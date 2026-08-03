@@ -14,6 +14,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "rest_framework",
     "apps.core",
+    "apps.reminders",
 ]
 
 MIDDLEWARE = [
