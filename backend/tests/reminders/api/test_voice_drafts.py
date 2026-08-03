@@ -1,6 +1,7 @@
 import hashlib
 
 import pytest
+from rest_framework.authtoken.models import Token
 
 
 TRANSCRIPT = "明天早上七点半叫我起床，先查未来两小时天气，如果下雨提醒我带伞。"
@@ -47,4 +48,19 @@ def test_anonymous_user_cannot_create_voice_draft(api_client):
         format="json",
     )
 
-    assert response.status_code == 403
+    assert response.status_code == 401
+    assert response.headers["WWW-Authenticate"] == "Bearer"
+
+
+@pytest.mark.django_db
+def test_mobile_bearer_token_can_create_voice_draft(api_client, user):
+    token = Token.objects.create(user=user)
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token.key}")
+
+    response = api_client.post(
+        "/api/v1/voice/reminder-drafts",
+        {"transcript": TRANSCRIPT},
+        format="json",
+    )
+
+    assert response.status_code == 201
