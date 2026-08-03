@@ -1,4 +1,4 @@
-.PHONY: install test-backend run-backend compose-up check
+.PHONY: install test-backend run-backend compose-up check flutter-analyze flutter-test flutter-build-ios
 
 install:
 	python3 -m venv .venv
@@ -16,3 +16,12 @@ compose-up:
 check:
 	.venv/bin/python backend/manage.py check
 	.venv/bin/python backend/manage.py makemigrations --check --dry-run
+
+flutter-analyze:
+	cd app && ../scripts/flutterw analyze
+
+flutter-test:
+	cd app && ../scripts/flutterw test
+
+flutter-build-ios:
+	cd app && ../scripts/flutterw build ios --simulator --debug

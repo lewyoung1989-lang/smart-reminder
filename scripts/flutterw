@@ -1,0 +1,19 @@
+#!/bin/sh
+set -eu
+
+PROJECT_ROOT=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+FLUTTER_BIN="$PROJECT_ROOT/.tools/flutter/bin/flutter"
+
+if [ ! -x "$FLUTTER_BIN" ]; then
+  echo "Flutter SDK not found at $FLUTTER_BIN" >&2
+  exit 1
+fi
+
+export CI="${CI:-true}"
+export DART_SUPPRESS_ANALYTICS="${DART_SUPPRESS_ANALYTICS:-true}"
+export FLUTTER_SUPPRESS_ANALYTICS="${FLUTTER_SUPPRESS_ANALYTICS:-true}"
+export XDG_CONFIG_HOME="$PROJECT_ROOT/.tools/config"
+export PUB_CACHE="$PROJECT_ROOT/.tools/pub-cache"
+
+mkdir -p "$XDG_CONFIG_HOME" "$PUB_CACHE"
+exec "$FLUTTER_BIN" "$@"

@@ -35,16 +35,16 @@ docker compose up --build
 
 ## Flutter
 
-安装 Flutter SDK 和 Xcode 命令行工具后运行：
+当前开发机的 Flutter SDK 安装在项目忽略的 `.tools/flutter`。通过包装命令运行：
 
 ```bash
-cd app
-flutter pub get
-flutter analyze
-flutter test
+scripts/flutterw pub get
+make flutter-analyze
+make flutter-test
+make flutter-build-ios
 ```
 
-Flutter 客户端的原生 iOS 工程需要在安装 SDK 后通过 `flutter create --platforms=ios .` 生成，再配置 Bundle ID、签名、通知权限和 AlarmKit entitlement。
+iOS Runner 工程位于 `app/ios`，当前 Bundle ID 为 `com.liuyang.smartreminder.smartReminderApp`，已配置现有 Apple 开发团队、麦克风用途和本地网络用途。AlarmKit entitlement 在闹钟迭代接入。
 
 ## 当前 API
 

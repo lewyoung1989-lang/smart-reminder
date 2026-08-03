@@ -388,13 +388,13 @@ Expected: FAIL because the screen does not exist. If `flutter` is unavailable, r
 
 The screen shows the transcript, title, local time, weather precheck, severity, ambiguities, a secondary edit action, and one primary confirmation action. `VoiceDraftApi` receives `baseUrl` in its constructor so an iPhone can use the Mac LAN address instead of `localhost`.
 
-- [ ] **Step 5: Run Flutter analyze and tests**
+- [x] **Step 5: Run Flutter analyze and tests**
 
 Run: `cd app && flutter analyze && flutter test`
 
 Expected: zero analyzer errors and all widget tests pass once Flutter SDK is installed.
 
-Blocked on 2026-08-03: the machine has no `flutter` or `dart` command. Source structure and `pubspec.yaml` were validated, but analyzer and Widget tests were not executed.
+Verified on 2026-08-03 with the project-local Flutter 3.44.8 SDK: analysis found no issues, the Widget test passed, and Xcode produced `build/ios/iphonesimulator/Runner.app`.
 
 - [x] **Step 6: Commit the Flutter foundation**
 
@@ -476,7 +476,7 @@ Run: `cd app && flutter analyze && flutter test`, then `docker compose config`.
 
 Expected: all pass. Missing Flutter or Docker must be reported as an environment prerequisite, not treated as a successful verification.
 
-Environment result on 2026-08-03: backend verification passed; Flutter and Docker commands are unavailable and therefore were not claimed as passing.
+Environment result on 2026-08-03: backend and Flutter verification passed, including an iOS Simulator build. Docker Desktop remains unavailable; Compose was syntax-checked with the system YAML parser but was not started.
 
 - [x] **Step 4: Exercise the API manually**
 
