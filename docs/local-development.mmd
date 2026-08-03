@@ -1,0 +1,8 @@
+flowchart LR
+  Local["Mac 本地开发\nFlutter + Docker Compose"] --> LAN["iPhone 局域网真机测试\nMac LAN IP + Debug HTTP 例外"]
+  LAN --> Gate{"核心闭环通过？\n提醒 / 天气 / 语音草稿 / OCR"}
+  Gate -->|否| Local
+  Gate -->|是| Staging["阿里云低成本预发布\nECS / RDS / Tair / OSS"]
+  Staging --> External["真实外部能力\nAPNs / ASR / OCR / DeepSeek"]
+  External --> Beta["TestFlight 亲友内测\n监控 / 备份 / 隐私验证"]
+  Beta --> Production["公开生产\nHTTPS / 备案 / 独立凭据 / 扩容"]

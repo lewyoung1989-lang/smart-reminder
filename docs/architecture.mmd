@@ -1,60 +1,81 @@
 flowchart TB
-  subgraph Client["Flutter 客户端"]
+  subgraph Client["Flutter App"]
     UI["首页 / 提醒 / 药箱 / 家庭"]
-    LocalDB["Drift / SQLite"]
-    RuleCache["本地规则与离线队列"]
-    Native["原生能力桥接"]
-    UI --> LocalDB
-    UI --> RuleCache
-    RuleCache --> Native
+    Voice["麦克风 / 增量转写 / 草稿确认"]
+    Local["Drift / 离线队列 / 本地规则"]
+    Bridge["原生能力适配器"]
+    UI --> Voice
+    UI --> Local
+    Local --> Bridge
   end
 
-  subgraph NativeLayer["操作系统能力"]
-    Android["Android AlarmManager\n通知渠道 / 锁屏响铃"]
-    IOS["iOS 26+ AlarmKit\n旧版 Local Notifications"]
+  subgraph OS["手机系统能力"]
+    AlarmKit["iOS 26+ AlarmKit"]
+    LocalNotification["旧版 iOS 本地通知降级"]
+    AndroidAlarm["第二阶段 Android AlarmManager"]
   end
 
-  subgraph Backend["Django 服务端"]
-    API["REST API"]
-    Auth["认证与家庭权限"]
-    Reminder["提醒与条件规则"]
+  subgraph API["Django API"]
+    Auth["认证 / 家庭权限"]
+    Reminder["提醒规则 / 条件引擎"]
     Medicine["药品 / 批次 / 服药"]
     OCR["OCR 编排"]
+    VoiceToken["语音短时令牌 / 会话"]
+    Draft["提醒草稿 / 确认"]
+    Parser["确定性时间解析 / 实体解析"]
+    Validator["Pydantic + JSON Schema"]
     Admin["Django Admin"]
     Worker["Celery Worker / Beat"]
   end
 
-  subgraph Data["数据层"]
-    PG[("PostgreSQL")]
-    Redis[("Redis")]
-    Object[("对象存储")]
+  subgraph Runtime["本地 Docker -> 阿里云"]
+    PG[("PostgreSQL -> RDS")]
+    Redis[("Redis -> Tair")]
+    Object[("MinIO -> OSS")]
+    Image["ACR 镜像"]
+    Compute["ECS 容器"]
+    Observe["SLS / CloudMonitor"]
+    Secret["RAM / KMS"]
   end
 
-  subgraph Providers["外部服务"]
+  subgraph Provider["外部 Provider 适配层"]
+    ASR["阿里云智能语音交互"]
+    LLM["DeepSeek 官方 API / 百炼"]
+    CloudOCR["阿里云 OCR"]
     Weather["和风天气"]
-    Push["聚合推送 / APNs"]
-    OCRProvider["腾讯云 OCR"]
+    Push["APNs / 移动推送"]
     Holiday["法定节假日数据"]
   end
 
-  Native --> Android
-  Native --> IOS
-  UI --> API
-  API --> Auth
-  API --> Reminder
-  API --> Medicine
-  API --> OCR
-  Admin --> PG
+  Bridge --> AlarmKit
+  Bridge --> LocalNotification
+  Bridge --> AndroidAlarm
+  UI --> Auth
+  UI --> Reminder
+  UI --> Medicine
+  UI --> OCR
+  Voice --> ASR
+  Voice --> VoiceToken
+  VoiceToken --> Draft
+  Draft --> Parser
+  Parser --> LLM
+  Parser --> Validator
+  Validator --> Reminder
   Auth --> PG
   Reminder --> PG
   Medicine --> PG
+  Draft --> Redis
   OCR --> Object
-  Reminder --> Worker
   OCR --> Worker
+  Reminder --> Worker
   Worker --> Redis
-  Worker --> PG
   Worker --> Weather
   Worker --> Push
-  Worker --> OCRProvider
+  Worker --> CloudOCR
   Worker --> Holiday
+  Image --> Compute
+  Compute --> Auth
+  Compute --> Worker
+  Worker --> Observe
+  Secret --> Compute
   Push --> UI
