@@ -1,0 +1,60 @@
+flowchart TB
+  subgraph Client["Flutter 客户端"]
+    UI["首页 / 提醒 / 药箱 / 家庭"]
+    LocalDB["Drift / SQLite"]
+    RuleCache["本地规则与离线队列"]
+    Native["原生能力桥接"]
+    UI --> LocalDB
+    UI --> RuleCache
+    RuleCache --> Native
+  end
+
+  subgraph NativeLayer["操作系统能力"]
+    Android["Android AlarmManager\n通知渠道 / 锁屏响铃"]
+    IOS["iOS 26+ AlarmKit\n旧版 Local Notifications"]
+  end
+
+  subgraph Backend["Django 服务端"]
+    API["REST API"]
+    Auth["认证与家庭权限"]
+    Reminder["提醒与条件规则"]
+    Medicine["药品 / 批次 / 服药"]
+    OCR["OCR 编排"]
+    Admin["Django Admin"]
+    Worker["Celery Worker / Beat"]
+  end
+
+  subgraph Data["数据层"]
+    PG[("PostgreSQL")]
+    Redis[("Redis")]
+    Object[("对象存储")]
+  end
+
+  subgraph Providers["外部服务"]
+    Weather["和风天气"]
+    Push["聚合推送 / APNs"]
+    OCRProvider["腾讯云 OCR"]
+    Holiday["法定节假日数据"]
+  end
+
+  Native --> Android
+  Native --> IOS
+  UI --> API
+  API --> Auth
+  API --> Reminder
+  API --> Medicine
+  API --> OCR
+  Admin --> PG
+  Auth --> PG
+  Reminder --> PG
+  Medicine --> PG
+  OCR --> Object
+  Reminder --> Worker
+  OCR --> Worker
+  Worker --> Redis
+  Worker --> PG
+  Worker --> Weather
+  Worker --> Push
+  Worker --> OCRProvider
+  Worker --> Holiday
+  Push --> UI
