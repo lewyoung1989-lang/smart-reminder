@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 
 REQUIRED = {
     "DOMAIN",
+    "FILES_DOMAIN",
     "DJANGO_SECRET_KEY",
     "DJANGO_DEBUG",
     "DJANGO_ALLOWED_HOSTS",
@@ -15,6 +17,19 @@ REQUIRED = {
     "CELERY_BROKER_URL",
     "CELERY_RESULT_BACKEND",
     "DEEPSEEK_API_KEY",
+    "OCR_PROVIDER",
+    "OCR_STORAGE_PROVIDER",
+    "OCR_JOB_RETENTION_HOURS",
+    "OCR_QUEUE",
+    "S3_INTERNAL_ENDPOINT",
+    "S3_PUBLIC_ENDPOINT",
+    "S3_BUCKET",
+    "S3_REGION",
+    "S3_ADDRESSING_STYLE",
+    "S3_ACCESS_KEY_ID",
+    "S3_SECRET_ACCESS_KEY",
+    "MINIO_ROOT_USER",
+    "MINIO_ROOT_PASSWORD",
     "CERTBOT_EMAIL",
     "BACKUP_DIR",
     "BACKUP_RETENTION_DAYS",
@@ -40,6 +55,28 @@ def validate(values: dict[str, str]) -> list[str]:
     ]
     if values.get("DOMAIN") not in {None, "", "aipupu.cloud"}:
         errors.append("DOMAIN must be aipupu.cloud")
+    files_domain = values.get("FILES_DOMAIN")
+    if files_domain not in {None, "", "files.aipupu.cloud"}:
+        errors.append("FILES_DOMAIN must be files.aipupu.cloud")
+    public_endpoint = urlparse(values.get("S3_PUBLIC_ENDPOINT", ""))
+    if (
+        public_endpoint.scheme != "https"
+        or public_endpoint.hostname != files_domain
+    ):
+        errors.append("S3_PUBLIC_ENDPOINT must use HTTPS FILES_DOMAIN")
+    if values.get("S3_INTERNAL_ENDPOINT") not in {
+        None,
+        "",
+        "http://minio:9000",
+    }:
+        errors.append("S3_INTERNAL_ENDPOINT must be http://minio:9000")
+    if values.get("S3_ADDRESSING_STYLE") not in {None, "", "path"}:
+        errors.append("S3_ADDRESSING_STYLE must be path")
+    if (
+        values.get("MINIO_ROOT_USER")
+        and values.get("MINIO_ROOT_USER") == values.get("S3_ACCESS_KEY_ID")
+    ):
+        errors.append("MINIO_ROOT_USER must differ from S3_ACCESS_KEY_ID")
     if values.get("DJANGO_DEBUG") not in {None, "", "false"}:
         errors.append("DJANGO_DEBUG must be false")
     if values.get("DJANGO_SECURE_SSL_REDIRECT") not in {None, "", "true"}:

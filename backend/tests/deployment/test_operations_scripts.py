@@ -7,7 +7,7 @@ SCRIPTS = REPO_ROOT / "deploy/tencent/scripts"
 
 
 def test_release_scripts_are_valid_bash():
-    for name in ("bootstrap_tls.sh", "deploy.sh"):
+    for name in ("bootstrap_tls.sh", "configure_secrets.sh", "deploy.sh"):
         result = subprocess.run(
             ["bash", "-n", str(SCRIPTS / name)],
             capture_output=True,
@@ -15,6 +15,17 @@ def test_release_scripts_are_valid_bash():
             check=False,
         )
         assert result.returncode == 0, result.stderr
+
+
+def test_secret_configurator_does_not_echo_or_source_production_values():
+    script = (SCRIPTS / "configure_secrets.sh").read_text()
+    assert "read -r -s" in script
+    assert "mktemp" in script
+    assert "chmod 600" in script
+    assert "check_env.py" in script
+    assert 'source "$ENV_FILE"' not in script
+    assert "set -x" not in script
+    assert 'echo "$DEEPSEEK_API_KEY"' not in script
 
 
 def test_deploy_requires_clean_expected_revision_and_health_check():
