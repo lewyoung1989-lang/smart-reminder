@@ -40,6 +40,17 @@ def test_deploy_requires_clean_expected_revision_and_health_check():
     assert "--profile production" in script
 
 
+def test_deploy_initializes_minio_and_smoke_checks_ocr_before_start():
+    script = (SCRIPTS / "deploy.sh").read_text()
+    build = script.index('build api ocr-worker')
+    minio = script.index('up -d postgres redis minio')
+    initialize = script.index('run --rm minio-init')
+    migrate = script.index('manage.py migrate --noinput')
+    smoke = script.index('manage.py check_ocr')
+    start = script.index('up -d api worker ocr-worker beat')
+    assert build < minio < initialize < migrate < smoke < start
+
+
 def test_tls_bootstrap_uses_webroot_and_never_starts_plain_http_api():
     script = (SCRIPTS / "bootstrap_tls.sh").read_text()
     assert "certonly" in script

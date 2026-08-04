@@ -35,6 +35,27 @@ def test_production_services_restart_and_rotate_logs():
         }
 
 
+def test_minio_is_private_initialized_and_not_profile_gated():
+    services = load_production_compose()["services"]
+    assert services["minio"]["ports"] == []
+    assert not services["minio"].get("profiles")
+    assert (
+        services["minio-init"]["depends_on"]["minio"]["condition"]
+        == "service_healthy"
+    )
+    assert services["minio-init"]["restart"] == "no"
+
+
+def test_ocr_worker_is_isolated_and_resource_limited():
+    service = load_production_compose()["services"]["ocr-worker"]
+    assert service["image"].startswith("smart-reminder-ocr:")
+    assert "-Q ocr" in service["command"]
+    assert "--concurrency=1" in service["command"]
+    assert service["cpus"] == 1.0
+    assert service["mem_limit"] == "1200m"
+    assert service["ports"] == []
+
+
 def test_nginx_redirects_http_and_forwards_https_metadata():
     config = (REPO_ROOT / "deploy/tencent/nginx/aipupu.cloud.conf").read_text()
     assert "return 301 https://$host$request_uri;" in config

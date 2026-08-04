@@ -33,10 +33,13 @@ COMPOSE=(
 )
 
 "${COMPOSE[@]}" config --quiet
-"${COMPOSE[@]}" build api
-"${COMPOSE[@]}" up -d postgres redis
+"${COMPOSE[@]}" build api ocr-worker
+"${COMPOSE[@]}" up -d postgres redis minio
+"${COMPOSE[@]}" run --rm minio-init
 "${COMPOSE[@]}" run --rm api python manage.py migrate --noinput
-"${COMPOSE[@]}" up -d api worker beat
+"${COMPOSE[@]}" run --rm ocr-worker python manage.py check_ocr \
+  tests/ocr/fixtures/medicine_front.jpg
+"${COMPOSE[@]}" up -d api worker ocr-worker beat
 
 for _attempt in $(seq 1 24); do
   if "${COMPOSE[@]}" exec -T api python -c \
