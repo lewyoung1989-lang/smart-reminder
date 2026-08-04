@@ -1,11 +1,17 @@
 FROM python:3.13-slim
 
 ARG PIP_INDEX_URL=https://pypi.org/simple
+ARG DEBIAN_MIRROR=http://deb.debian.org/debian
+ARG DEBIAN_SECURITY_MIRROR=http://deb.debian.org/debian-security
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-RUN apt-get update \
+RUN sed -i \
+        -e "s|http://deb.debian.org/debian-security|$DEBIAN_SECURITY_MIRROR|g" \
+        -e "s|http://deb.debian.org/debian|$DEBIAN_MIRROR|g" \
+        /etc/apt/sources.list.d/debian.sources \
+    && apt-get update \
     && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 

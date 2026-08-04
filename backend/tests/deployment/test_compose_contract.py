@@ -35,6 +35,20 @@ def test_python_images_accept_a_configurable_package_index():
         assert "ARG PIP_INDEX_URL=https://pypi.org/simple" in content
         assert '--index-url "$PIP_INDEX_URL"' in content
 
+    ocr_build_args = services["ocr-worker"]["build"]["args"]
+    assert ocr_build_args["DEBIAN_MIRROR"] == (
+        "${DEBIAN_MIRROR:-http://deb.debian.org/debian}"
+    )
+    assert ocr_build_args["DEBIAN_SECURITY_MIRROR"] == (
+        "${DEBIAN_SECURITY_MIRROR:-http://deb.debian.org/debian-security}"
+    )
+    ocr_dockerfile = (REPO_ROOT / "backend/Dockerfile.ocr").read_text()
+    assert "ARG DEBIAN_MIRROR=http://deb.debian.org/debian" in ocr_dockerfile
+    assert (
+        "ARG DEBIAN_SECURITY_MIRROR=http://deb.debian.org/debian-security"
+        in ocr_dockerfile
+    )
+
 
 def test_internal_services_publish_no_host_ports():
     services = load_production_compose()["services"]

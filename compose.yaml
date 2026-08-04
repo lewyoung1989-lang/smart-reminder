@@ -95,6 +95,8 @@ services:
       dockerfile: backend/Dockerfile.ocr
       args:
         PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+        DEBIAN_MIRROR: ${DEBIAN_MIRROR:-http://deb.debian.org/debian}
+        DEBIAN_SECURITY_MIRROR: ${DEBIAN_SECURITY_MIRROR:-http://deb.debian.org/debian-security}
     environment: *backend_environment
     command: celery -A config worker -Q ocr --concurrency=1 --prefetch-multiplier=1 --loglevel=INFO
     mem_reservation: 700m
