@@ -67,6 +67,18 @@ def test_nginx_redirects_http_and_forwards_https_metadata():
     assert "proxy_set_header Authorization $http_authorization;" in config
 
 
+def test_file_domain_is_put_only_and_does_not_log_signatures():
+    config = (
+        REPO_ROOT / "deploy/tencent/nginx/aipupu.cloud.conf"
+    ).read_text()
+    assert "server_name files.aipupu.cloud;" in config
+    assert "proxy_pass http://minio:9000;" in config
+    assert "proxy_set_header Host $http_host;" in config
+    assert "limit_except PUT" in config
+    assert "access_log off;" in config
+    assert "client_max_body_size 9m;" in config
+
+
 def test_api_healthcheck_uses_the_allowed_production_host():
     services = load_production_compose()["services"]
     command = services["api"]["healthcheck"]["test"][-1]

@@ -7,6 +7,7 @@ VALIDATOR="$ROOT_DIR/deploy/tencent/scripts/check_env.py"
 
 python3 "$VALIDATOR" "$ENV_FILE"
 DOMAIN=$(python3 "$VALIDATOR" "$ENV_FILE" --get DOMAIN)
+FILES_DOMAIN=$(python3 "$VALIDATOR" "$ENV_FILE" --get FILES_DOMAIN)
 CERTBOT_EMAIL=$(python3 "$VALIDATOR" "$ENV_FILE" --get CERTBOT_EMAIL)
 export APP_VERSION=bootstrap
 
@@ -28,6 +29,7 @@ trap cleanup EXIT
   --webroot \
   --webroot-path /var/www/certbot \
   --domain "$DOMAIN" \
+  --domain "$FILES_DOMAIN" \
   --email "$CERTBOT_EMAIL" \
   --agree-tos \
   --no-eff-email \

@@ -60,6 +60,16 @@ def test_tls_bootstrap_uses_webroot_and_never_starts_plain_http_api():
     assert 'source "$ENV_FILE"' not in script
 
 
+def test_tls_bootstrap_requests_both_domains():
+    script = (SCRIPTS / "bootstrap_tls.sh").read_text()
+    assert (
+        'FILES_DOMAIN=$(python3 "$VALIDATOR" "$ENV_FILE" --get FILES_DOMAIN)'
+        in script
+    )
+    assert '--domain "$DOMAIN"' in script
+    assert '--domain "$FILES_DOMAIN"' in script
+
+
 def test_backup_is_private_compressed_and_retained():
     script = (SCRIPTS / "backup_postgres.sh").read_text()
     assert "pg_dump" in script
