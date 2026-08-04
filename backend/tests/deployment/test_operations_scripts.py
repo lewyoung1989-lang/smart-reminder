@@ -28,6 +28,13 @@ def test_secret_configurator_does_not_echo_or_source_production_values():
     assert 'echo "$DEEPSEEK_API_KEY"' not in script
 
 
+def test_minio_initializer_uses_shell_matching_for_lifecycle_rules():
+    script = (SCRIPTS / "init_minio.sh").read_text()
+    assert "grep" not in script
+    assert "existing_rules=$(mc ilm rule ls --json" in script
+    assert "case \"$existing_rules\" in" in script
+
+
 def test_deploy_requires_clean_expected_revision_and_health_check():
     script = (SCRIPTS / "deploy.sh").read_text()
     assert "git diff --quiet" in script

@@ -19,7 +19,11 @@ mc admin policy create private smart-reminder-ocr /config/app-policy.json
 mc admin policy attach private smart-reminder-ocr \
   --user "$S3_ACCESS_KEY_ID"
 
-if ! mc ilm rule ls --json "private/$S3_BUCKET" | grep -Fq 'ocr/tmp/'; then
-  mc ilm rule add --expire-days 1 --prefix 'ocr/tmp/' \
-    "private/$S3_BUCKET"
-fi
+existing_rules=$(mc ilm rule ls --json "private/$S3_BUCKET")
+case "$existing_rules" in
+  *'ocr/tmp/'*) ;;
+  *)
+    mc ilm rule add --expire-days 1 --prefix 'ocr/tmp/' \
+      "private/$S3_BUCKET"
+    ;;
+esac
