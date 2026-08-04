@@ -35,3 +35,20 @@ def test_tls_bootstrap_uses_webroot_and_never_starts_plain_http_api():
     assert "nginx-bootstrap" in script
     assert "up -d api" not in script
     assert 'source "$ENV_FILE"' not in script
+
+
+def test_backup_is_private_compressed_and_retained():
+    script = (SCRIPTS / "backup_postgres.sh").read_text()
+    assert "pg_dump" in script
+    assert "--format=custom" in script
+    assert "chmod 600" in script
+    assert "BACKUP_RETENTION_DAYS" in script
+    assert "-mtime" in script
+
+
+def test_restore_requires_confirmation_and_explicit_file():
+    script = (SCRIPTS / "restore_postgres.sh").read_text()
+    assert "BACKUP_FILE" in script
+    assert "RESTORE" in script
+    assert "pg_restore" in script
+    assert "--clean" not in script
