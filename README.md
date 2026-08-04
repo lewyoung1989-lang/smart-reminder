@@ -1,57 +1,94 @@
 # 智能生活提醒
 
-面向个人与家庭的智能提醒 App。当前开发阶段完成 Django 基础、确定性语音解析、语音提醒草稿和人工确认闭环。
+面向个人与家庭的智能提醒 App。当前 MVP 已支持：
+
+- 输入中文文字生成结构化提醒草稿。
+- “今天/明天几点”和“几分钟后”等简单表达由本地规则解析。
+- 复杂单次提醒在配置后交给 DeepSeek JSON 模式解析。
+- 所有解析结果必须由用户确认，确认前不会创建正式提醒。
+- 确认后在 iPhone 安排一次本地通知。
+- 服务端不保存原始输入，只保存 SHA-256 和结构化草稿。
+
+AlarmKit 强闹钟、阿里云语音识别、天气预检查和家庭药箱仍在后续阶段。
 
 ## 本地后端
 
 ```bash
 make install
+cp .env.example .env
 .venv/bin/python backend/manage.py migrate
-make test-backend
+.venv/bin/python backend/manage.py create_local_test_token
 make run-backend
 ```
 
 健康检查：`http://127.0.0.1:8000/api/v1/health`
 
-## iPhone 联调
+`create_local_test_token` 会输出本地开发 Bearer Token。该命令只在 `DEBUG=True` 时可用；Token 不应提交到 Git、截图分享或用于线上环境。
 
-1. Mac 与 iPhone 连接同一个局域网。
-2. 执行 `ipconfig getifaddr en0` 查询 Mac 的局域网 IP。
-3. 复制 `.env.example` 为 `.env`，把该 IP 加入 `DJANGO_ALLOWED_HOSTS`。
-4. Flutter Debug 配置的 API 地址使用 `http://<MAC_LAN_IP>:8000`，不能使用 `localhost`。
-5. iOS 只在 Debug 配置中为这个局域网地址设置 HTTP 例外；TestFlight 和生产环境必须使用 HTTPS。
+## DeepSeek
 
-## Docker Compose
+在 Git 忽略的 `.env` 中设置：
 
-安装 Docker Desktop 后运行：
-
-```bash
-cp .env.example .env
-docker compose config
-docker compose up --build
+```dotenv
+DEEPSEEK_API_KEY=你的本地密钥
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-v4-flash
+DEEPSEEK_TIMEOUT_SECONDS=8
 ```
 
-服务包括 PostgreSQL、Redis、MinIO、Django API、Celery Worker 和 Celery Beat。MinIO 控制台位于 `http://127.0.0.1:9001`。
+修改后重启 Django。简单表达不会调用模型；例如“下周一上午十点提醒我体检”会在本地规则无法确定时调用 DeepSeek。草稿页会显示“本地规则”“DeepSeek”或“本地规则（模型不可用）”。
 
-## Flutter
+模型输出始终经过 Pydantic 严格字段校验。非创建意图、额外权限字段、错误时区和过去时间会被拒绝；DeepSeek Key、完整输入和完整模型响应不写日志。
 
-当前开发机的 Flutter SDK 安装在项目忽略的 `.tools/flutter`。通过包装命令运行：
+## iPhone 通知测试
+
+1. Mac 与 iPhone 连接同一局域网。
+2. 执行 `ipconfig getifaddr en0` 获取 Mac 局域网 IP。
+3. 把这个 IP 加入 `.env` 的 `DJANGO_ALLOWED_HOSTS`，然后重启后端。
+4. 使用上一步生成的 Token 启动 Flutter App：
 
 ```bash
-scripts/flutterw pub get
-make flutter-analyze
-make flutter-test
-make flutter-build-ios
+cd app
+../scripts/flutterw run \
+  --dart-define=API_BASE_URL=http://<MAC局域网IP>:8000 \
+  --dart-define=API_ACCESS_TOKEN=<本地Token>
 ```
 
-iOS Runner 工程位于 `app/ios`，当前 Bundle ID 为 `com.liuyang.smartreminder.smartReminderApp`，已配置现有 Apple 开发团队、麦克风用途和本地网络用途。AlarmKit entitlement 在闹钟迭代接入。
+5. 输入“1分钟后提醒我喝水”，检查草稿时间后点击“确认创建”。
+6. 首次确认时允许通知，将 App 切到后台，约一分钟后应收到“喝水”通知。
+
+如果通知权限被拒绝，服务端提醒仍会创建，但 App 会明确显示“提醒已创建，但手机通知未安排”。再次点击确认只重试手机通知，不会重复创建服务端提醒。
+
+模拟器可验证 UI 和编译，锁屏、后台和真实通知权限必须使用 iPhone 验证。当前实现是普通本地通知，不等同于 iOS 26 AlarmKit 强闹钟。
+
+## Flutter 检查
+
+```bash
+cd app
+../scripts/flutterw test
+../scripts/flutterw analyze
+../scripts/flutterw build ios --simulator --debug
+```
 
 ## 当前 API
 
 | 方法 | 路径 | 用途 |
 |---|---|---|
 | GET | `/api/v1/health` | 服务健康检查 |
-| POST | `/api/v1/voice/reminder-drafts` | 解析转写并创建短期草稿 |
-| POST | `/api/v1/voice/reminder-drafts/{id}/confirm` | 人工确认并创建正式提醒 |
+| POST | `/api/v1/reminder-drafts` | 解析文字并创建短期草稿 |
+| POST | `/api/v1/reminder-drafts/{id}/confirm` | 人工确认并创建正式提醒 |
+| POST | `/api/v1/voice/reminder-drafts` | 兼容上一阶段的转写草稿路径 |
+| POST | `/api/v1/voice/reminder-drafts/{id}/confirm` | 兼容上一阶段的确认路径 |
 
-语音接口支持 Django 会话认证和移动端 `Authorization: Bearer <token>`。登录与令牌签发、阿里云语音令牌、DeepSeek Provider 和 AlarmKit 在后续迭代接入。
+请求需要 `Authorization: Bearer <token>`。文字和语音最终使用同一套结构化草稿、确认和幂等逻辑。
+
+## Docker Compose
+
+安装 Docker Desktop 后运行：
+
+```bash
+docker compose config
+docker compose up --build
+```
+
+服务包括 PostgreSQL、Redis、MinIO、Django API、Celery Worker 和 Celery Beat。MinIO 控制台位于 `http://127.0.0.1:9001`。

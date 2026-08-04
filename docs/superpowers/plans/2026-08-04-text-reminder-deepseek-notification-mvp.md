@@ -53,11 +53,11 @@ Expected: `10 passed`。
 
 - [ ] **Step 3: 运行 Flutter 基线测试和静态检查**
 
-Run: `scripts/flutterw test app`
+Run: `cd app && ../scripts/flutterw test`
 
 Expected: `All tests passed`。
 
-Run: `scripts/flutterw analyze app`
+Run: `cd app && ../scripts/flutterw analyze`
 
 Expected: `No issues found`。
 
@@ -402,7 +402,7 @@ testWidgets('text input creates a draft and requires confirmation', (tester) asy
 
 - [ ] **Step 2: 运行 Widget 测试并确认 RED**
 
-Run: `scripts/flutterw test app/test/reminder_composer_screen_test.dart`
+Run: `cd app && ../scripts/flutterw test test/reminder_composer_screen_test.dart`
 
 Expected: 因新页面不存在而编译失败。
 
@@ -412,7 +412,7 @@ Expected: 因新页面不存在而编译失败。
 
 - [ ] **Step 4: 运行 Flutter 测试并确认 GREEN**
 
-Run: `scripts/flutterw test app`
+Run: `cd app && ../scripts/flutterw test`
 
 Expected: 全部通过。
 
@@ -452,7 +452,7 @@ testWidgets('confirmation schedules one local notification', (tester) async {
 
 - [ ] **Step 2: 运行测试并确认 RED**
 
-Run: `scripts/flutterw test app/test/reminder_confirmation_notification_test.dart`
+Run: `cd app && ../scripts/flutterw test test/reminder_confirmation_notification_test.dart`
 
 Expected: 通知调度接口不存在而失败。
 
@@ -468,11 +468,11 @@ Expected: 通知调度接口不存在而失败。
 
 - [ ] **Step 5: 运行 Flutter 测试和静态检查**
 
-Run: `scripts/flutterw test app`
+Run: `cd app && ../scripts/flutterw test`
 
 Expected: 全部通过。
 
-Run: `scripts/flutterw analyze app`
+Run: `cd app && ../scripts/flutterw analyze`
 
 Expected: `No issues found`。
 
@@ -532,11 +532,11 @@ DEEPSEEK_MODEL=deepseek-v4-flash
 
 - [ ] **Step 5: 验证 Flutter 与 iOS 构建**
 
-Run: `scripts/flutterw test app`
+Run: `cd app && ../scripts/flutterw test`
 
-Run: `scripts/flutterw analyze app`
+Run: `cd app && ../scripts/flutterw analyze`
 
-Run: `scripts/flutterw build ios --simulator --debug app`
+Run: `cd app && ../scripts/flutterw build ios --simulator --debug`
 
 Expected: 测试、静态检查和 Simulator 构建全部通过。
 
@@ -564,3 +564,12 @@ git commit -m "docs: record text reminder notification verification"
 - iPhone 用户允许通知后，确认提醒能安排并收到一次本地通知。
 - 通知权限拒绝时 UI 明确提示，不能误报“已安排”。
 - Git 历史、测试输出和应用日志中没有 DeepSeek Key、Token 或完整原始输入。
+
+## 2026-08-04 验证记录
+
+- 后端：31 项测试通过；Django system check 通过；没有遗漏迁移。
+- Flutter：12 项测试通过；`flutter analyze` 无问题。
+- iOS：Simulator Debug 构建成功，产物为 `app/build/ios/iphonesimulator/Runner.app`。
+- 本地数据库 API：文字草稿返回 201；首次确认返回 201；重复确认返回 200；两次确认返回同一提醒 ID，且只新增一个 `ReminderRule`。
+- DeepSeek Provider：请求 JSON Output、非法意图、额外字段、过去时间和脱敏异常共 5 项契约测试通过。
+- 尚需用户完成：在本地 `.env` 配置真实 DeepSeek Key 后做一次实际调用；在 iPhone 真机允许通知后验证后台到达。
