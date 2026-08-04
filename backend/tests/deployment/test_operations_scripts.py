@@ -25,6 +25,7 @@ def test_deploy_requires_clean_expected_revision_and_health_check():
     assert "EXPECTED_SHA" in script
     assert "manage.py migrate --noinput" in script
     assert "/api/v1/health" in script
+    assert "'Host':'aipupu.cloud'" in script
     assert "--profile production" in script
 
 

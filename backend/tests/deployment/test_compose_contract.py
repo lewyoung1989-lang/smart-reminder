@@ -44,3 +44,9 @@ def test_nginx_redirects_http_and_forwards_https_metadata():
     assert "proxy_pass http://api:8000;" in config
     assert "proxy_set_header X-Forwarded-Proto https;" in config
     assert "proxy_set_header Authorization $http_authorization;" in config
+
+
+def test_api_healthcheck_uses_the_allowed_production_host():
+    services = load_production_compose()["services"]
+    command = services["api"]["healthcheck"]["test"][-1]
+    assert "'Host':'aipupu.cloud'" in command
