@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../platform/notifications/reminder_notification_scheduler.dart';
 import '../domain/reminder_draft.dart';
 import 'reminder_draft_screen.dart';
 
@@ -8,12 +9,14 @@ class ReminderComposerScreen extends StatefulWidget {
   const ReminderComposerScreen({
     required this.createDraft,
     required this.confirmDraft,
+    this.notificationScheduler,
     this.now,
     super.key,
   });
 
   final Future<ReminderDraft> Function(String) createDraft;
   final Future<String> Function(String) confirmDraft;
+  final ReminderNotificationScheduler? notificationScheduler;
   final DateTime? now;
 
   @override
@@ -27,6 +30,7 @@ class _ReminderComposerScreenState extends State<ReminderComposerScreen> {
   String? _sourceText;
   String? _error;
   bool _isParsing = false;
+  String? _confirmedReminderId;
 
   @override
   void dispose() {
@@ -47,6 +51,7 @@ class _ReminderComposerScreenState extends State<ReminderComposerScreen> {
       setState(() {
         _draft = draft;
         _sourceText = text;
+        _confirmedReminderId = null;
       });
     } catch (_) {
       if (!mounted) return;
@@ -60,10 +65,24 @@ class _ReminderComposerScreenState extends State<ReminderComposerScreen> {
     final draft = _draft;
     if (draft == null) return;
     try {
-      await widget.confirmDraft(draft.id);
+      final reminderId = _confirmedReminderId ?? await widget.confirmDraft(draft.id);
+      _confirmedReminderId = reminderId;
+      final scheduler = widget.notificationScheduler;
+      if (scheduler != null) {
+        await scheduler.schedule(reminderId: reminderId, draft: draft);
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('提醒已创建')),
+        SnackBar(
+          content: Text(
+            scheduler == null ? '提醒已创建' : '提醒已创建，通知已安排',
+          ),
+        ),
+      );
+    } on ReminderNotificationException {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('提醒已创建，但手机通知未安排')),
       );
     } catch (_) {
       if (!mounted) return;
@@ -77,6 +96,7 @@ class _ReminderComposerScreenState extends State<ReminderComposerScreen> {
     setState(() {
       _draft = null;
       _error = null;
+      _confirmedReminderId = null;
     });
   }
 

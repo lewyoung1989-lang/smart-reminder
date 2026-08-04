@@ -9,7 +9,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_local_notifications: ^22.2.0
   http: ^1.2.2
+  timezone: ^0.11.1
 
 dev_dependencies:
   flutter_test:

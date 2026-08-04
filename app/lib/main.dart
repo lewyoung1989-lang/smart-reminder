@@ -3,17 +3,34 @@ import 'package:flutter/material.dart';
 import 'config/app_config.dart';
 import 'features/reminder_drafts/data/reminder_draft_api.dart';
 import 'features/reminder_drafts/presentation/reminder_composer_screen.dart';
+import 'platform/notifications/local_notification_scheduler.dart';
+import 'platform/notifications/reminder_notification_scheduler.dart';
 
 
-void main() {
-  runApp(SmartReminderApp(config: AppConfig.fromEnvironment()));
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final notificationGateway = FlutterLocalNotificationGateway();
+  await notificationGateway.initialize();
+  runApp(
+    SmartReminderApp(
+      config: AppConfig.fromEnvironment(),
+      notificationScheduler: LocalNotificationScheduler(
+        gateway: notificationGateway,
+      ),
+    ),
+  );
 }
 
 
 class SmartReminderApp extends StatefulWidget {
-  const SmartReminderApp({required this.config, super.key});
+  const SmartReminderApp({
+    required this.config,
+    required this.notificationScheduler,
+    super.key,
+  });
 
   final AppConfig config;
+  final ReminderNotificationScheduler notificationScheduler;
 
   @override
   State<SmartReminderApp> createState() => _SmartReminderAppState();
@@ -58,6 +75,7 @@ class _SmartReminderAppState extends State<SmartReminderApp> {
       home: ReminderComposerScreen(
         createDraft: _api.createDraft,
         confirmDraft: _api.confirmDraft,
+        notificationScheduler: widget.notificationScheduler,
       ),
     );
   }
