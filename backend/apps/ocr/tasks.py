@@ -7,10 +7,15 @@ from django.conf import settings
 from apps.ocr.models import OCRJob
 from apps.ocr.providers.factory import get_ocr_provider
 from apps.ocr.providers.storage import get_object_storage
-from apps.ocr.services.job_runner import run_job
 
 
 logger = logging.getLogger(__name__)
+
+
+def run_job(*args, **kwargs):
+    from apps.ocr.services.job_runner import run_job as execute_job
+
+    return execute_job(*args, **kwargs)
 
 
 @shared_task(bind=True, acks_late=True)

@@ -1,9 +1,48 @@
+import os
+from pathlib import Path
+import subprocess
+import sys
+
 from celery.exceptions import Retry
 import pytest
 
 from apps.ocr.domain.types import OCRDocument, OCRLine
 from apps.ocr.models import OCRCandidate, OCRJob
 from apps.ocr.tasks import process_ocr_job
+
+
+def test_task_module_does_not_require_cv2_during_api_import():
+    backend_root = Path(__file__).resolve().parents[2]
+    script = """
+import builtins
+import os
+
+original_import = builtins.__import__
+
+def guarded_import(name, *args, **kwargs):
+    if name == "cv2":
+        raise ModuleNotFoundError("cv2 is unavailable in the API image")
+    return original_import(name, *args, **kwargs)
+
+builtins.__import__ = guarded_import
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+import django
+django.setup()
+import apps.ocr.tasks
+"""
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(backend_root)
+
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=backend_root,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 @pytest.mark.django_db
