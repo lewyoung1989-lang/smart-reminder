@@ -18,6 +18,24 @@ def load_production_compose():
     return yaml.load(path.read_text(), Loader=ComposeLoader)
 
 
+def load_local_compose():
+    path = REPO_ROOT / "compose.yaml"
+    return yaml.safe_load(path.read_text())
+
+
+def test_python_images_accept_a_configurable_package_index():
+    services = load_local_compose()["services"]
+    for name in ("api", "worker", "ocr-worker", "beat"):
+        assert services[name]["build"]["args"]["PIP_INDEX_URL"] == (
+            "${PIP_INDEX_URL:-https://pypi.org/simple}"
+        )
+
+    for dockerfile in ("backend/Dockerfile", "backend/Dockerfile.ocr"):
+        content = (REPO_ROOT / dockerfile).read_text()
+        assert "ARG PIP_INDEX_URL=https://pypi.org/simple" in content
+        assert '--index-url "$PIP_INDEX_URL"' in content
+
+
 def test_internal_services_publish_no_host_ports():
     services = load_production_compose()["services"]
     for name in ("postgres", "redis", "minio", "api"):
