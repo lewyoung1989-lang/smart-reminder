@@ -57,7 +57,8 @@ services:
       CELERY_RESULT_BACKEND: redis://redis:6379/1
       OCR_STORAGE_PROVIDER: ${OCR_STORAGE_PROVIDER:-s3}
       OCR_MODEL_ROOT: ${OCR_MODEL_ROOT:-}
-      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      S3_INTERNAL_ENDPOINT: ${S3_INTERNAL_ENDPOINT:-http://minio:9000}
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
       S3_BUCKET: ${S3_BUCKET:-smart-reminder-private}
       S3_REGION: ${S3_REGION:-us-east-1}
       S3_ADDRESSING_STYLE: ${S3_ADDRESSING_STYLE:-path}

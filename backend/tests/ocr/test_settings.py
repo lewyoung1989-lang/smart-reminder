@@ -11,3 +11,8 @@ def test_ocr_defaults_are_safe_for_cpu_worker():
     assert settings.OCR_TASK_SOFT_TIME_LIMIT == 45
     assert settings.OCR_TASK_TIME_LIMIT == 60
     assert settings.OCR_MAX_RETRIES == 2
+
+
+def test_s3_endpoints_have_explicit_internal_and_public_settings():
+    assert settings.S3_INTERNAL_ENDPOINT
+    assert settings.S3_PUBLIC_ENDPOINT

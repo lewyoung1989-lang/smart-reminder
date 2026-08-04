@@ -124,10 +124,17 @@ OCR_QUEUE = os.environ.get("OCR_QUEUE", "ocr")
 OCR_STORAGE_PROVIDER = os.environ.get("OCR_STORAGE_PROVIDER", "s3")
 OCR_UPLOAD_URL_TTL_SECONDS = int(os.environ.get("OCR_UPLOAD_URL_TTL_SECONDS", "600"))
 
-S3_ENDPOINT = os.environ.get("S3_ENDPOINT", "http://localhost:9000")
+S3_INTERNAL_ENDPOINT = os.environ.get(
+    "S3_INTERNAL_ENDPOINT",
+    os.environ.get("S3_ENDPOINT", "http://localhost:9000"),
+)
+S3_PUBLIC_ENDPOINT = os.environ.get(
+    "S3_PUBLIC_ENDPOINT",
+    S3_INTERNAL_ENDPOINT,
+)
 S3_BUCKET = os.environ.get("S3_BUCKET", "smart-reminder-private")
 S3_REGION = os.environ.get("S3_REGION", "us-east-1")
-S3_ADDRESSING_STYLE = os.environ.get("S3_ADDRESSING_STYLE", "auto")
+S3_ADDRESSING_STYLE = os.environ.get("S3_ADDRESSING_STYLE", "path")
 S3_ACCESS_KEY_ID = os.environ.get("S3_ACCESS_KEY_ID", "")
 S3_SECRET_ACCESS_KEY = os.environ.get("S3_SECRET_ACCESS_KEY", "")
 
