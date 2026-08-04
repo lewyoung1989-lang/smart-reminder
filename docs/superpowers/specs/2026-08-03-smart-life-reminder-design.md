@@ -176,6 +176,14 @@
 
 OCR 结果永远是候选值，不直接触发服药或丢弃药品等高风险动作。
 
+#### 5.6.1 内测版 OCR 技术决策
+
+- 默认 Provider 改为自建 `RapidOCR 3.9.2 + ONNX Runtime 1.28.0`，使用中文模型在 CPU 上推理，不训练自有 OCR 模型，也不要求 GPU。
+- Django 只负责签名上传、创建任务和返回状态；独立 Celery `ocr` 队列下载临时图片并执行识别，首版 Worker 并发固定为 1，避免模型多进程复制挤占内存。
+- 业务层只依赖统一 OCR Provider 接口。阿里云 OCR 保留为可配置的未来兜底，不作为亲友内测版的默认成本项。
+- 药盒正面与有效期区域分别拍摄。通用 OCR 输出经本地规则提取药名、规格、批号、生产日期和有效期；所有字段都保留置信度并要求人工确认。
+- 临时图片使用私有 OSS/COS、短时签名 URL 和最小保留期。确认成功后立即安排删除；失败任务最多保留 24 小时，日志不记录图片和完整识别文本。
+
 ### 5.7 语音创建提醒
 
 首版语音只处理 `create_reminder` 意图。典型输入：
@@ -249,11 +257,11 @@ flowchart TB
     Worker["Celery Worker / Beat"]
   end
 
-  subgraph Cloud["本地 Docker / 阿里云映射"]
+  subgraph Cloud["本地 Docker / 阿里云或腾讯云映射"]
     PG[("PostgreSQL")]
-    Redis[("Redis / Tair")]
-    Object[("MinIO / OSS")]
-    Observe["SLS / CloudMonitor"]
+    Redis[("Redis / Tair / TencentDB")]
+    Object[("MinIO / OSS / COS")]
+    Observe["SLS / CLS / 云监控"]
   end
 
   subgraph External["外部服务"]
@@ -261,7 +269,7 @@ flowchart TB
     Push["APNs / 移动推送"]
     ASR["阿里云语音识别"]
     LLM["DeepSeek API / 百炼"]
-    CloudOCR["阿里云 OCR"]
+    OCRProvider["RapidOCR / 可选阿里云 OCR"]
     Holiday["法定节假日数据"]
   end
 
@@ -291,7 +299,7 @@ flowchart TB
   Worker --> PG
   Worker --> Weather
   Worker --> Push
-  Worker --> CloudOCR
+  Worker --> OCRProvider
   Worker --> Holiday
   Worker --> Observe
   Push --> UI
@@ -360,7 +368,7 @@ lib/
 - Celery Worker + Celery Beat。
 - S3 兼容对象存储。
 - Nginx + Gunicorn。
-- Docker Compose 用于本地开发与集成测试；阿里云环境使用 ECS 上的容器部署，不在首版引入 Kubernetes/ACK。
+- Docker Compose 用于本地开发与集成测试；阿里云 ECS 或腾讯云轻量/CVM 使用同一套容器部署，不在首版引入 Kubernetes。
 
 Django 应用边界：
 
@@ -419,8 +427,8 @@ erDiagram
 | IntakeEvent | plan_id, scheduled_at, action, acted_by, acted_at, source_device_id |
 | Prescription | owner_id, type, hospital, doctor, prescribed_at, directions, image_asset_id |
 | FormulaIngredient | prescription_id, name, amount, unit, note |
-| OCRJob | user_id, asset_id, provider, status, expires_at, error_code |
-| OCRCandidate | job_id, field_name, raw_text, normalized_value, confidence, confirmed_value |
+| OCRJob | user_id, image_keys, provider, status, expires_at, error_code, confirmed_batch_id |
+| OCRCandidate | job_id, medicine_name, specification, batch_number, production_date, expiry_date, confidence_json, raw_line_count |
 | VoiceParseSession | user_id, provider, status, transcript_ciphertext, transcript_expires_at, error_code |
 | ReminderDraft | session_id, intent, schema_version, draft_json, ambiguities_json, validation_status, expires_at, confirmed_at |
 | NotificationDelivery | occurrence_id, device_id, channel, provider_message_id, status, attempted_at |
@@ -570,7 +578,8 @@ API 统一使用 `/api/v1`，返回稳定错误码和 `request_id`。
 | POST `/inventory-batches/bulk-actions` | 批量移动、标记用完或删除 |
 | GET/POST `/medication-plans` | 用药计划 |
 | GET `/intake-events` | 服药记录与家庭授权视图 |
-| POST `/uploads/presign` | 获取受限上传地址 |
+| POST `/uploads/presign` | 获取普通附件的受限上传地址 |
+| POST `/ocr/uploads` | 获取药盒临时图片的短时签名上传地址 |
 | POST `/ocr/jobs` | 创建 OCR 任务 |
 | GET `/ocr/jobs/{id}` | 查询候选结果 |
 | POST `/ocr/jobs/{id}/confirm` | 人工确认并写入药箱 |
@@ -592,7 +601,7 @@ API 统一使用 `/api/v1`，返回稳定错误码和 `request_id`。
 
 - 天气：内测默认和风天气，缓存相同地点和时间窗的查询。
 - 推送：iPhone 使用 APNs，Android 第二阶段接入阿里云移动推送或厂商通道。
-- OCR：阿里云 OCR 负责药盒与有效期候选识别，本地可用模拟适配器或 PaddleOCR 做低成本联调。
+- OCR：亲友内测默认使用自建 RapidOCR；业务层通过 Provider Adapter 隔离实现，阿里云 OCR 仅作为可配置的未来兜底。
 - 语音识别：阿里云智能语音交互；App 只获取短时令牌，不内置长期 AccessKey。
 - 结构化解析：统一 `ReminderIntentProvider` 接口。本地与测试环境可直接调用 DeepSeek 官方 API；阿里云预发布和生产优先在可用时通过百炼调用 DeepSeek，官方 API 作为可配置备选。
 - 短信：公开版接入国内云短信；亲友内测可使用邀请账号减少费用。
@@ -695,7 +704,7 @@ Mac 使用 Docker Compose 启动 Django、PostgreSQL、Redis、Celery Worker、C
 - iPhone 与 Mac 连接同一局域网；Django 监听受控局域网接口，并限制允许的 Host。
 - iOS 开发配置可对指定局域网地址添加仅 Debug 生效的 HTTP 例外；发布包和云环境全部使用 HTTPS。
 - 推送、AlarmKit、后台状态和真实语音权限必须用真机验证，模拟器只承担 UI 与普通逻辑测试。
-- 本地核心流程稳定后尽早部署低成本阿里云预发布环境，验证 APNs、HTTPS、对象存储和公网回调。
+- 本地核心流程稳定后尽早部署低成本阿里云或腾讯云预发布环境，验证 APNs、HTTPS、对象存储和公网回调。
 
 ### 18.2 阿里云预发布与亲友内测
 
@@ -706,12 +715,18 @@ Mac 使用 Docker Compose 启动 Django、PostgreSQL、Redis、Celery Worker、C
 | 数据库 | RDS PostgreSQL | 自动备份、白名单、慢查询和恢复演练 |
 | 缓存与队列 | Tair Redis | Celery broker、短期草稿和分布式锁 |
 | 图片与临时文件 | OSS | 私有 Bucket、签名 URL、生命周期自动删除 |
-| OCR | 阿里云 OCR | 药名、批号和有效期候选识别 |
+| OCR | ECS 上独立 RapidOCR Worker；阿里云 OCR 可选 | CPU 推理药名、批号和有效期候选，队列并发 1，无需 GPU |
 | 语音 | 智能语音交互 | 流式中文 ASR 与短时令牌 |
 | 大模型 | 百炼中的 DeepSeek 或官方 API | 通过 Provider Adapter 切换，不绑定业务代码 |
 | 推送 | APNs；后续移动推送 | iPhone 首发，Android 第二阶段 |
 | 日志与监控 | SLS + CloudMonitor | 脱敏日志、任务延迟、错误率与预算告警 |
 | 权限与密钥 | RAM + KMS | 最小权限角色、密钥轮换与审计 |
+
+#### 18.2.1 腾讯云低成本替代
+
+亲友内测可以使用腾讯云轻量应用服务器承载同一套 Docker Compose，不改变应用架构。2026-08-04 核对的活动档位中，`4 核 4 GB / 3 Mbps / 上海 / 1 年` 适合作为短期内测首选；OCR Worker 仍限制并发为 1，图片改存私有 COS。该活动属于新客或产品新客优惠，到期按官网刊例价续费，且活动轻量实例不支持调整规格，因此购买前必须确认系统盘、月流量、Linux 镜像和续费成本。
+
+腾讯云映射为：轻量应用服务器或 CVM 对应 ECS，TencentDB for PostgreSQL 对应 RDS，TencentDB for Redis 对应 Tair，COS 对应 OSS，云监控/CLS 对应 CloudMonitor/SLS。首批少量用户可将 PostgreSQL 和 Redis 同机运行在 4 GB 实例，公开测试前再迁移到托管服务。
 
 ### 18.3 公开版本
 
@@ -727,7 +742,7 @@ Mac 使用 Docker Compose 启动 Django、PostgreSQL、Redis、Celery Worker、C
 
 | 阶段 | 时间 | 交付物 |
 |---|---:|---|
-| 0. 准备 | 1-2 周 | 产品名称、原型确认、Apple 开发者账号、天气/OCR/语音/DeepSeek 测试账号 |
+| 0. 准备 | 1-2 周 | 产品名称、原型确认、Apple 开发者账号、天气/语音/DeepSeek 测试账号、RapidOCR 技术验证 |
 | 1. 工程基础 | 3-4 周 | Flutter/Django 项目、认证、家庭、CI、开发环境 |
 | 2. iPhone 提醒闭环 | 4-5 周 | 本地通知/AlarmKit 适配、通知等级、规则、天气预检查、离线兜底 |
 | 3. 语音草稿 | 3-4 周 | 阿里云 ASR、确定性解析、DeepSeek 适配、Schema 校验和确认页 |
@@ -750,7 +765,7 @@ Mac 使用 Docker Compose 启动 Django、PostgreSQL、Redis、Celery Worker、C
 ### 账号与供应商
 
 - 注册 Apple Developer、Android 分发渠道、域名和云账号。
-- 申请天气、阿里云 OCR/语音、DeepSeek、短信、对象存储和推送服务。
+- 申请天气、阿里云语音、DeepSeek、短信、对象存储和推送服务；阿里云 OCR 账号只在启用云端兜底时申请。
 - 建立密钥轮换、费用上限和服务到期提醒。
 
 ### 内容与数据
@@ -774,11 +789,11 @@ Mac 使用 Docker Compose 启动 Django、PostgreSQL、Redis、Celery Worker、C
 
 | 阶段 | 每月基础成本 | 主要项目 |
 |---|---:|---|
-| 本地开发/演示 | 50-300 元 | DeepSeek、语音/OCR 测试调用、少量对象存储 |
-| 推荐亲友内测 | 700-1500 元 | ECS、RDS、Tair、OSS、SLS、天气、语音、OCR、模型调用 |
-| 早期公开版 | 1500-5000 元 | 独立生产资源、监控、短信、语音、OCR、模型与公网流量 |
+| 本地开发/演示 | 50-300 元 | DeepSeek、语音测试调用、少量对象存储；OCR 在本机 CPU 运行 |
+| 推荐亲友内测 | 700-1500 元 | ECS（含 OCR Worker）、RDS、Tair、OSS、SLS、天气、语音和模型调用 |
+| 早期公开版 | 1500-5000 元 | 独立生产资源、OCR 计算资源、监控、短信、语音、模型与公网流量 |
 
-另有 Apple Developer 年费、国内应用市场可能要求的材料、域名和备案相关成本。OCR、短信和推送费用随调用量增长，必须设置预算告警。
+另有 Apple Developer 年费、国内应用市场可能要求的材料、域名和备案相关成本。自建 OCR 的主要变量是 ECS CPU 和内存；短信、语音和推送费用随调用量增长，必须设置预算告警。
 
 ## 22. 主要风险
 
@@ -802,7 +817,7 @@ Mac 使用 Docker Compose 启动 Django、PostgreSQL、Redis、Celery Worker、C
 - 本文档通过最终评审。
 - iPhone 首发和内测范围不再增加新模块。
 - UI 原型中的五条核心流程获得确认：工作日闹钟、语音草稿、服药、药箱、OCR。
-- 阿里云语音、DeepSeek、天气、OCR 和 APNs 各完成一次最小技术验证。
+- 阿里云语音、DeepSeek、天气、RapidOCR 和 APNs 各完成一次最小技术验证；启用阿里云 OCR 兜底前再单独验证其适配器。
 - 确认现有 iPhone 的 iOS 版本；若低于 iOS 26，落实一台 AlarmKit 验收设备。
 - 本地 Docker Compose 可一条命令启动，iPhone 能通过局域网完成登录和创建提醒。
 - 语音表达不会未经确认创建正式提醒，也不能删除、停用或执行提醒。
