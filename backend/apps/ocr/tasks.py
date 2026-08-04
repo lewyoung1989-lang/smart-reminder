@@ -59,3 +59,11 @@ def process_ocr_job(self, job_id):
             job_id,
             job.error_code,
         )
+
+
+@shared_task
+def delete_ocr_job_images(job_id):
+    # 清理实现按需导入，API 进程只负责投递，不提前连接对象存储。
+    from apps.ocr.services.retention import delete_job_images
+
+    return delete_job_images(job_id, storage=get_object_storage())

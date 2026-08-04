@@ -17,4 +17,5 @@ urlpatterns = [
         name="reminder-draft-confirm",
     ),
     path("api/v1/voice/", include("apps.reminders.api.urls")),
+    path("api/v1/ocr/", include("apps.ocr.api.urls")),
 ]
