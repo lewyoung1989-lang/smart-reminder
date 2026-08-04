@@ -1,6 +1,7 @@
 from celery.exceptions import Retry
 import pytest
 
+from apps.ocr.domain.types import OCRDocument, OCRLine
 from apps.ocr.models import OCRCandidate, OCRJob
 from apps.ocr.tasks import process_ocr_job
 
@@ -58,3 +59,48 @@ def test_process_task_marks_terminal_failure_after_retry_limit(
     job.refresh_from_db()
     assert job.status == OCRJob.Status.FAILED
     assert job.error_code == "ocr_failed"
+
+
+@pytest.mark.django_db
+def test_process_logs_metadata_without_recognized_text(
+    user,
+    monkeypatch,
+    mocker,
+    caplog,
+):
+    sensitive_text = "布洛芬缓释胶囊"
+    job = OCRJob.objects.create(user=user, image_keys={"front": "front"})
+
+    class FakeStorage:
+        def get_bytes(self, key):
+            return b"image"
+
+    class FakeProvider:
+        def recognize(self, image_bytes, *, role):
+            line = OCRLine(
+                ((0, 0), (1, 0), (1, 1), (0, 1)),
+                sensitive_text,
+                0.96,
+            )
+            return OCRDocument(role, (line,))
+
+    monkeypatch.setattr(
+        "apps.ocr.services.job_runner.validate_and_resize",
+        lambda value: value,
+    )
+    mocker.patch(
+        "apps.ocr.tasks.get_object_storage",
+        return_value=FakeStorage(),
+    )
+    mocker.patch(
+        "apps.ocr.tasks.get_ocr_provider",
+        return_value=FakeProvider(),
+    )
+
+    with caplog.at_level("INFO"):
+        process_ocr_job.run(str(job.id))
+
+    assert str(job.id) in caplog.text
+    assert "duration_ms" in caplog.text
+    assert "line_count=1" in caplog.text
+    assert sensitive_text not in caplog.text

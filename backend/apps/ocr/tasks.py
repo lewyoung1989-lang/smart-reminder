@@ -63,7 +63,21 @@ def process_ocr_job(self, job_id):
 
 @shared_task
 def delete_ocr_job_images(job_id):
-    # 清理实现按需导入，API 进程只负责投递，不提前连接对象存储。
     from apps.ocr.services.retention import delete_job_images
 
-    return delete_job_images(job_id, storage=get_object_storage())
+    try:
+        return delete_job_images(job_id, storage=get_object_storage())
+    except Exception:
+        # 日志不记录对象键，删除失败时由数据库中的键支持后续重试。
+        logger.exception(
+            "image_delete_failed job_id=%s error_code=image_delete_failed",
+            job_id,
+        )
+        raise
+
+
+@shared_task
+def purge_expired_ocr_images():
+    from apps.ocr.services.retention import purge_expired_images
+
+    return purge_expired_images(storage=get_object_storage())

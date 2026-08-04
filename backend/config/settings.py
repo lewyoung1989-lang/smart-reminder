@@ -106,3 +106,9 @@ S3_SECRET_ACCESS_KEY = os.environ.get("S3_SECRET_ACCESS_KEY", "")
 CELERY_TASK_ROUTES = {"apps.ocr.tasks.*": {"queue": OCR_QUEUE}}
 CELERY_TASK_SOFT_TIME_LIMIT = OCR_TASK_SOFT_TIME_LIMIT
 CELERY_TASK_TIME_LIMIT = OCR_TASK_TIME_LIMIT
+CELERY_BEAT_SCHEDULE = {
+    "purge-expired-ocr-images-hourly": {
+        "task": "apps.ocr.tasks.purge_expired_ocr_images",
+        "schedule": 3600.0,
+    },
+}
