@@ -1,0 +1,45 @@
+import os
+import subprocess
+import sys
+import textwrap
+from pathlib import Path
+
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+
+def test_production_security_settings_are_loaded_from_environment():
+    env = os.environ.copy()
+    env.update(
+        {
+            "DJANGO_DEBUG": "false",
+            "DJANGO_ALLOWED_HOSTS": "aipupu.cloud",
+            "DJANGO_CSRF_TRUSTED_ORIGINS": "https://aipupu.cloud",
+            "DJANGO_SECURE_SSL_REDIRECT": "true",
+            "DJANGO_SECURE_HSTS_SECONDS": "3600",
+        }
+    )
+    script = textwrap.dedent(
+        """
+        from config import settings
+
+        assert settings.DEBUG is False
+        assert settings.ALLOWED_HOSTS == ["aipupu.cloud"]
+        assert settings.CSRF_TRUSTED_ORIGINS == ["https://aipupu.cloud"]
+        assert settings.SECURE_PROXY_SSL_HEADER == (
+            "HTTP_X_FORWARDED_PROTO",
+            "https",
+        )
+        assert settings.SECURE_SSL_REDIRECT is True
+        assert settings.SESSION_COOKIE_SECURE is True
+        assert settings.CSRF_COOKIE_SECURE is True
+        assert settings.SECURE_HSTS_SECONDS == 3600
+        """
+    )
+
+    subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=BACKEND_DIR,
+        env=env,
+        check=True,
+    )
