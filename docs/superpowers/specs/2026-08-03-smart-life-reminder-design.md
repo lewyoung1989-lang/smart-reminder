@@ -35,10 +35,10 @@
 | 数据库 | PostgreSQL | 适合家庭关系、库存批次和审计数据 |
 | 药箱设计 | 药品档案与库存批次分离 | 同一种药可能有多盒、不同有效期和存放位置 |
 | 中药能力 | 首版保留方剂和处方结构 | 先拍照并手动确认，不自动识别每味饮片和剂量 |
-| 语音识别 | 阿里云智能语音交互 | 中文识别成熟，便于后续与阿里云部署统一管理 |
+| 语音识别 | 阿里云智能语音交互 | 中文识别成熟，通过 Provider Adapter 与腾讯云部署解耦 |
 | 语义解析 | 本地规则优先，DeepSeek 兜底 | 简单时间本地解析，复杂条件用大模型转为受控 JSON |
 | 语音安全边界 | 只创建草稿，必须确认 | 首版不允许语音直接删除、停用或执行提醒 |
-| 开发与部署 | 本地先行，再上阿里云 | Docker Compose 完成本地闭环，核心流程稳定后部署低成本预发布环境 |
+| 开发与部署 | 本地先行，再上腾讯云 | Docker Compose 完成本地闭环，核心流程稳定后部署到 `aipupu.cloud` 对应的腾讯云预发布环境 |
 
 ## 3. 范围
 
@@ -182,7 +182,7 @@ OCR 结果永远是候选值，不直接触发服药或丢弃药品等高风险�
 - Django 只负责签名上传、创建任务和返回状态；独立 Celery `ocr` 队列下载临时图片并执行识别，首版 Worker 并发固定为 1，避免模型多进程复制挤占内存。
 - 业务层只依赖统一 OCR Provider 接口。阿里云 OCR 保留为可配置的未来兜底，不作为亲友内测版的默认成本项。
 - 药盒正面与有效期区域分别拍摄。通用 OCR 输出经本地规则提取药名、规格、批号、生产日期和有效期；所有字段都保留置信度并要求人工确认。
-- 临时图片使用私有 OSS/COS、短时签名 URL 和最小保留期。确认成功后立即安排删除；失败任务最多保留 24 小时，日志不记录图片和完整识别文本。
+- 临时图片使用私有 COS、短时签名 URL 和最小保留期。确认成功后立即安排删除；失败任务最多保留 24 小时，日志不记录图片和完整识别文本。
 
 ### 5.7 语音创建提醒
 
@@ -257,11 +257,11 @@ flowchart TB
     Worker["Celery Worker / Beat"]
   end
 
-  subgraph Cloud["本地 Docker / 阿里云或腾讯云映射"]
+  subgraph Cloud["本地 Docker / 腾讯云映射"]
     PG[("PostgreSQL")]
-    Redis[("Redis / Tair / TencentDB")]
-    Object[("MinIO / OSS / COS")]
-    Observe["SLS / CLS / 云监控"]
+    Redis[("Redis / TencentDB for Redis")]
+    Object[("MinIO / COS")]
+    Observe["CLS / 腾讯云监控"]
   end
 
   subgraph External["外部服务"]
@@ -368,7 +368,7 @@ lib/
 - Celery Worker + Celery Beat。
 - S3 兼容对象存储。
 - Nginx + Gunicorn。
-- Docker Compose 用于本地开发与集成测试；阿里云 ECS 或腾讯云轻量/CVM 使用同一套容器部署，不在首版引入 Kubernetes。
+- Docker Compose 用于本地开发与集成测试；腾讯云轻量应用服务器或 CVM 使用同一套容器部署，不在首版引入 Kubernetes。
 
 Django 应用边界：
 
@@ -603,7 +603,7 @@ API 统一使用 `/api/v1`，返回稳定错误码和 `request_id`。
 - 推送：iPhone 使用 APNs，Android 第二阶段接入阿里云移动推送或厂商通道。
 - OCR：亲友内测默认使用自建 RapidOCR；业务层通过 Provider Adapter 隔离实现，阿里云 OCR 仅作为可配置的未来兜底。
 - 语音识别：阿里云智能语音交互；App 只获取短时令牌，不内置长期 AccessKey。
-- 结构化解析：统一 `ReminderIntentProvider` 接口。本地与测试环境可直接调用 DeepSeek 官方 API；阿里云预发布和生产优先在可用时通过百炼调用 DeepSeek，官方 API 作为可配置备选。
+- 结构化解析：统一 `ReminderIntentProvider` 接口。本地、腾讯云预发布和生产默认调用 DeepSeek 官方 API；百炼中的 DeepSeek 保留为可配置备选。
 - 短信：公开版接入国内云短信；亲友内测可使用邀请账号减少费用。
 - 节假日：每年依据官方公告导入版本化日历，由管理员复核调休日期。
 
@@ -639,7 +639,7 @@ API 统一使用 `/api/v1`，返回稳定错误码和 `request_id`。
 - 日志禁止记录原始音频和完整语音转写；只记录会话 ID、耗时、Provider、错误码和字段级校验结果。
 - 音频默认仅流式传输，不在业务服务端保存；转写和草稿采用短保留期，用户取消时立即安排删除。
 - 发送给 DeepSeek 的内容遵循最小必要原则，不包含完整药箱、家庭成员清单、处方原图或无关健康信息。
-- 阿里云 RAM 使用最小权限角色；生产 AccessKey、DeepSeek Key 和 APNs 密钥使用 KMS 或等价密钥管理，不进入镜像和源码。
+- 腾讯云 CAM 使用最小权限角色；生产 COS 凭据、DeepSeek Key 和 APNs 密钥使用 KMS 或等价密钥管理，不进入镜像和源码。
 - 管理员查看敏感数据需要明确权限并写入审计日志。
 - 提供账号注销、数据导出、撤回共享和删除原图能力。
 - 公开上架前对敏感个人信息处理取得单独同意，并列出推送、OCR、统计等第三方 SDK。
@@ -704,37 +704,37 @@ Mac 使用 Docker Compose 启动 Django、PostgreSQL、Redis、Celery Worker、C
 - iPhone 与 Mac 连接同一局域网；Django 监听受控局域网接口，并限制允许的 Host。
 - iOS 开发配置可对指定局域网地址添加仅 Debug 生效的 HTTP 例外；发布包和云环境全部使用 HTTPS。
 - 推送、AlarmKit、后台状态和真实语音权限必须用真机验证，模拟器只承担 UI 与普通逻辑测试。
-- 本地核心流程稳定后尽早部署低成本阿里云或腾讯云预发布环境，验证 APNs、HTTPS、对象存储和公网回调。
+- 本地核心流程稳定后尽早部署到腾讯云预发布环境，验证 APNs、HTTPS、COS 和公网回调。
 
-### 18.2 阿里云预发布与亲友内测
+### 18.2 腾讯云预发布与亲友内测
 
-| 能力 | 阿里云服务 | 说明 |
+| 能力 | 腾讯云服务 | 说明 |
 |---|---|---|
-| 应用计算 | ECS + Docker Compose | Nginx、Django API、Celery Worker/Beat；早期不引入 ACK |
-| 容器镜像 | ACR | 存储 API 与 Worker 镜像，按版本回滚 |
-| 数据库 | RDS PostgreSQL | 自动备份、白名单、慢查询和恢复演练 |
-| 缓存与队列 | Tair Redis | Celery broker、短期草稿和分布式锁 |
-| 图片与临时文件 | OSS | 私有 Bucket、签名 URL、生命周期自动删除 |
-| OCR | ECS 上独立 RapidOCR Worker；阿里云 OCR 可选 | CPU 推理药名、批号和有效期候选，队列并发 1，无需 GPU |
+| 应用计算 | Lighthouse/CVM + Docker Compose | Nginx、Django API、Celery Worker/Beat；早期不引入 TKE |
+| 容器镜像 | TCR | 存储 API 与 Worker 镜像，按版本回滚 |
+| 数据库 | Docker PostgreSQL，后续 TencentDB for PostgreSQL | 初期降低成本；公开测试前启用托管备份、白名单和恢复演练 |
+| 缓存与队列 | Docker Redis，后续 TencentDB for Redis | Celery broker、短期草稿和分布式锁 |
+| 图片与临时文件 | COS | 私有 Bucket、签名 URL、生命周期自动删除 |
+| OCR | Lighthouse/CVM 上独立 RapidOCR Worker；阿里云 OCR 可选 | CPU 推理药名、批号和有效期候选，队列并发 1，无需 GPU |
 | 语音 | 智能语音交互 | 流式中文 ASR 与短时令牌 |
-| 大模型 | 百炼中的 DeepSeek 或官方 API | 通过 Provider Adapter 切换，不绑定业务代码 |
+| 大模型 | DeepSeek 官方 API；百炼可选 | 通过 Provider Adapter 切换，不绑定业务代码 |
 | 推送 | APNs；后续移动推送 | iPhone 首发，Android 第二阶段 |
-| 日志与监控 | SLS + CloudMonitor | 脱敏日志、任务延迟、错误率与预算告警 |
-| 权限与密钥 | RAM + KMS | 最小权限角色、密钥轮换与审计 |
+| 日志与监控 | CLS + 腾讯云监控 | 脱敏日志、任务延迟、错误率与预算告警 |
+| 权限与密钥 | CAM + KMS | 最小权限角色、密钥轮换与审计 |
 
-#### 18.2.1 腾讯云低成本替代
+#### 18.2.1 首期低成本配置
 
-亲友内测可以使用腾讯云轻量应用服务器承载同一套 Docker Compose，不改变应用架构。2026-08-04 核对的活动档位中，`4 核 4 GB / 3 Mbps / 上海 / 1 年` 适合作为短期内测首选；OCR Worker 仍限制并发为 1，图片改存私有 COS。该活动属于新客或产品新客优惠，到期按官网刊例价续费，且活动轻量实例不支持调整规格，因此购买前必须确认系统盘、月流量、Linux 镜像和续费成本。
+亲友内测使用腾讯云轻量应用服务器承载同一套 Docker Compose，不改变应用架构。2026-08-04 核对的活动档位中，`4 核 4 GB / 3 Mbps / 上海 / 1 年` 适合作为短期内测首选；OCR Worker 仍限制并发为 1，图片存入私有 COS。活动配置和续费价格可能变化，部署前必须重新确认系统盘、月流量、Linux 镜像和续费成本。
 
-腾讯云映射为：轻量应用服务器或 CVM 对应 ECS，TencentDB for PostgreSQL 对应 RDS，TencentDB for Redis 对应 Tair，COS 对应 OSS，云监控/CLS 对应 CloudMonitor/SLS。首批少量用户可将 PostgreSQL 和 Redis 同机运行在 4 GB 实例，公开测试前再迁移到托管服务。
+首批少量用户可将 PostgreSQL 和 Redis 同机运行在 4 GB 实例，启用每日加密备份；公开测试前再迁移到 TencentDB 托管服务。公网只开放 SSH、HTTP 和 HTTPS，数据库、Redis 与管理端口不得直接暴露。
 
 ### 18.3 公开版本
 
-- 国内正式域名、HTTPS、备案和独立隐私页面。
-- Django API 与 Worker 按负载分离，RDS、Tair 和 OSS 设置独立生产实例与备份策略。
-- OSS 设置生命周期规则自动删除临时 OCR 图片；语音音频默认不落 OSS。
+- 使用 `aipupu.cloud`、HTTPS、备案和独立隐私页面。
+- Django API 与 Worker 按负载分离，TencentDB 和 COS 设置独立生产实例与备份策略。
+- COS 设置生命周期规则自动删除临时 OCR 图片；语音音频默认不落对象存储。
 - CI/CD 执行测试、镜像扫描、数据库迁移检查、灰度部署和回滚准备。
-- 不因“上云”自动升级到 Kubernetes；只有单机资源、发布并发或隔离需求形成实际瓶颈时再评估 ACK。
+- 不因“上云”自动升级到 Kubernetes；只有单机资源、发布并发或隔离需求形成实际瓶颈时再评估 TKE。
 
 ## 19. 个人开发者实施计划
 
@@ -749,7 +749,7 @@ Mac 使用 Docker Compose 启动 Django、PostgreSQL、Redis、Celery Worker、C
 | 4. 用药与药箱 | 5-6 周 | 用药计划、服药动作、药品档案、库存批次、搜索筛选 |
 | 5. OCR 与模板 | 3-4 周 | 药盒识别、有效期确认、洗车和买票模板、中药占位 |
 | 6. 家庭与可靠性 | 3-4 周 | 共享权限、升级提醒、审计、备份、监控和异常恢复 |
-| 7. 内测 | 3-4 周 | iPhone 真机、阿里云预发布、可用性修复、隐私文案和 TestFlight |
+| 7. 内测 | 3-4 周 | iPhone 真机、腾讯云预发布、可用性修复、隐私文案和 TestFlight |
 
 时间范围假设不开发医疗诊断、开放式 Agent 和语音修改/删除能力。
 
@@ -790,10 +790,10 @@ Mac 使用 Docker Compose 启动 Django、PostgreSQL、Redis、Celery Worker、C
 | 阶段 | 每月基础成本 | 主要项目 |
 |---|---:|---|
 | 本地开发/演示 | 50-300 元 | DeepSeek、语音测试调用、少量对象存储；OCR 在本机 CPU 运行 |
-| 推荐亲友内测 | 700-1500 元 | ECS（含 OCR Worker）、RDS、Tair、OSS、SLS、天气、语音和模型调用 |
+| 推荐亲友内测 | 700-1500 元 | Lighthouse/CVM（含 OCR Worker）、TencentDB、COS、CLS、天气、语音和模型调用 |
 | 早期公开版 | 1500-5000 元 | 独立生产资源、OCR 计算资源、监控、短信、语音、模型与公网流量 |
 
-另有 Apple Developer 年费、国内应用市场可能要求的材料、域名和备案相关成本。自建 OCR 的主要变量是 ECS CPU 和内存；短信、语音和推送费用随调用量增长，必须设置预算告警。
+另有 Apple Developer 年费、国内应用市场可能要求的材料、域名和备案相关成本。自建 OCR 的主要变量是 Lighthouse/CVM CPU 和内存；短信、语音和推送费用随调用量增长，必须设置预算告警。
 
 ## 22. 主要风险
 

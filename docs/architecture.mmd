@@ -28,14 +28,14 @@ flowchart TB
     Worker["Celery Worker / Beat"]
   end
 
-  subgraph Runtime["本地 Docker -> 阿里云 / 腾讯云"]
-    PG[("PostgreSQL -> RDS / TencentDB")]
-    Redis[("Redis -> Tair / TencentDB")]
-    Object[("MinIO -> OSS / COS")]
-    Image["ACR / TCR 镜像"]
-    Compute["ECS / Lighthouse / CVM"]
-    Observe["SLS / CLS / 云监控"]
-    Secret["RAM / CAM / KMS"]
+  subgraph Runtime["本地 Docker -> 腾讯云"]
+    PG[("PostgreSQL -> TencentDB")]
+    Redis[("Redis -> TencentDB for Redis")]
+    Object[("MinIO -> COS")]
+    Image["TCR 镜像"]
+    Compute["Lighthouse / CVM"]
+    Observe["CLS / 腾讯云监控"]
+    Secret["CAM / KMS"]
   end
 
   subgraph Provider["外部 Provider 适配层"]

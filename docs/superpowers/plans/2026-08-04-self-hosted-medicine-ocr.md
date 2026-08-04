@@ -92,7 +92,7 @@ S3_ACCESS_KEY_ID=
 S3_SECRET_ACCESS_KEY=
 ```
 
-Production secrets belong in KMS/role injection, not `.env`, source control, Docker image layers, or the Flutter app. Prefer an ECS RAM role or Tencent Cloud service role over long-lived `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY`.
+Production secrets belong in KMS/role injection, not `.env`, source control, Docker image layers, or the Flutter app. Prefer a Tencent Cloud service role over long-lived `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY`.
 
 ### Runtime checklist
 
