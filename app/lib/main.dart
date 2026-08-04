@@ -1,38 +1,63 @@
 import 'package:flutter/material.dart';
 
-import 'features/voice_reminders/domain/reminder_draft.dart';
-import 'features/voice_reminders/presentation/voice_draft_screen.dart';
+import 'config/app_config.dart';
+import 'features/reminder_drafts/data/reminder_draft_api.dart';
+import 'features/reminder_drafts/presentation/reminder_composer_screen.dart';
 
 
 void main() {
-  runApp(const SmartReminderApp());
+  runApp(SmartReminderApp(config: AppConfig.fromEnvironment()));
 }
 
 
-class SmartReminderApp extends StatelessWidget {
-  const SmartReminderApp({super.key});
+class SmartReminderApp extends StatefulWidget {
+  const SmartReminderApp({required this.config, super.key});
+
+  final AppConfig config;
+
+  @override
+  State<SmartReminderApp> createState() => _SmartReminderAppState();
+}
+
+
+class _SmartReminderAppState extends State<SmartReminderApp> {
+  late final ReminderDraftApi _api;
+
+  @override
+  void initState() {
+    super.initState();
+    _api = ReminderDraftApi(
+      baseUrl: widget.config.apiBaseUrl,
+      accessToken: widget.config.apiAccessToken,
+    );
+  }
+
+  @override
+  void dispose() {
+    _api.close();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final draft = ReminderDraft(
-      id: 'local-preview',
-      title: '起床并查看天气',
-      scheduledAt: DateTime.now().add(const Duration(days: 1)),
-      timezone: 'Asia/Shanghai',
-      severity: ReminderSeverity.alarm,
-      weatherMessage: '未来两小时可能有雨，建议带伞',
-      ambiguities: const [],
-    );
     return MaterialApp(
-      title: '智能生活提醒',
+      title: '智能提醒',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF006C4C)),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF166B5A),
+          surface: const Color(0xFFF7F9F8),
+        ),
+        scaffoldBackgroundColor: const Color(0xFFF7F9F8),
+        inputDecorationTheme: const InputDecorationTheme(
+          filled: true,
+          fillColor: Colors.white,
+        ),
         useMaterial3: true,
       ),
-      home: VoiceDraftScreen(
-        transcript: '明天早上七点半叫我起床，先查未来两小时天气，如果下雨提醒我带伞。',
-        draft: draft,
-        onConfirm: () async {},
+      home: ReminderComposerScreen(
+        createDraft: _api.createDraft,
+        confirmDraft: _api.confirmDraft,
       ),
     );
   }
