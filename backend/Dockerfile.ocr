@@ -1,0 +1,19 @@
+FROM python:3.13-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY backend/requirements /app/backend/requirements
+RUN pip install --no-cache-dir -r /app/backend/requirements/ocr.txt
+
+COPY backend /app/backend
+
+WORKDIR /app/backend
+
+CMD ["celery", "-A", "config", "worker", "-Q", "ocr", "--concurrency=1", "--prefetch-multiplier=1", "--loglevel=INFO"]
