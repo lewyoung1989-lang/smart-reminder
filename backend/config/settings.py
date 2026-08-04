@@ -19,6 +19,8 @@ INSTALLED_APPS = [
     "rest_framework.authtoken",
     "apps.core",
     "apps.reminders",
+    "apps.medicines.apps.MedicinesConfig",
+    "apps.ocr.apps.OCRConfig",
 ]
 
 MIDDLEWARE = [
