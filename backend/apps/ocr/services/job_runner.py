@@ -1,0 +1,57 @@
+from django.db import transaction
+
+from apps.ocr.domain.medicine_parser import extract_candidates
+from apps.ocr.models import OCRCandidate, OCRJob
+
+from .image_validation import validate_and_resize
+
+
+def run_job(job_id, *, storage, provider):
+    with transaction.atomic():
+        job = OCRJob.objects.select_for_update().get(id=job_id)
+        # Celery 重投或客户端重复触发时，成功任务直接返回，避免重复识别和写入。
+        if job.status in {
+            OCRJob.Status.SUCCEEDED,
+            OCRJob.Status.CONFIRMED,
+        }:
+            return job
+        job.status = OCRJob.Status.RUNNING
+        job.attempt_count += 1
+        job.error_code = ""
+        job.save(
+            update_fields=[
+                "status",
+                "attempt_count",
+                "error_code",
+                "updated_at",
+            ]
+        )
+
+    documents = []
+    for role in ("front", "expiry"):
+        key = job.image_keys.get(role)
+        if key:
+            image = validate_and_resize(storage.get_bytes(key))
+            documents.append(provider.recognize(image, role=role))
+
+    candidates = extract_candidates(tuple(documents))
+    line_count = sum(len(document.lines) for document in documents)
+
+    with transaction.atomic():
+        job = OCRJob.objects.select_for_update().get(id=job_id)
+        # 只持久化结构化候选值和置信度，完整 OCR 原文不进入数据库。
+        OCRCandidate.objects.update_or_create(
+            job=job,
+            defaults={
+                "medicine_name": candidates.medicine_name,
+                "specification": candidates.specification,
+                "batch_number": candidates.batch_number,
+                "production_date": candidates.production_date,
+                "expiry_date": candidates.expiry_date,
+                "confidence_json": candidates.confidence or {},
+                "raw_line_count": line_count,
+            },
+        )
+        job.status = OCRJob.Status.SUCCEEDED
+        job.save(update_fields=["status", "updated_at"])
+    return job

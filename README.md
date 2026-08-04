@@ -9,7 +9,7 @@
 - 确认后在 iPhone 安排一次本地通知。
 - 服务端不保存原始输入，只保存 SHA-256 和结构化草稿。
 
-AlarmKit 强闹钟、阿里云语音识别、天气预检查和家庭药箱仍在后续阶段。
+药盒 OCR 当前使用自建 RapidOCR，候选结果必须人工核对后才会写入药箱。AlarmKit 强闹钟、语音识别和天气预检查仍在后续阶段。
 
 ## 本地后端
 
@@ -79,6 +79,10 @@ cd app
 | POST | `/api/v1/reminder-drafts/{id}/confirm` | 人工确认并创建正式提醒 |
 | POST | `/api/v1/voice/reminder-drafts` | 兼容上一阶段的转写草稿路径 |
 | POST | `/api/v1/voice/reminder-drafts/{id}/confirm` | 兼容上一阶段的确认路径 |
+| POST | `/api/v1/ocr/uploads` | 获取私有药盒图片的限时上传地址 |
+| POST | `/api/v1/ocr/jobs` | 创建药盒 OCR 任务 |
+| GET | `/api/v1/ocr/jobs/{id}` | 查询任务状态与结构化候选值 |
+| POST | `/api/v1/ocr/jobs/{id}/confirm` | 人工确认候选并创建药品库存 |
 
 请求需要 `Authorization: Bearer <token>`。文字和语音最终使用同一套结构化草稿、确认和幂等逻辑。
 
@@ -91,7 +95,54 @@ docker compose config
 docker compose up --build
 ```
 
-服务包括 PostgreSQL、Redis、MinIO、Django API、Celery Worker 和 Celery Beat。MinIO 控制台位于 `http://127.0.0.1:9001`。
+服务包括 PostgreSQL、Redis、MinIO、Django API、普通 Celery Worker、并发为 1 的 OCR Worker 和 Celery Beat。MinIO 控制台位于 `http://127.0.0.1:9001`。
+
+只启动 OCR 闭环依赖并执行安全冒烟检查：
+
+```bash
+docker compose up -d postgres redis minio api ocr-worker beat
+docker compose exec ocr-worker python manage.py check_ocr tests/ocr/fixtures/medicine_front.jpg
+```
+
+API 镜像只安装 `backend/requirements/base.txt`；RapidOCR、ONNX Runtime 和 OpenCV 只存在于 `ocr-worker` 镜像。
+
+## OCR 配置
+
+本地 `.env` 可使用以下配置；腾讯云部署使用同机私有 MinIO，生产差异由 `deploy/tencent/` 管理：
+
+```dotenv
+OCR_PROVIDER=rapidocr
+OCR_LANGUAGE=ch
+OCR_TEXT_SCORE=0.50
+OCR_MAX_IMAGE_BYTES=8388608
+OCR_MAX_IMAGE_SIDE=2048
+OCR_JOB_RETENTION_HOURS=24
+OCR_WORKER_CONCURRENCY=1
+OCR_TASK_SOFT_TIME_LIMIT=45
+OCR_TASK_TIME_LIMIT=60
+OCR_MAX_RETRIES=2
+OCR_MODEL_ROOT=
+OCR_QUEUE=ocr
+OCR_STORAGE_PROVIDER=s3
+OCR_UPLOAD_URL_TTL_SECONDS=600
+S3_ENDPOINT=http://minio:9000
+S3_BUCKET=smart-reminder-private
+S3_REGION=us-east-1
+S3_ADDRESSING_STYLE=path
+S3_ACCESS_KEY_ID=smart-reminder
+S3_SECRET_ACCESS_KEY=local-development-only
+```
+
+腾讯云亲友内测使用 4 核 4 GB 轻量服务器。PostgreSQL、Redis 和 MinIO 随 Compose 部署；公网只开放 HTTPS，数据库、Redis 和对象存储管理端口保持私网可见。
+
+上线前检查：
+
+- MinIO 已创建私有 `smart-reminder-private` 桶，匿名读写和列表均关闭，`ocr/tmp/` 生命周期设为 1 天。
+- OCR Worker 固定 `1 CPU`、约 `700 MB` 预留、`1.2 GB` 上限、并发 `1`。
+- 生产环境在构建或发布阶段准备模型文件，挂载只读 `OCR_MODEL_ROOT`，启动时不联网下载。
+- Celery 超时为 `45/60` 秒，最多重试 `2` 次；每小时清理过期图片。
+- 日志只包含任务 ID、耗时、行数、Provider 和错误码，不包含 OCR 原文、图片、签名 URL 或密钥。
+- 监控主机内存、Worker 重启、队列深度、P95 耗时、失败率和图片删除失败。
 
 ## 腾讯云预发布
 

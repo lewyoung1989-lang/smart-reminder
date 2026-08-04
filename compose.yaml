@@ -55,6 +55,14 @@ services:
       POSTGRES_PORT: "5432"
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
+      OCR_STORAGE_PROVIDER: ${OCR_STORAGE_PROVIDER:-s3}
+      OCR_MODEL_ROOT: ${OCR_MODEL_ROOT:-}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      S3_BUCKET: ${S3_BUCKET:-smart-reminder-private}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_ADDRESSING_STYLE: ${S3_ADDRESSING_STYLE:-path}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-smart-reminder}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-local-development-only}
     command: sh -c "python manage.py migrate && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2"
     ports:
       - "8000:8000"
@@ -69,7 +77,22 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     environment: *backend_environment
-    command: celery -A config worker --loglevel=INFO
+    command: celery -A config worker -Q celery --loglevel=INFO
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  ocr-worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.ocr
+    environment: *backend_environment
+    command: celery -A config worker -Q ocr --concurrency=1 --prefetch-multiplier=1 --loglevel=INFO
+    mem_reservation: 700m
+    mem_limit: 1200m
+    cpus: 1.0
     depends_on:
       postgres:
         condition: service_healthy
