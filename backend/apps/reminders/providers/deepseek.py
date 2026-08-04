@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Any, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import ValidationError
 
@@ -104,8 +105,36 @@ class DeepSeekReminderIntentProvider:
         except (KeyError, IndexError, TypeError, json.JSONDecodeError, ValidationError) as error:
             raise DeepSeekResponseError("DeepSeek returned an invalid reminder draft") from error
 
+        draft = self._localize_naive_datetime(draft, timezone=timezone)
         self._validate_draft(draft, now=now, timezone=timezone)
         return draft
+
+    @staticmethod
+    def _localize_naive_datetime(
+        draft: ReminderDraftData,
+        *,
+        timezone: str,
+    ) -> ReminderDraftData:
+        schedule = draft.schedule
+        if (
+            schedule is None
+            or schedule.local_datetime.tzinfo is not None
+            or schedule.timezone != timezone
+        ):
+            return draft
+        try:
+            local_datetime = schedule.local_datetime.replace(tzinfo=ZoneInfo(timezone))
+        except ZoneInfoNotFoundError as error:
+            raise DeepSeekResponseError(
+                "DeepSeek returned an invalid reminder timezone"
+            ) from error
+        return draft.model_copy(
+            update={
+                "schedule": schedule.model_copy(
+                    update={"local_datetime": local_datetime}
+                )
+            }
+        )
 
     @staticmethod
     def _system_prompt(*, now: datetime, timezone: str) -> str:
