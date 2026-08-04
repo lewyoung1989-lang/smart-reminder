@@ -1,7 +1,12 @@
+import logging
+
 from django.db import transaction
 from django.utils import timezone
 
 from apps.ocr.models import OCRJob
+
+
+logger = logging.getLogger(__name__)
 
 
 def delete_job_images(job_id, *, storage):
@@ -20,8 +25,18 @@ def purge_expired_images(*, storage):
     job_ids = list(
         OCRJob.objects.filter(expires_at__lte=timezone.now())
         .exclude(image_keys={})
+        .order_by("created_at")
         .values_list("id", flat=True)
     )
+    deleted = 0
     for job_id in job_ids:
-        delete_job_images(job_id, storage=storage)
-    return len(job_ids)
+        try:
+            delete_job_images(job_id, storage=storage)
+        except Exception:
+            logger.warning(
+                "image_delete_failed job_id=%s error_code=image_delete_failed",
+                job_id,
+            )
+            continue
+        deleted += 1
+    return deleted

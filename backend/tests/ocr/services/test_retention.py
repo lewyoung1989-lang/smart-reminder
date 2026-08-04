@@ -64,3 +64,24 @@ def test_purge_deletes_expired_jobs_with_remaining_images(user):
     assert storage.deleted == ["a"]
     assert expired.image_keys == {}
     assert active.image_keys == {"front": "b"}
+
+
+@pytest.mark.django_db
+def test_purge_continues_after_one_expired_job_fails(user, caplog):
+    failed = OCRJob.objects.create(user=user, image_keys={"front": "bad"})
+    removed = OCRJob.objects.create(user=user, image_keys={"front": "good"})
+    OCRJob.objects.filter(id__in=[failed.id, removed.id]).update(
+        expires_at=timezone.now() - timedelta(seconds=1)
+    )
+    storage = FakeStorage(fail_on="bad")
+
+    with caplog.at_level("WARNING"):
+        assert purge_expired_images(storage=storage) == 1
+
+    failed.refresh_from_db()
+    removed.refresh_from_db()
+    assert failed.image_keys == {"front": "bad"}
+    assert removed.image_keys == {}
+    assert str(failed.id) in caplog.text
+    assert "error_code=image_delete_failed" in caplog.text
+    assert "bad" not in caplog.text
