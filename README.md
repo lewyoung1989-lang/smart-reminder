@@ -125,13 +125,16 @@ OCR_MODEL_ROOT=
 OCR_QUEUE=ocr
 OCR_STORAGE_PROVIDER=s3
 OCR_UPLOAD_URL_TTL_SECONDS=600
-S3_ENDPOINT=http://minio:9000
+S3_INTERNAL_ENDPOINT=http://minio:9000
+S3_PUBLIC_ENDPOINT=http://localhost:9000
 S3_BUCKET=smart-reminder-private
 S3_REGION=us-east-1
 S3_ADDRESSING_STYLE=path
 S3_ACCESS_KEY_ID=smart-reminder
 S3_SECRET_ACCESS_KEY=local-development-only
 ```
+
+`S3_INTERNAL_ENDPOINT` 供 API/OCR Worker 在 Docker 网络内读取和删除图片；`S3_PUBLIC_ENDPOINT` 只用于生成上传签名。iPhone 真机测试必须把 public endpoint 的 `localhost` 改成 Mac 局域网地址。
 
 腾讯云亲友内测使用 4 核 4 GB 轻量服务器。PostgreSQL、Redis 和 MinIO 随 Compose 部署；公网只开放 HTTPS，数据库、Redis 和对象存储管理端口保持私网可见。
 

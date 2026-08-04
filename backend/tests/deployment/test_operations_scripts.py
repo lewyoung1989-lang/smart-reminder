@@ -99,5 +99,12 @@ def test_runbook_covers_security_release_backup_and_rollback():
         "回滚",
         "22/80/443",
         "https://aipupu.cloud/api/v1/health",
+        "files.aipupu.cloud",
+        "S3_INTERNAL_ENDPOINT",
+        "S3_PUBLIC_ENDPOINT",
+        "configure_secrets.sh",
+        "MinIO Console",
+        "24 小时",
+        "check_ocr",
     ):
         assert required in runbook

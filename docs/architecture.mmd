@@ -28,12 +28,13 @@ flowchart TB
     Worker["Celery Worker / Beat"]
   end
 
-  subgraph Runtime["本地 Docker -> 腾讯云"]
-    PG[("PostgreSQL -> TencentDB")]
-    Redis[("Redis -> TencentDB for Redis")]
-    Object[("MinIO -> COS")]
-    Image["TCR 镜像"]
-    Compute["Lighthouse / CVM"]
+  subgraph Runtime["腾讯云 Lighthouse / Docker Compose"]
+    Edge["Nginx\naipupu.cloud / files.aipupu.cloud"]
+    PG[("PostgreSQL")]
+    Redis[("Redis")]
+    Object[("私有 MinIO\n24 小时临时图片")]
+    Image["本机 Docker 镜像"]
+    Compute["Lighthouse 4核4GB"]
     Observe["CLS / 腾讯云监控"]
     Secret["CAM / KMS"]
   end
@@ -54,6 +55,8 @@ flowchart TB
   UI --> Reminder
   UI --> Medicine
   UI --> OCR
+  UI -->|"HTTPS 签名 PUT"| Edge
+  Edge --> Object
   Voice --> ASR
   Voice --> VoiceToken
   VoiceToken --> Draft

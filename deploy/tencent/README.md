@@ -1,6 +1,6 @@
 # 腾讯云单机部署手册
 
-本手册用于把智能生活提醒后端部署到腾讯云 Ubuntu 服务器，并通过 `https://aipupu.cloud` 提供 API。首期运行 Django API、普通 Celery Worker、Celery Beat、PostgreSQL、Redis 和 Nginx；OCR 由独立分支完成后再接入。
+本手册用于把智能生活提醒后端部署到腾讯云 Ubuntu 服务器。`https://aipupu.cloud` 提供 API，`https://files.aipupu.cloud` 提供药盒图片的短期签名上传。服务器运行 Django API、普通 Celery Worker、Celery Beat、独立 RapidOCR Worker、PostgreSQL、Redis、私有 MinIO 和 Nginx。
 
 生产环境中禁止提交或打印服务器密码、SSH 私钥、Bearer Token、Django Secret、数据库密码和 DeepSeek Key。
 
@@ -10,13 +10,14 @@
 
 - `22/tcp` 仅允许管理员当前公网 IP，不能向全网开放。
 - `80/tcp` 用于 Let's Encrypt 验证，并在正式配置中跳转 HTTPS。
-- `443/tcp` 面向 App 和健康检查开放。
+- `443/tcp` 面向 App、健康检查和签名图片上传开放。
 - 不开放 `5432`、`6379`、`8000`、`9000`、`9001`。
 
-在域名控制台为 `aipupu.cloud` 设置 A 记录。签发证书前执行：
+在域名控制台为 `aipupu.cloud` 和 `files.aipupu.cloud` 设置指向同一服务器的 A 记录。签发证书前执行：
 
 ```bash
 getent ahostsv4 aipupu.cloud
+getent ahostsv4 files.aipupu.cloud
 ```
 
 解析结果必须是当前服务器；否则不要运行证书脚本。
@@ -97,7 +98,7 @@ git clone https://github.com/lewyoung1989-lang/smart-reminder.git \
   /opt/smart-reminder/app
 cd /opt/smart-reminder/app
 git fetch origin
-git checkout feature/tencent-single-server-deployment
+git checkout feature/tencent-ocr-minio-integration
 ```
 
 每次发布前记录并审核完整提交：
@@ -117,7 +118,14 @@ install -m 0600 deploy/tencent/env.production.example \
   /opt/smart-reminder/shared/.env.production
 ```
 
-使用终端编辑器填写空值。`DJANGO_SECRET_KEY` 和数据库密码使用密码生成器或 `openssl rand -hex 32` 单独生成；DeepSeek Key 使用供应商控制台提供的生产专用值；`CERTBOT_EMAIL` 填写证书到期通知邮箱。
+已有环境文件通过非回显脚本升级并补齐 DeepSeek、Certbot 和 MinIO 凭据：
+
+```bash
+./deploy/tencent/scripts/configure_secrets.sh \
+  /opt/smart-reminder/shared/.env.production
+```
+
+脚本不会 `source` 环境文件，也不会把密钥放入命令参数。生产配置必须同时包含 `S3_INTERNAL_ENDPOINT=http://minio:9000` 和 `S3_PUBLIC_ENDPOINT=https://files.aipupu.cloud`；前者供 API/OCR Worker 内部读删，后者只用于生成 iPhone 上传签名。
 
 检查权限和配置，不显示文件内容：
 
@@ -139,7 +147,7 @@ cd /opt/smart-reminder/app
   /opt/smart-reminder/shared/.env.production
 ```
 
-该脚本的 HTTP 服务只响应 ACME 验证，其余路径返回 `503`，不会通过明文 HTTP 暴露 API。
+该脚本为两个域名申请同一张证书。HTTP 服务只响应 ACME 验证，其余路径返回 `503`，不会通过明文 HTTP 暴露 API 或对象上传。
 
 证书签发成功后部署审核过的提交：
 
@@ -166,6 +174,7 @@ docker compose \
   --profile production exec -T nginx nginx -t
 curl --fail --show-error --silent \
   https://aipupu.cloud/api/v1/health
+curl --head https://files.aipupu.cloud/
 ```
 
 公网健康检查应返回：
@@ -174,7 +183,25 @@ curl --fail --show-error --silent \
 {"status":"ok","service":"smart-reminder-api"}
 ```
 
-## 7. 证书续期
+文件域名的匿名 `HEAD/GET` 必须被拒绝。MinIO Console 不配置公网域名，`9000/9001` 不得出现在宿主端口列表中。部署脚本会运行：
+
+```bash
+docker compose \
+  --env-file /opt/smart-reminder/shared/.env.production \
+  -f compose.yaml -f deploy/tencent/compose.production.yaml \
+  run --rm ocr-worker python manage.py check_ocr \
+  tests/ocr/fixtures/medicine_front.jpg
+```
+
+输出只能包含识别行数和耗时，不能包含药名等 OCR 原文。
+
+## 7. MinIO 与临时图片
+
+`minio-init` 创建私有 `smart-reminder-private` 桶、独立应用用户和最小权限策略。Django/RapidOCR 不使用 MinIO root 凭据。药盒图片确认后立即异步删除；未确认或失败任务按 24 小时策略清理，bucket 的 1 天生命周期规则处理孤儿上传。
+
+MinIO 数据不进入 PostgreSQL 备份，也不复制到 COS。服务中断期间无法精确计时删除，恢复后由 Celery 和 MinIO 生命周期继续执行。磁盘损坏导致临时图片丢失时，用户重拍或手动录入即可。
+
+## 8. 证书续期
 
 每月运行一次 Certbot 续期，并在续期后检查和重载 Nginx：
 
@@ -201,7 +228,7 @@ docker compose \
 
 使用 systemd timer 或 rootless cron 定时执行，并监控证书到期日。先手动执行 `certbot renew --dry-run` 验证续期链路。
 
-## 8. 数据库备份与恢复演练
+## 9. 数据库备份与恢复演练
 
 手动备份：
 
@@ -229,14 +256,14 @@ cd /opt/smart-reminder/app
 
 脚本要求输入精确的 `RESTORE`，且只接受备份目录内部的普通文件。验证表和记录数量后删除临时数据库及临时环境文件；不要在未安排维护窗口和恢复点时对主数据库执行恢复。
 
-## 9. 更新与回滚
+## 10. 更新与回滚
 
 更新：
 
 ```bash
 cd /opt/smart-reminder/app
 git fetch origin
-git checkout feature/tencent-single-server-deployment
+git checkout feature/tencent-ocr-minio-integration
 git pull --ff-only
 DEPLOY_SHA=$(git rev-parse HEAD)
 ./deploy/tencent/scripts/deploy.sh \
@@ -253,7 +280,7 @@ DEPLOY_SHA=$(git rev-parse HEAD)
 
 不要自动回滚数据库卷。数据库迁移必须采用可向后兼容的扩展/切换/清理顺序；需要恢复数据库时先停止发布并使用明确的备份恢复方案。
 
-## 10. 重启与故障排查
+## 11. 重启与故障排查
 
 服务器重启后检查：
 
@@ -277,14 +304,16 @@ docker compose \
   --env-file /opt/smart-reminder/shared/.env.production \
   -f compose.yaml \
   -f deploy/tencent/compose.production.yaml \
-  --profile production logs --tail 200 api worker beat nginx
+  --profile production logs --tail 200 api worker ocr-worker beat minio nginx
 df -h
 free -h
 ```
 
 日志不得包含环境文件内容、Token、完整用户输入或模型响应。构建失败时保持现有容器运行；迁移失败时不要启动新 API；磁盘不足时先列出镜像和备份，禁止删除 PostgreSQL 卷。
 
-## 11. iPhone 验收
+OCR Worker 内存不足时先停止 `ocr-worker`，核心提醒 API 可继续运行；不要临时提高并发或移除 `1.2 GB` 内存上限。
+
+## 12. iPhone 验收
 
 使用以下生产地址构建测试 App：
 
@@ -292,4 +321,11 @@ free -h
 --dart-define=API_BASE_URL=https://aipupu.cloud
 ```
 
-在 iPhone 上创建一条文字提醒草稿、确认创建并验证本地通知。生产环境不再使用 Mac 局域网 HTTP 地址。
+在 iPhone 上完成以下流程：
+
+1. 创建一条文字提醒草稿、确认并验证本地通知。
+2. 拍摄药盒正面和有效期区域，确认上传地址 host 为 `files.aipupu.cloud`。
+3. 等待 OCR 候选，修改错误字段后人工确认。
+4. 确认前药箱不得新增库存；确认后新增库存，并验证两张临时图片已删除。
+
+生产环境不再使用 Mac 局域网 HTTP 地址。
