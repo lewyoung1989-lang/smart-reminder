@@ -1,6 +1,4 @@
-import hashlib
-from datetime import timedelta
-
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import status
@@ -9,10 +7,58 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.reminders.domain.schemas import ReminderDraftData
-from apps.reminders.domain.voice_parser import parse_voice_reminder
-from apps.reminders.models import ReminderDraft, ReminderRule, VoiceParseSession
+from apps.reminders.domain.intent_parser import ReminderIntentParser
+from apps.reminders.models import ReminderDraft, ReminderRule
+from apps.reminders.providers.deepseek import DeepSeekReminderIntentProvider
+from apps.reminders.services.draft_service import create_reminder_draft
 
-from .serializers import CreateVoiceReminderDraftSerializer
+from .serializers import CreateTextReminderDraftSerializer, CreateVoiceReminderDraftSerializer
+
+
+def _intent_parser() -> ReminderIntentParser:
+    if not settings.DEEPSEEK_API_KEY:
+        return ReminderIntentParser()
+    return ReminderIntentParser(
+        DeepSeekReminderIntentProvider(
+            api_key=settings.DEEPSEEK_API_KEY,
+            base_url=settings.DEEPSEEK_BASE_URL,
+            model=settings.DEEPSEEK_MODEL,
+            timeout_seconds=settings.DEEPSEEK_TIMEOUT_SECONDS,
+        )
+    )
+
+
+def _create_draft_response(*, request, text: str) -> Response:
+    created = create_reminder_draft(
+        user=request.user,
+        text=text,
+        parser=_intent_parser(),
+        now=timezone.now(),
+        timezone="Asia/Shanghai",
+    )
+    draft = created.draft
+    return Response(
+        {
+            "id": str(draft.id),
+            "status": draft.status,
+            "expires_at": draft.expires_at.isoformat(),
+            "parser_source": created.parser_source,
+            "draft": draft.draft_json,
+        },
+        status=status.HTTP_201_CREATED,
+    )
+
+
+class ReminderDraftListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = CreateTextReminderDraftSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return _create_draft_response(
+            request=request,
+            text=serializer.validated_data["text"],
+        )
 
 
 class VoiceReminderDraftListCreateView(APIView):
@@ -21,36 +67,9 @@ class VoiceReminderDraftListCreateView(APIView):
     def post(self, request):
         serializer = CreateVoiceReminderDraftSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        transcript = serializer.validated_data["transcript"]
-        expires_at = timezone.now() + timedelta(minutes=15)
-        draft_data = parse_voice_reminder(
-            transcript,
-            now=timezone.now(),
-            timezone="Asia/Shanghai",
-        )
-        draft_json = draft_data.model_dump(mode="json")
-
-        with transaction.atomic():
-            session = VoiceParseSession.objects.create(
-                user=request.user,
-                transcript_sha256=hashlib.sha256(transcript.encode("utf-8")).hexdigest(),
-                expires_at=expires_at,
-            )
-            draft = ReminderDraft.objects.create(
-                session=session,
-                draft_json=draft_json,
-                ambiguities_json=draft_data.ambiguities,
-                expires_at=expires_at,
-            )
-
-        return Response(
-            {
-                "id": str(draft.id),
-                "status": draft.status,
-                "expires_at": draft.expires_at.isoformat(),
-                "draft": draft_json,
-            },
-            status=status.HTTP_201_CREATED,
+        return _create_draft_response(
+            request=request,
+            text=serializer.validated_data["transcript"],
         )
 
 
