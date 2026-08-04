@@ -1,4 +1,4 @@
-.PHONY: install test-backend run-backend compose-up check flutter-analyze flutter-test flutter-build-ios
+.PHONY: install test-backend run-backend compose-up check flutter-analyze flutter-test flutter-build-ios test-deployment
 
 install:
 	python3 -m venv .venv
@@ -25,3 +25,10 @@ flutter-test:
 
 flutter-build-ios:
 	cd app && ../scripts/flutterw build ios --simulator --debug
+
+test-deployment:
+	.venv/bin/pytest backend/tests/deployment -q
+	bash -n deploy/tencent/scripts/bootstrap_tls.sh
+	bash -n deploy/tencent/scripts/deploy.sh
+	bash -n deploy/tencent/scripts/backup_postgres.sh
+	bash -n deploy/tencent/scripts/restore_postgres.sh

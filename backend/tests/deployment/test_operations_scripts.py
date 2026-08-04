@@ -52,3 +52,19 @@ def test_restore_requires_confirmation_and_explicit_file():
     assert "RESTORE" in script
     assert "pg_restore" in script
     assert "--clean" not in script
+
+
+def test_runbook_covers_security_release_backup_and_rollback():
+    runbook = (REPO_ROOT / "deploy/tencent/README.md").read_text()
+    for required in (
+        "SSH 公钥",
+        "Docker Compose v2.24.4",
+        "bootstrap_tls.sh",
+        "deploy.sh",
+        "backup_postgres.sh",
+        "restore_postgres.sh",
+        "回滚",
+        "22/80/443",
+        "https://aipupu.cloud/api/v1/health",
+    ):
+        assert required in runbook

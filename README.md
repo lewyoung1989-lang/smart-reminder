@@ -92,3 +92,7 @@ docker compose up --build
 ```
 
 服务包括 PostgreSQL、Redis、MinIO、Django API、Celery Worker 和 Celery Beat。MinIO 控制台位于 `http://127.0.0.1:9001`。
+
+## 腾讯云预发布
+
+`aipupu.cloud` 的单机预发布部署、HTTPS、备份与回滚步骤见 [`deploy/tencent/README.md`](deploy/tencent/README.md)。生产凭据只保存在服务器权限为 `600` 的环境文件中，不提交到 Git。
