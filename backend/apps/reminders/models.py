@@ -8,6 +8,7 @@ class VoiceParseSession(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     transcript_sha256 = models.CharField(max_length=64)
+    parser_source = models.CharField(max_length=32, default="local")
     status = models.CharField(max_length=32, default="parsed")
     expires_at = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
