@@ -34,7 +34,7 @@
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>连接同一局域网内的开发服务，用于测试提醒与语音草稿。</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>用于将你说出的提醒内容转换为待确认的提醒草稿。</string>
+	<string>用于将你说出的提醒内容转换为可编辑文字。</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
