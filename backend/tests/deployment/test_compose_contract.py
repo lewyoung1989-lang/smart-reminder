@@ -125,12 +125,17 @@ def test_nginx_access_log_is_correlated_without_private_request_data():
     assert "$http_authorization" not in log_format
     assert "$smart_request_id" in log_format
     assert "level=INFO" in log_format
-    assert "access_log /dev/stdout smart_reminder;" in config
+    assert config.count("access_log /dev/stdout smart_reminder;") == 3
+    before_first_server = config.split("server {", 1)[0]
+    assert "access_log " not in before_first_server
     assert "error_log /dev/stderr crit;" in config
     assert config.count("proxy_set_header X-Request-ID $smart_request_id;") == 2
     assert config.count("add_header X-Request-ID $smart_request_id always;") == 2
     assert "~^[A-Za-z0-9._-]{1,128}$" in config
     assert "default $request_id;" in config
+
+    bootstrap = (REPO_ROOT / "deploy/tencent/nginx/bootstrap.conf").read_text()
+    assert "access_log off;" in bootstrap
 
 
 def test_file_domain_is_put_only_and_does_not_log_signatures():
