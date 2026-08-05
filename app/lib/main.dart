@@ -1,11 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'config/app_config.dart';
 import 'features/reminder_drafts/data/reminder_draft_api.dart';
 import 'features/reminder_drafts/presentation/reminder_composer_screen.dart';
+import 'features/voice_input/data/audio_recorder_gateway.dart';
+import 'features/voice_input/data/voice_transcription_api.dart';
+import 'features/voice_input/services/voice_input_service.dart';
 import 'platform/notifications/local_notification_scheduler.dart';
 import 'platform/notifications/reminder_notification_scheduler.dart';
-
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,7 +25,6 @@ Future<void> main() async {
   );
 }
 
-
 class SmartReminderApp extends StatefulWidget {
   const SmartReminderApp({
     required this.config,
@@ -36,9 +39,10 @@ class SmartReminderApp extends StatefulWidget {
   State<SmartReminderApp> createState() => _SmartReminderAppState();
 }
 
-
 class _SmartReminderAppState extends State<SmartReminderApp> {
   late final ReminderDraftApi _api;
+  late final VoiceTranscriptionApi _voiceApi;
+  late final VoiceInputService _voiceInput;
 
   @override
   void initState() {
@@ -47,10 +51,20 @@ class _SmartReminderAppState extends State<SmartReminderApp> {
       baseUrl: widget.config.apiBaseUrl,
       accessToken: widget.config.apiAccessToken,
     );
+    _voiceApi = VoiceTranscriptionApi(
+      baseUrl: widget.config.apiBaseUrl,
+      accessToken: widget.config.apiAccessToken,
+    );
+    _voiceInput = VoiceInputService(
+      recorder: RecordAudioRecorderGateway(),
+      transcribe: _voiceApi.transcribe,
+    );
   }
 
   @override
   void dispose() {
+    unawaited(_voiceInput.dispose());
+    _voiceApi.close();
     _api.close();
     super.dispose();
   }
@@ -75,6 +89,12 @@ class _SmartReminderAppState extends State<SmartReminderApp> {
       home: ReminderComposerScreen(
         createDraft: _api.createDraft,
         confirmDraft: _api.confirmDraft,
+        startRecording: _voiceInput.start,
+        stopRecording: () async {
+          final result = await _voiceInput.stopAndTranscribe();
+          return result.transcript;
+        },
+        cancelRecording: _voiceInput.cancel,
         notificationScheduler: widget.notificationScheduler,
       ),
     );
