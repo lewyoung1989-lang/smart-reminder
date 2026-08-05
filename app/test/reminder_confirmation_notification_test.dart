@@ -9,6 +9,8 @@ class RecordingNotificationScheduler implements ReminderNotificationScheduler {
   final requests = <({String reminderId, ReminderDraft draft})>[];
   Object? error;
 
+  Future<void> cancel({required String reminderId}) async {}
+
   @override
   Future<void> schedule({
     required String reminderId,

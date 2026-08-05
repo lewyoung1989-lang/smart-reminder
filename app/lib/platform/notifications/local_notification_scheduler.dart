@@ -14,6 +14,8 @@ abstract interface class LocalNotificationGateway {
     required String title,
     required tz.TZDateTime scheduledDate,
   });
+
+  Future<void> cancel({required int id});
 }
 
 
@@ -65,6 +67,15 @@ class LocalNotificationScheduler implements ReminderNotificationScheduler {
       );
     } catch (_) {
       throw const NotificationSchedulingFailed();
+    }
+  }
+
+  @override
+  Future<void> cancel({required String reminderId}) async {
+    try {
+      await gateway.cancel(id: _stableNotificationId(reminderId));
+    } catch (_) {
+      throw const NotificationCancellationFailed();
     }
   }
 
@@ -125,5 +136,10 @@ class FlutterLocalNotificationGateway implements LocalNotificationGateway {
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       payload: 'reminder:$id',
     );
+  }
+
+  @override
+  Future<void> cancel({required int id}) async {
+    await _plugin.cancel(id: id);
   }
 }
