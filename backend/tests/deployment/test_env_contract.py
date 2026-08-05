@@ -53,6 +53,7 @@ def test_example_lists_required_production_variables_without_secrets():
     assert values["DJANGO_DEBUG"] == "false"
     assert values["DJANGO_ALLOWED_HOSTS"] == "aipupu.cloud"
     assert values["DJANGO_CSRF_TRUSTED_ORIGINS"] == "https://aipupu.cloud"
+    assert values["LOG_LEVEL"] == "INFO"
     for secret in (
         "DJANGO_SECRET_KEY",
         "POSTGRES_PASSWORD",
