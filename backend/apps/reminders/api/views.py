@@ -2,6 +2,8 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import status
+from rest_framework.exceptions import ValidationError
+from rest_framework.pagination import CursorPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -12,7 +14,33 @@ from apps.reminders.models import ReminderDraft, ReminderRule
 from apps.reminders.providers.deepseek import DeepSeekReminderIntentProvider
 from apps.reminders.services.draft_service import create_reminder_draft
 
-from .serializers import CreateTextReminderDraftSerializer, CreateVoiceReminderDraftSerializer
+from .serializers import (
+    CreateTextReminderDraftSerializer,
+    CreateVoiceReminderDraftSerializer,
+    ReminderRuleSerializer,
+)
+
+
+class PendingReminderPagination(CursorPagination):
+    page_size = 50
+    ordering = ("scheduled_at", "id")
+
+
+class ExpiredReminderPagination(CursorPagination):
+    page_size = 50
+    ordering = ("-scheduled_at", "id")
+
+
+class CancelledReminderPagination(CursorPagination):
+    page_size = 50
+    ordering = ("-cancelled_at", "id")
+
+
+REMINDER_PAGINATORS = {
+    "pending": PendingReminderPagination,
+    "expired": ExpiredReminderPagination,
+    "cancelled": CancelledReminderPagination,
+}
 
 
 def _intent_parser() -> ReminderIntentParser:
@@ -133,3 +161,81 @@ class VoiceReminderDraftConfirmView(APIView):
             {"reminder_id": str(rule.id), "status": "confirmed"},
             status=status.HTTP_201_CREATED,
         )
+
+
+class ReminderListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        reminder_status = request.query_params.get("status", "pending")
+        if reminder_status not in REMINDER_PAGINATORS:
+            raise ValidationError(
+                {"status": "状态必须是 pending、expired 或 cancelled"}
+            )
+
+        now = timezone.now()
+        queryset = ReminderRule.objects.filter(owner=request.user)
+        if reminder_status == "pending":
+            queryset = queryset.filter(
+                enabled=True,
+                cancelled_at__isnull=True,
+                scheduled_at__gt=now,
+            )
+        elif reminder_status == "expired":
+            queryset = queryset.filter(
+                enabled=True,
+                cancelled_at__isnull=True,
+                scheduled_at__lte=now,
+            )
+        else:
+            queryset = queryset.filter(
+                enabled=False,
+                cancelled_at__isnull=False,
+            )
+
+        paginator = REMINDER_PAGINATORS[reminder_status]()
+        page = paginator.paginate_queryset(queryset, request, view=self)
+        serializer = ReminderRuleSerializer(
+            page,
+            many=True,
+            context={"now": now},
+        )
+        return paginator.get_paginated_response(serializer.data)
+
+
+class ReminderCancelView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, reminder_id):
+        now = timezone.now()
+        with transaction.atomic():
+            try:
+                rule = ReminderRule.objects.select_for_update().get(
+                    id=reminder_id,
+                    owner=request.user,
+                )
+            except ReminderRule.DoesNotExist:
+                return Response(
+                    {"detail": "未找到该提醒"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            if not rule.enabled and rule.cancelled_at is not None:
+                serializer = ReminderRuleSerializer(rule, context={"now": now})
+                return Response(serializer.data, status=status.HTTP_200_OK)
+
+            if rule.scheduled_at <= now:
+                return Response(
+                    {
+                        "code": "reminder_expired",
+                        "detail": "提醒时间已过，不能取消",
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            rule.enabled = False
+            rule.cancelled_at = now
+            rule.save(update_fields=["enabled", "cancelled_at"])
+
+        serializer = ReminderRuleSerializer(rule, context={"now": now})
+        return Response(serializer.data, status=status.HTTP_200_OK)
