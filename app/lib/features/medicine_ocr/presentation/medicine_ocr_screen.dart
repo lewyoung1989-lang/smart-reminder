@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
@@ -199,26 +200,88 @@ class _MedicineOcrScreenState extends State<MedicineOcrScreen> {
       _frontBytes = null;
       _expiryBytes = null;
       _job = null;
+      _error = null;
     });
+  }
+
+  Widget _photoSlot({
+    required String kind,
+    required String label,
+    required List<int>? bytes,
+  }) {
+    final photoBytes = bytes;
+    final retakeLabel = kind == 'front' ? '重新拍摄药盒正面' : '重新拍摄有效期';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        AspectRatio(
+          aspectRatio: 4 / 3,
+          child: photoBytes != null
+              ? Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: Image.memory(
+                        Uint8List.fromList(photoBytes),
+                        key: Key('$kind-photo-preview'),
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const ColoredBox(
+                          color: Color(0xFFE7ECE9),
+                          child: Icon(Icons.image_outlined),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: IconButton.filledTonal(
+                        tooltip: retakeLabel,
+                        onPressed: () => _capture(kind),
+                        icon: const Icon(Icons.camera_alt_outlined),
+                      ),
+                    ),
+                  ],
+                )
+              : OutlinedButton.icon(
+                  onPressed: () => _capture(kind),
+                  icon: Icon(
+                    kind == 'front'
+                        ? Icons.camera_alt_outlined
+                        : Icons.event_outlined,
+                  ),
+                  label: Text('拍摄$label'),
+                ),
+        ),
+        const SizedBox(height: 6),
+        Text(label, textAlign: TextAlign.center),
+      ],
+    );
   }
 
   Widget _captureView() => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          OutlinedButton.icon(
-            onPressed: () => _capture('front'),
-            icon: const Icon(Icons.camera_alt_outlined),
-            label: Text(
-              _frontBytes == null ? '拍摄药盒正面' : '重新拍摄药盒正面',
-            ),
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: () => _capture('expiry'),
-            icon: const Icon(Icons.event_outlined),
-            label: Text(
-              _expiryBytes == null ? '拍摄有效期' : '重新拍摄有效期',
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _photoSlot(
+                  kind: 'front',
+                  label: '药盒正面',
+                  bytes: _frontBytes,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _photoSlot(
+                  kind: 'expiry',
+                  label: '有效期（可选）',
+                  bytes: _expiryBytes,
+                ),
+              ),
+            ],
           ),
           if (_error != null)
             Padding(

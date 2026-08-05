@@ -50,13 +50,20 @@ void main() {
         'front': [1],
         'expiry': [2],
       };
+      var createJobCalls = 0;
+      List<int>? submittedFront;
+      List<int>? submittedExpiry;
       Map<String, Object?>? confirmed;
       await tester.pumpWidget(
         MaterialApp(
           home: MedicineOcrScreen(
             capture: (kind) async => captures[kind],
-            createJob: ({required frontBytes, expiryBytes}) async =>
-                const OcrJob(id: 'job-1', status: 'queued'),
+            createJob: ({required frontBytes, expiryBytes}) async {
+              createJobCalls += 1;
+              submittedFront = frontBytes;
+              submittedExpiry = expiryBytes;
+              return const OcrJob(id: 'job-1', status: 'queued');
+            },
             getJob: (_) async => OcrJob(
               id: 'job-1',
               status: 'succeeded',
@@ -82,11 +89,22 @@ void main() {
 
       await tester.tap(find.text('拍摄药盒正面'));
       await tester.pump();
-      await tester.tap(find.text('拍摄有效期'));
+      expect(find.byKey(const Key('front-photo-preview')), findsOneWidget);
+      expect(find.byKey(const Key('expiry-photo-preview')), findsNothing);
+      expect(createJobCalls, 0);
+
+      await tester.tap(find.textContaining('拍摄有效期'));
       await tester.pump();
+      expect(find.byKey(const Key('front-photo-preview')), findsOneWidget);
+      expect(find.byKey(const Key('expiry-photo-preview')), findsOneWidget);
+      expect(createJobCalls, 0);
+
       await tester.tap(find.text('开始识别'));
       await tester.pumpAndSettle();
 
+      expect(createJobCalls, 1);
+      expect(submittedFront, [1]);
+      expect(submittedExpiry, [2]);
       expect(find.text('核对识别结果'), findsOneWidget);
       await tester.enterText(
         find.byKey(const Key('medicine-name')),
@@ -97,6 +115,8 @@ void main() {
 
       expect(confirmed?['medicine_name'], '布洛芬胶囊');
       expect(confirmed?['expiry_date'], '2028-05-31');
+      expect(find.byKey(const Key('front-photo-preview')), findsNothing);
+      expect(find.byKey(const Key('expiry-photo-preview')), findsNothing);
     },
   );
 
@@ -147,5 +167,72 @@ void main() {
     await tester.tap(find.text('拍摄药盒正面'));
     await tester.pump();
     expect(find.text('无法打开相机，请检查相机权限后重试'), findsNothing);
+  });
+
+  testWidgets('cancelling retake keeps the existing front preview',
+      (tester) async {
+    var calls = 0;
+    await tester.pumpWidget(
+      buildCaptureScreen(
+        capture: (_) async {
+          calls += 1;
+          return calls == 1 ? [1] : null;
+        },
+      ),
+    );
+
+    await tester.tap(find.text('拍摄药盒正面'));
+    await tester.pump();
+    expect(find.byKey(const Key('front-photo-preview')), findsOneWidget);
+
+    await tester.tap(find.byTooltip('重新拍摄药盒正面'));
+    await tester.pump();
+    expect(find.byKey(const Key('front-photo-preview')), findsOneWidget);
+  });
+
+  testWidgets('upload failure keeps previews and allows retry', (tester) async {
+    var createJobCalls = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MedicineOcrScreen(
+          capture: (kind) async => kind == 'front' ? [1] : [2],
+          createJob: ({required frontBytes, expiryBytes}) async {
+            createJobCalls += 1;
+            if (createJobCalls == 1) {
+              throw Exception('network unavailable');
+            }
+            return const OcrJob(id: 'job-1', status: 'queued');
+          },
+          getJob: (_) async => const OcrJob(
+            id: 'job-1',
+            status: 'succeeded',
+            candidate: OcrCandidate(
+              medicineName: '测试药品',
+              specification: '',
+              batchNumber: '',
+            ),
+          ),
+          confirmJob: (_, __) async {},
+          pollInterval: Duration.zero,
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('拍摄药盒正面'));
+    await tester.pump();
+    await tester.tap(find.textContaining('拍摄有效期'));
+    await tester.pump();
+    await tester.tap(find.text('开始识别'));
+    await tester.pump();
+
+    expect(find.text('上传失败，请检查网络后重试'), findsOneWidget);
+    expect(find.byKey(const Key('front-photo-preview')), findsOneWidget);
+    expect(find.byKey(const Key('expiry-photo-preview')), findsOneWidget);
+    expect(createJobCalls, 1);
+
+    await tester.tap(find.text('开始识别'));
+    await tester.pumpAndSettle();
+    expect(createJobCalls, 2);
+    expect(find.text('核对识别结果'), findsOneWidget);
   });
 }

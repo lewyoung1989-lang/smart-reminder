@@ -103,7 +103,11 @@ testWidgets('upload failure keeps previews and allows retry', (tester) async {
         getJob: (_) async => const OcrJob(
           id: 'job-1',
           status: 'succeeded',
-          candidate: OcrCandidate(medicineName: '测试药品'),
+          candidate: OcrCandidate(
+            medicineName: '测试药品',
+            specification: '',
+            batchNumber: '',
+          ),
         ),
         confirmJob: (_, __) async {},
         pollInterval: Duration.zero,
