@@ -1,29 +1,29 @@
-# Production Logging Design
+# 生产日志系统设计
 
-## Goal
+## 目标
 
-Give the single-server Tencent Cloud deployment searchable, privacy-safe logs with a seven-day retention window, bounded disk usage, and documented operational paths.
+为腾讯云单机部署建立可检索、保护隐私的生产日志系统。日志保留 7 天，限制最大磁盘占用，并提供明确、稳定的运维路径。
 
-## Current State
+## 当前状态
 
-- Every production container uses Docker's `json-file` logging driver with five 10 MB files.
-- The physical Docker log path is container-ID dependent and unsuitable as an operator contract.
-- Gunicorn emits startup and error output but does not emit access logs.
-- Nginx disables access logs for `files.aipupu.cloud` to avoid leaking signed upload query parameters.
-- PostgreSQL backup and certificate renewal already run through `smart-reminder-postgres-backup.timer` and `smart-reminder-cert-renew.timer`.
-- The host journal currently uses about 32 MB.
+- 所有生产容器使用 Docker `json-file` 日志驱动，每个容器最多保留 5 个 10MB 文件。
+- Docker 日志物理路径依赖容器 ID，不能作为稳定的运维路径。
+- Gunicorn 会输出启动和错误信息，但没有输出访问日志。
+- `files.aipupu.cloud` 已关闭 Nginx 访问日志，避免上传签名参数泄露。
+- PostgreSQL 备份和证书续期分别由 `smart-reminder-postgres-backup.timer`、`smart-reminder-cert-renew.timer` 执行。
+- 服务器当前 journal 占用约 32MB。
 
-## Decisions
+## 设计决策
 
-### Runtime Storage
+### 运行日志存储
 
-All production containers use Docker's `journald` logging driver. Docker adds a stable tag in the form `smart-reminder/<service>` and journald stores the records under its persistent binary store:
+所有生产容器改用 Docker `journald` 日志驱动。Docker 为日志添加 `smart-reminder/<服务名>` 格式的稳定标签，journald 将日志保存在持久化二进制目录：
 
 ```text
 /var/log/journal/
 ```
 
-The host installs `/etc/systemd/journald.conf.d/50-smart-reminder.conf` with:
+服务器安装 `/etc/systemd/journald.conf.d/50-smart-reminder.conf`：
 
 ```ini
 [Journal]
@@ -33,11 +33,11 @@ MaxRetentionSec=7day
 SystemMaxUse=1G
 ```
 
-The retention and size limits apply to the host journal, including operating-system logs. This is appropriate for the dedicated single-application server and prevents logs from filling the system disk.
+保留时间和容量限制会作用于服务器的全部 journal，包括操作系统日志。当前服务器只承载本项目，因此该方案可以统一控制日志并防止系统盘被写满。
 
-### Human-Readable Operation Logs
+### 可直接读取的运维日志
 
-Long-running operational commands also write plain-text timestamped logs under:
+部署、备份和证书续期等长时间运维操作，同时写入以下纯文本目录：
 
 ```text
 /opt/smart-reminder/logs/deploy/
@@ -45,42 +45,42 @@ Long-running operational commands also write plain-text timestamped logs under:
 /opt/smart-reminder/logs/cert/
 ```
 
-The root directory is owned by `ubuntu:ubuntu`, has mode `0750`, and log files have mode `0640`. A daily logrotate rule compresses old files and deletes files older than seven days.
+根目录所有者为 `ubuntu:ubuntu`，权限为 `0750`；日志文件权限为 `0640`。每日 logrotate 会压缩历史日志，并删除超过 7 天的文件。
 
-The existing timers retain their names. Their services call the repository scripts, and each script records start time, result, and non-secret command output in its corresponding operation directory.
+现有 systemd timer 名称保持不变。对应 service 继续调用仓库中的脚本，每次运行记录开始时间、结果和不含密钥的命令输出。
 
-## Log Content
+## 日志内容
 
-| Source | Records | Explicitly excluded |
+| 来源 | 记录内容 | 明确禁止记录 |
 |---|---|---|
-| Nginx | timestamp, request ID, method, path without query, status, bytes, request/upstream duration | query string, Authorization header, request body |
-| Gunicorn | request ID, method, path without query, status, duration | query string, headers, body |
-| Django | timestamp, level, logger, event code, internal entity IDs, parser/provider result, exception class | reminder text, structured draft content, Token, API key |
-| Celery | task name/ID, queue, lifecycle, duration, retry and failure class | task payload and user content |
-| OCR worker | job ID, provider, duration, recognized line count, outcome, retry, deletion outcome | image, OCR text, signed URL, object credentials |
-| PostgreSQL/Redis/MinIO | startup, shutdown, health and service errors | database passwords and object-store credentials |
-| Deployment | full Git SHA, environment validation result, migration/OCR check outcome, service health and Nginx reload | environment file contents and secrets |
-| Backup/certificate | start/end, destination filename or certificate domains, result and duration | credentials and private-key contents |
+| Nginx | 时间、请求 ID、方法、不含查询参数的路径、状态码、响应字节、请求及上游耗时 | 查询参数、Authorization、请求正文 |
+| Gunicorn | 请求 ID、方法、不含查询参数的路径、状态码、耗时 | 查询参数、请求头、请求正文 |
+| Django | 时间、级别、logger、事件码、内部实体 ID、解析器或 Provider 结果、异常类型 | 提醒原文、结构化草稿内容、Token、API Key |
+| Celery | 任务名、任务 ID、队列、生命周期、耗时、重试和失败类型 | 任务载荷和用户内容 |
+| OCR Worker | 任务 ID、Provider、耗时、识别行数、结果、重试、图片删除结果 | 图片、OCR 原文、签名 URL、对象存储凭据 |
+| PostgreSQL、Redis、MinIO | 启停、健康状态和服务错误 | 数据库密码和对象存储凭据 |
+| 部署 | 完整 Git SHA、环境校验结果、迁移及 OCR 检查结果、服务健康状态、Nginx 重载结果 | 环境文件内容和密钥 |
+| 备份、证书 | 开始及结束时间、备份文件名或证书域名、结果和耗时 | 凭据和私钥内容 |
 
-Nginx uses `$uri`, never `$request_uri`, so signed upload parameters cannot enter access logs. Source IPs are omitted in the first release because this is a personal/family application and request IDs are sufficient for request correlation.
+Nginx 使用 `$uri`，不使用 `$request_uri`，确保上传签名参数不会进入访问日志。首版不记录来源 IP；这是个人和家庭应用，请求 ID 已足够关联一次请求的上下游日志。
 
-## Application Logging
+## 应用日志
 
-Django defines an explicit console `LOGGING` configuration with a stable one-line formatter and an environment-controlled `LOG_LEVEL` defaulting to `INFO` in production. Existing OCR log events continue to use entity IDs and counts only.
+Django 增加明确的控制台 `LOGGING` 配置，使用稳定的单行格式。日志级别由环境变量 `LOG_LEVEL` 控制，生产环境默认 `INFO`。现有 OCR 日志继续只记录实体 ID 和数量等元数据。
 
-Gunicorn writes access and error logs to stdout/stderr. Its access format contains method, URL path without query, status, response size, duration, and the forwarded request ID.
+Gunicorn 将访问日志和错误日志输出到标准输出及标准错误。访问日志只包含请求方法、不含查询参数的路径、状态码、响应大小、耗时和上游传入的请求 ID。
 
-Nginx creates a request ID when absent, forwards it as `X-Request-ID`, and writes its safe access format to stdout. The API and files hosts both use the same safe format; upload query signatures remain excluded.
+Nginx 在请求没有 ID 时生成请求 ID，通过 `X-Request-ID` 传给后端，并使用安全格式向标准输出写访问日志。API 域名和文件上传域名使用相同安全格式，上传签名参数始终被排除。
 
-## Operator Interface
+## 运维查询接口
 
-`deploy/tencent/scripts/logs.sh` is the supported runtime interface:
+`deploy/tencent/scripts/logs.sh` 是统一的运行日志查询入口：
 
 ```text
 logs.sh SERVICE [--since TIME] [--level LEVEL] [--follow]
 ```
 
-Allowed services are `api`, `worker`, `ocr-worker`, `beat`, `nginx`, `postgres`, `redis`, `minio`, and `all`. The script rejects unknown values and invokes `journalctl` using the stable Docker tag. Examples:
+允许的服务名为 `api`、`worker`、`ocr-worker`、`beat`、`nginx`、`postgres`、`redis`、`minio` 和 `all`。脚本拒绝未知服务，并使用稳定 Docker 标签查询 journal。例如：
 
 ```bash
 ./deploy/tencent/scripts/logs.sh api --since "2 hours ago"
@@ -88,37 +88,37 @@ Allowed services are `api`, `worker`, `ocr-worker`, `beat`, `nginx`, `postgres`,
 ./deploy/tencent/scripts/logs.sh all --since today --follow
 ```
 
-The deployment README documents both the journal path and operation-log paths, plus direct `journalctl` and `tail` examples. Operators should use the script instead of reading Docker's implementation directories.
+腾讯云部署手册需要列出 journal 路径、三个运维日志路径，以及直接使用 `journalctl` 和 `tail` 的示例。运维人员应使用查询脚本，不直接依赖 Docker 内部实现目录。
 
-## Installation And Deployment
+## 安装与部署
 
-`deploy/tencent/scripts/install_logging.sh` performs the privileged host setup. It:
+`deploy/tencent/scripts/install_logging.sh` 负责需要管理员权限的服务器初始化：
 
-1. Requires root and validates the expected `/opt/smart-reminder` installation.
-2. Creates the three operation-log directories with fixed ownership and modes.
-3. Installs the journald drop-in and logrotate policy.
-4. Restarts journald and verifies persistent storage and effective limits.
-5. Prints only paths and validation results.
+1. 要求以 root 运行，并校验 `/opt/smart-reminder` 安装目录。
+2. 创建三个运维日志目录，设置固定所有者和权限。
+3. 安装 journald 配置片段和 logrotate 策略。
+4. 重启 journald，验证持久化存储及生效的保留限制。
+5. 只输出路径和校验结果，不输出环境变量或密钥。
 
-The production Compose contract changes every service to `journald` with its stable tag. Containers are recreated only after host logging installation succeeds. Deployment continues using the reviewed full Git SHA.
+生产 Compose 文件把所有服务切换到 `journald` 并配置稳定标签。只有服务器日志初始化成功后才重新创建容器。部署继续使用经过审核的完整 Git SHA。
 
-## Failure Handling
+## 失败处理
 
-- If journald installation or validation fails, existing containers remain unchanged.
-- If a container cannot attach to journald, Compose deployment fails before Nginx is reloaded.
-- If operation-log file creation fails, deploy/backup/certificate scripts exit non-zero instead of running without an audit record.
-- Logging failures never trigger database rollback or volume deletion.
-- Disk limits are enforced by journald and logrotate independently.
+- journald 安装或校验失败时，不修改现有容器。
+- 容器无法连接 journald 时，Compose 部署必须失败，不能重载 Nginx。
+- 无法创建运维日志文件时，部署、备份或证书脚本返回非零状态，不允许在没有审计记录的情况下继续执行。
+- 日志故障不能触发数据库回滚或数据卷删除。
+- journald 与 logrotate 分别独立限制运行日志和运维日志的磁盘占用。
 
-## Verification
+## 验证方案
 
-Automated tests cover:
+自动化测试覆盖：
 
-- Compose uses `journald` and stable tags for every production service.
-- Nginx access formats contain `$uri` and exclude `$request_uri`, query variables, Authorization, and signed URL data.
-- Django logging is console-only and defaults to a valid production level.
-- `logs.sh` validates service names and constructs the correct journal filter.
-- `install_logging.sh` and logrotate configuration specify seven-day retention, `1G` journal usage, correct paths, ownership, and permissions.
-- Deploy, backup, and certificate scripts never print environment file contents.
+- 所有生产服务使用 `journald` 和稳定标签。
+- Nginx 访问日志包含 `$uri`，不包含 `$request_uri`、查询参数变量、Authorization 或签名 URL 数据。
+- Django 只向控制台写日志，并使用有效的默认生产日志级别。
+- `logs.sh` 校验服务名，并生成正确的 journal 查询条件。
+- `install_logging.sh` 和 logrotate 配置包含 7 天保留期、1GB journal 上限、正确路径、所有者及权限。
+- 部署、备份和证书脚本不输出环境文件内容。
 
-Production acceptance verifies effective journald configuration, container log-driver metadata, one public health request correlated by request ID, operation directory permissions, timer logs, and seven-day/log-size settings.
+生产验收检查 journald 生效配置、容器日志驱动元数据、一次带请求 ID 的公网健康请求、运维目录权限、timer 日志以及 7 天和容量限制。
