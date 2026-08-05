@@ -80,6 +80,15 @@ def test_rejects_blank_transcript():
         provider.transcribe(io.BytesIO(b"wav"), request_id="request-1")
 
 
+def test_rejects_transcript_over_500_characters():
+    provider = FunAsrProvider(
+        transport=FakeTransport(TransportResponse({"text": "字" * 501}, 2))
+    )
+
+    with pytest.raises(AsrResponseError):
+        provider.transcribe(io.BytesIO(b"wav"), request_id="request-1")
+
+
 @pytest.mark.parametrize("error", [AsrUnavailableError(), AsrTimeoutError()])
 def test_preserves_stable_transport_errors(error):
     provider = FunAsrProvider(transport=FakeTransport(error=error))

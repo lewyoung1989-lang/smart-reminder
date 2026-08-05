@@ -79,6 +79,8 @@ class FunAsrProvider:
         transcript = payload["text"].strip()
         if not transcript:
             raise EmptyTranscriptError
+        if len(transcript) > 500:
+            raise AsrResponseError
 
         return AsrResult(
             transcript=transcript,
