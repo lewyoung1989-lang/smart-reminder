@@ -112,6 +112,22 @@ def test_nginx_redirects_http_and_forwards_https_metadata():
     assert "proxy_set_header Authorization $http_authorization;" in config
 
 
+def test_nginx_access_log_is_correlated_without_private_request_data():
+    config = (REPO_ROOT / "deploy/tencent/nginx/aipupu.cloud.conf").read_text()
+    log_format = config.split("log_format smart_reminder", 1)[1].split(";", 1)[0]
+
+    assert "$uri" in log_format
+    assert "$request_uri" not in log_format
+    assert "$args" not in log_format
+    assert "$query_string" not in log_format
+    assert "$remote_addr" not in log_format
+    assert "$http_authorization" not in log_format
+    assert "$smart_request_id" in log_format
+    assert "access_log /dev/stdout smart_reminder;" in config
+    assert "error_log /dev/stderr warn;" in config
+    assert config.count("proxy_set_header X-Request-ID $smart_request_id;") == 2
+
+
 def test_file_domain_is_put_only_and_does_not_log_signatures():
     config = (
         REPO_ROOT / "deploy/tencent/nginx/aipupu.cloud.conf"
@@ -120,7 +136,8 @@ def test_file_domain_is_put_only_and_does_not_log_signatures():
     assert "proxy_pass http://minio:9000;" in config
     assert "proxy_set_header Host $http_host;" in config
     assert "limit_except PUT" in config
-    assert "access_log off;" in config
+    assert "access_log off;" not in config
+    assert "access_log /dev/stdout smart_reminder;" in config
     assert "client_max_body_size 9m;" in config
 
 
