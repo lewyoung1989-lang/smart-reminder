@@ -151,6 +151,10 @@ OCR_MAX_RETRIES = int(os.environ.get("OCR_MAX_RETRIES", "2"))
 OCR_DEBUG_TEXT_LOGGING = (
     os.environ.get("OCR_DEBUG_TEXT_LOGGING", "false").lower() == "true"
 )
+OCR_SEMANTIC_PROVIDER = os.environ.get("OCR_SEMANTIC_PROVIDER", "deepseek")
+OCR_SEMANTIC_TIMEOUT_SECONDS = float(
+    os.environ.get("OCR_SEMANTIC_TIMEOUT_SECONDS", "8")
+)
 OCR_MODEL_ROOT = os.environ.get("OCR_MODEL_ROOT", "")
 OCR_QUEUE = os.environ.get("OCR_QUEUE", "ocr")
 OCR_STORAGE_PROVIDER = os.environ.get("OCR_STORAGE_PROVIDER", "s3")

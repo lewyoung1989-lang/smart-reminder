@@ -81,6 +81,30 @@ def validate(values: dict[str, str]) -> list[str]:
         errors.append("DJANGO_DEBUG must be false")
     if values.get("DJANGO_SECURE_SSL_REDIRECT") not in {None, "", "true"}:
         errors.append("DJANGO_SECURE_SSL_REDIRECT must be true")
+    if values.get("OCR_DEBUG_TEXT_LOGGING") not in {
+        None,
+        "",
+        "true",
+        "false",
+    }:
+        errors.append("OCR_DEBUG_TEXT_LOGGING must be true or false")
+    if values.get("OCR_SEMANTIC_PROVIDER") not in {
+        None,
+        "",
+        "deepseek",
+        "none",
+    }:
+        errors.append("OCR_SEMANTIC_PROVIDER must be deepseek or none")
+    try:
+        semantic_timeout = float(
+            values.get("OCR_SEMANTIC_TIMEOUT_SECONDS") or "8"
+        )
+        if semantic_timeout <= 0:
+            raise ValueError
+    except ValueError:
+        errors.append(
+            "OCR_SEMANTIC_TIMEOUT_SECONDS must be a positive number"
+        )
     return errors
 
 

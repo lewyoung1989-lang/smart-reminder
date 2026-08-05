@@ -54,6 +54,9 @@ def test_example_lists_required_production_variables_without_secrets():
     assert values["DJANGO_ALLOWED_HOSTS"] == "aipupu.cloud"
     assert values["DJANGO_CSRF_TRUSTED_ORIGINS"] == "https://aipupu.cloud"
     assert values["LOG_LEVEL"] == "INFO"
+    assert values["OCR_SEMANTIC_PROVIDER"] == "deepseek"
+    assert values["OCR_SEMANTIC_TIMEOUT_SECONDS"] == "8"
+    assert values["OCR_DEBUG_TEXT_LOGGING"] == "false"
     for secret in (
         "DJANGO_SECRET_KEY",
         "POSTGRES_PASSWORD",
@@ -122,3 +125,33 @@ def test_validator_reads_a_value_without_shell_evaluation(tmp_path):
 
     assert result.returncode == 0
     assert result.stdout.strip() == "aipupu.cloud"
+
+
+def test_validator_rejects_invalid_ocr_debug_flag(tmp_path):
+    values = valid_example_values()
+    values["OCR_DEBUG_TEXT_LOGGING"] = "yes"
+
+    result = run_validator(tmp_path, values)
+
+    assert result.returncode == 1
+    assert "OCR_DEBUG_TEXT_LOGGING" in result.stderr
+
+
+def test_validator_rejects_unknown_ocr_semantic_provider(tmp_path):
+    values = valid_example_values()
+    values["OCR_SEMANTIC_PROVIDER"] = "unknown"
+
+    result = run_validator(tmp_path, values)
+
+    assert result.returncode == 1
+    assert "OCR_SEMANTIC_PROVIDER" in result.stderr
+
+
+def test_validator_rejects_invalid_ocr_semantic_timeout(tmp_path):
+    values = valid_example_values()
+    values["OCR_SEMANTIC_TIMEOUT_SECONDS"] = "zero"
+
+    result = run_validator(tmp_path, values)
+
+    assert result.returncode == 1
+    assert "OCR_SEMANTIC_TIMEOUT_SECONDS" in result.stderr

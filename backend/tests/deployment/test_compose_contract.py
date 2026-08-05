@@ -100,6 +100,15 @@ def test_ocr_worker_is_isolated_and_resource_limited():
     assert service["cpus"] == 1.0
     assert service["mem_limit"] == "1200m"
     assert service["ports"] == []
+    assert service["environment"]["OCR_SEMANTIC_PROVIDER"] == (
+        "${OCR_SEMANTIC_PROVIDER:-deepseek}"
+    )
+    assert service["environment"]["OCR_SEMANTIC_TIMEOUT_SECONDS"] == (
+        "${OCR_SEMANTIC_TIMEOUT_SECONDS:-8}"
+    )
+    assert service["environment"]["OCR_DEBUG_TEXT_LOGGING"] == (
+        "${OCR_DEBUG_TEXT_LOGGING:-false}"
+    )
 
 
 def test_nginx_redirects_http_and_forwards_https_metadata():
