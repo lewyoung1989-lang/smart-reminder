@@ -1,4 +1,6 @@
-/opt/smart-reminder/logs/*/*.log {
+/opt/smart-reminder/logs/deploy/deploy.log
+/opt/smart-reminder/logs/backup/backup.log
+/opt/smart-reminder/logs/cert/cert.log {
     daily
     rotate 7
     maxage 7

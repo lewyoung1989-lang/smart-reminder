@@ -308,6 +308,8 @@ cd /opt/smart-reminder/app
 
 脚本支持的服务名为 `api`、`worker`、`ocr-worker`、`beat`、`nginx`、`postgres`、`redis`、`minio` 和 `all`。服务器账户没有 journal 读取权限时，在命令前加 `sudo`。
 
+`--level` 根据日志正文中的 `level=ERROR`、Celery `ERROR`、Nginx `[error]` 等标准级别标记过滤，不使用 Docker 按 stdout/stderr 推断的 journal priority。未包含常见级别标记的第三方服务行不会出现在级别过滤结果中；排查完整上下文时省略 `--level`。
+
 直接查询和检查磁盘占用：
 
 ```bash
@@ -315,16 +317,17 @@ journalctl --disk-usage
 journalctl CONTAINER_TAG=smart-reminder/api --since today \
   --output=short-iso-precise
 systemd-analyze cat-config systemd/journald.conf
+./deploy/tencent/scripts/verify_logging.sh
 ```
 
-有效配置必须包含 `Storage=persistent`、`MaxRetentionSec=7day` 和 `SystemMaxUse=1G`。journald 的限制同时作用于本项目容器日志和操作系统日志。
+有效配置必须包含 `Storage=persistent`、`MaxRetentionSec=7day` 和 `SystemMaxUse=1G`。`verify_logging.sh` 还会拒绝排序在项目配置之后且会覆盖这些值的 drop-in。journald 的限制同时作用于本项目容器日志和操作系统日志。
 
 查看纯文本运维日志及权限：
 
 ```bash
-tail -n 200 /opt/smart-reminder/logs/deploy/deploy-$(date -u +%F).log
-tail -n 200 /opt/smart-reminder/logs/backup/backup-$(date -u +%F).log
-tail -n 200 /opt/smart-reminder/logs/cert/cert-$(date -u +%F).log
+tail -n 200 /opt/smart-reminder/logs/deploy/deploy.log
+tail -n 200 /opt/smart-reminder/logs/backup/backup.log
+tail -n 200 /opt/smart-reminder/logs/cert/cert.log
 find /opt/smart-reminder/logs -maxdepth 2 -type d \
   -exec stat -c '%a %U %G %n' {} \;
 ```

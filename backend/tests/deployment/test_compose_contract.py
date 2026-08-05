@@ -78,6 +78,7 @@ def test_gunicorn_access_log_excludes_query_strings_and_headers():
     assert "%(q)s" not in command
     assert "%(r)s" not in command
     assert "x-request-id" in command.lower()
+    assert "level=INFO" in command
 
 
 def test_minio_is_private_initialized_and_not_profile_gated():
@@ -123,9 +124,13 @@ def test_nginx_access_log_is_correlated_without_private_request_data():
     assert "$remote_addr" not in log_format
     assert "$http_authorization" not in log_format
     assert "$smart_request_id" in log_format
+    assert "level=INFO" in log_format
     assert "access_log /dev/stdout smart_reminder;" in config
-    assert "error_log /dev/stderr warn;" in config
+    assert "error_log /dev/stderr crit;" in config
     assert config.count("proxy_set_header X-Request-ID $smart_request_id;") == 2
+    assert config.count("add_header X-Request-ID $smart_request_id always;") == 2
+    assert "~^[A-Za-z0-9._-]{1,128}$" in config
+    assert "default $request_id;" in config
 
 
 def test_file_domain_is_put_only_and_does_not_log_signatures():

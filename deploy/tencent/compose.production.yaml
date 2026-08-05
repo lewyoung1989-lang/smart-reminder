@@ -101,7 +101,7 @@ services:
       gunicorn config.wsgi:application --bind 0.0.0.0:8000
       --workers 2 --timeout 30 --access-logfile - --error-logfile -
       --access-logformat
-      'request_id=%({x-request-id}i)s method=%(m)s path=%(U)s status=%(s)s bytes=%(b)s duration_us=%(D)s'
+      'level=INFO request_id=%({x-request-id}i)s method=%(m)s path=%(U)s status=%(s)s bytes=%(b)s duration_us=%(D)s'
     restart: unless-stopped
     logging:
       <<: *production_logging

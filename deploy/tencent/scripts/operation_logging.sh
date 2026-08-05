@@ -47,7 +47,7 @@ start_operation_log() {
   fi
 
   umask 027
-  OPERATION_LOG_FILE="$log_directory/$category-$(date -u +%Y-%m-%d).log"
+  OPERATION_LOG_FILE="$log_directory/$category.log"
   touch "$OPERATION_LOG_FILE"
   chmod 0640 "$OPERATION_LOG_FILE"
   OPERATION_LOG_PIPE="$log_directory/.operation-$category-$$-$RANDOM.pipe"

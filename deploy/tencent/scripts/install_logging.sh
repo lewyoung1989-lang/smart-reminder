@@ -46,23 +46,12 @@ systemd-tmpfiles --create --prefix /var/log/journal
 systemctl restart systemd-journald
 journalctl --flush
 
-EFFECTIVE_CONFIG=$(systemd-analyze cat-config systemd/journald.conf)
-for setting in \
-  Storage=persistent \
-  Compress=yes \
-  MaxRetentionSec=7day \
-  SystemMaxUse=1G; do
-  if [[ "$EFFECTIVE_CONFIG" != *"$setting"* ]]; then
-    printf 'journald 配置未生效：%s\n' "$setting" >&2
-    exit 1
-  fi
-done
-
 logrotate --debug /etc/logrotate.d/smart-reminder >/dev/null
 systemctl daemon-reload
 systemctl enable --now \
   smart-reminder-postgres-backup.timer \
   smart-reminder-cert-renew.timer
+"$ROOT_DIR/deploy/tencent/scripts/verify_logging.sh"
 
 printf '%s\n' '日志系统安装完成：'
 printf '  运行日志：%s\n' /var/log/journal/

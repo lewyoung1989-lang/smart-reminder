@@ -17,6 +17,7 @@ def test_release_scripts_are_valid_bash():
         "logs.sh",
         "operation_logging.sh",
         "renew_certificate.sh",
+        "verify_logging.sh",
     ):
         result = subprocess.run(
             ["bash", "-n", str(SCRIPTS / name)],
@@ -39,7 +40,13 @@ def test_journald_and_logrotate_keep_logs_for_seven_days():
     rotate = (
         REPO_ROOT / "deploy/tencent/logging/smart-reminder.logrotate"
     ).read_text()
-    assert "/opt/smart-reminder/logs/*/*.log" in rotate
+    for path in (
+        "/opt/smart-reminder/logs/deploy/deploy.log",
+        "/opt/smart-reminder/logs/backup/backup.log",
+        "/opt/smart-reminder/logs/cert/cert.log",
+    ):
+        assert path in rotate
+    assert "/opt/smart-reminder/logs/*/*.log" not in rotate
     assert "daily" in rotate
     assert "rotate 7" in rotate
     assert "maxage 7" in rotate
@@ -55,6 +62,7 @@ def test_logging_installer_uses_expected_paths_and_permissions():
     assert "systemd-journald" in script
     assert "50-smart-reminder.conf" in script
     assert "smart-reminder.logrotate" in script
+    assert "verify_logging.sh" in script
 
 
 def test_log_query_rejects_unknown_service_and_uses_stable_tag(tmp_path):
@@ -100,10 +108,68 @@ def test_log_query_rejects_unknown_service_and_uses_stable_tag(tmp_path):
     assert "CONTAINER_TAG=smart-reminder/api" in arguments
     assert "--since" in arguments
     assert "2 hours ago" in arguments
-    assert "--priority" in arguments
-    assert "error" in arguments
+    assert "--grep" in arguments
+    assert any("ERROR" in argument and "CRITICAL" in argument for argument in arguments)
+    assert "--case-sensitive=no" in arguments
+    assert "--priority" not in arguments
     assert "--follow" in arguments
     assert "--output=short-iso-precise" in arguments
+
+
+def test_logging_verifier_rejects_later_journald_override(tmp_path):
+    assert "export LC_ALL=C" in (SCRIPTS / "verify_logging.sh").read_text()
+
+    system_root = tmp_path / "system"
+    journal_dropins = system_root / "etc/systemd/journald.conf.d"
+    journal_dropins.mkdir(parents=True)
+    (system_root / "var/log/journal").mkdir(parents=True)
+    (journal_dropins / "50-smart-reminder.conf").write_text(
+        "[Journal]\nStorage=persistent\nCompress=yes\n"
+        "MaxRetentionSec=7day\nSystemMaxUse=1G\n"
+    )
+    log_root = tmp_path / "logs"
+    for category in ("deploy", "backup", "cert"):
+        (log_root / category).mkdir(parents=True)
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    systemctl = fake_bin / "systemctl"
+    systemctl.write_text("#!/usr/bin/env bash\nexit 0\n")
+    systemctl.chmod(0o755)
+    docker = fake_bin / "docker"
+    docker.write_text(
+        "#!/usr/bin/env bash\nprintf '%s\\n' "
+        "'[\"json-file\",\"journald\"]'\n"
+    )
+    docker.chmod(0o755)
+    env = os.environ.copy()
+    env.update(
+        PATH=f"{fake_bin}:{env['PATH']}",
+        SMART_REMINDER_SYSTEM_ROOT=str(system_root),
+        SMART_REMINDER_LOG_ROOT=str(log_root),
+    )
+
+    accepted = subprocess.run(
+        ["bash", str(SCRIPTS / "verify_logging.sh")],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    assert accepted.returncode == 0, accepted.stderr
+
+    (journal_dropins / "60-override.conf").write_text(
+        "[Journal]\nSystemMaxUse=10G\n"
+    )
+    rejected = subprocess.run(
+        ["bash", str(SCRIPTS / "verify_logging.sh")],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    assert rejected.returncode != 0
+    assert "60-override.conf" in rejected.stderr
 
 
 def test_operation_logger_creates_private_daily_log_and_rejects_bad_directory(
@@ -126,10 +192,9 @@ def test_operation_logger_creates_private_daily_log_and_rejects_bad_directory(
         check=False,
     )
     assert accepted.returncode == 0, accepted.stderr
-    logs = list((log_root / "backup").glob("backup-*.log"))
-    assert len(logs) == 1
-    assert logs[0].stat().st_mode & 0o777 == 0o640
-    assert "operation-test" in logs[0].read_text()
+    log_file = log_root / "backup/backup.log"
+    assert log_file.stat().st_mode & 0o777 == 0o640
+    assert "operation-test" in log_file.read_text()
 
     env["SMART_REMINDER_LOG_ROOT"] = str(tmp_path / "missing")
     rejected = subprocess.run(
@@ -216,6 +281,7 @@ def test_deploy_requires_clean_expected_revision_and_health_check():
     assert "/api/v1/health" in script
     assert "'Host':'aipupu.cloud'" in script
     assert "--profile production" in script
+    assert script.index("verify_logging.sh") < script.index('build api ocr-worker')
 
 
 def test_deploy_initializes_minio_and_smoke_checks_ocr_before_start():

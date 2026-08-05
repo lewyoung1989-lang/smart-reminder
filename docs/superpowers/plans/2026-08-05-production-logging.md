@@ -177,10 +177,10 @@ log_format smart_reminder
     'path=$uri status=$status bytes=$body_bytes_sent '
     'request_time=$request_time upstream_time=$upstream_response_time';
 access_log /dev/stdout smart_reminder;
-error_log /dev/stderr warn;
+error_log /dev/stderr crit;
 ```
 
-API 和文件上传代理都透传 `X-Request-ID`。上传域名不再关闭日志，但安全格式绝不包含签名查询参数。引导配置只把错误写到标准错误。
+API 和文件上传代理都透传并向客户端响应 `X-Request-ID`，只接受字符集和长度安全的外部 ID。上传域名不再关闭访问日志，但安全格式绝不包含签名查询参数；错误日志只保留不附带请求行的严重系统错误。引导配置采用相同的错误日志边界。
 
 - [ ] **步骤 4：运行测试并确认通过**
 
@@ -196,6 +196,7 @@ API 和文件上传代理都透传 `X-Request-ID`。上传域名不再关闭日�
 - 创建：`deploy/tencent/logging/smart-reminder.logrotate`
 - 创建：`deploy/tencent/scripts/logs.sh`
 - 创建：`deploy/tencent/scripts/install_logging.sh`
+- 创建：`deploy/tencent/scripts/verify_logging.sh`
 - 修改：`backend/tests/deployment/test_operations_scripts.py`
 
 - [ ] **步骤 1：写入失败的安装与查询契约测试**
@@ -241,9 +242,9 @@ def test_log_query_rejects_unknown_service_and_uses_stable_tag(tmp_path):
 
 `50-smart-reminder.conf` 写入已设计的四项 journald 设置。logrotate 对三个运维目录每日压缩并保留 7 天。
 
-`logs.sh SERVICE [--since TIME] [--level LEVEL] [--follow]` 使用 Bash 数组调用 `journalctl`，只允许九个服务名和 `all`；禁止用 `eval` 拼接命令。
+`logs.sh SERVICE [--since TIME] [--level LEVEL] [--follow]` 使用 Bash 数组调用 `journalctl`，只允许九个服务名和 `all`；`--level` 使用日志正文中的标准级别标记，不使用无法反映应用级别的 stdout/stderr journal priority；禁止用 `eval` 拼接命令。
 
-`install_logging.sh` 必须以 root 运行，校验 `/opt/smart-reminder/app`，创建三个 `ubuntu:ubuntu`、`0750` 目录，安装配置，创建持久 journal 目录，重启并验证 journald。任何校验失败均返回非零，且在此脚本中不执行 Compose。
+`install_logging.sh` 必须以 root 运行，校验 `/opt/smart-reminder/app`，创建三个 `ubuntu:ubuntu`、`0750` 目录，安装配置，创建持久 journal 目录并重启 journald。`verify_logging.sh` 拒绝会覆盖项目保留策略的后序 drop-in，并检查 journald、持久目录、Docker 驱动和运维目录。任何校验失败均返回非零，且在此脚本中不执行 Compose。
 
 - [ ] **步骤 4：运行测试并确认通过**
 
@@ -278,7 +279,7 @@ def test_log_query_rejects_unknown_service_and_uses_stable_tag(tmp_path):
 
 - [ ] **步骤 3：实现统一操作日志**
 
-helper 只负责创建当天日志文件、检查目录可写、设置权限、复制标准输出/错误到日志，并在退出时记录结果；不得输出环境变量。部署脚本在任何构建或容器变更前验证 journald 配置和日志目录。备份脚本组合现有临时文件清理与日志退出处理。证书脚本依次执行 `certbot renew`、`nginx -t`、`nginx -s reload`。
+helper 只负责打开每类稳定日志文件（`deploy.log`、`backup.log`、`cert.log`）、检查目录可写、设置权限、复制标准输出/错误到日志，并在退出时记录结果；logrotate 使用 `dateext` 生成每日归档并按 7 天持续清理。helper 不得输出环境变量。部署脚本在任何构建或容器变更前验证 journald 配置和日志目录。备份脚本组合现有临时文件清理与日志退出处理。证书脚本依次执行 `certbot renew`、`nginx -t`、`nginx -s reload`。
 
 `install_logging.sh` 安装四个 systemd 文件，执行 `daemon-reload` 并启用两个 timer，但不立即触发备份或证书任务。
 

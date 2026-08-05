@@ -70,11 +70,11 @@ Django 增加明确的控制台 `LOGGING` 配置，使用稳定的单行格式�
 
 Gunicorn 将访问日志和错误日志输出到标准输出及标准错误。访问日志只包含请求方法、不含查询参数的路径、状态码、响应大小、耗时和上游传入的请求 ID。
 
-Nginx 在请求没有 ID 时生成请求 ID，通过 `X-Request-ID` 传给后端，并使用安全格式向标准输出写访问日志。API 域名和文件上传域名使用相同安全格式，上传签名参数始终被排除。
+Nginx 只接受字符集和长度安全的外部请求 ID，其余情况生成新 ID，通过 `X-Request-ID` 传给后端并返回客户端。API 域名和文件上传域名使用相同安全格式向标准输出写访问日志；Nginx 错误日志只保留不会附带请求行的严重系统错误，避免请求级错误泄露查询参数。上传签名参数始终被排除。
 
 ## 运维查询接口
 
-`deploy/tencent/scripts/logs.sh` 是统一的运行日志查询入口：
+`deploy/tencent/scripts/logs.sh` 是统一的运行日志查询入口。`--level` 根据 Django、Gunicorn、Nginx 和常见服务输出中的级别标记过滤，不使用 Docker 根据 stdout/stderr 推断的 journal priority：
 
 ```text
 logs.sh SERVICE [--since TIME] [--level LEVEL] [--follow]
@@ -99,6 +99,8 @@ logs.sh SERVICE [--since TIME] [--level LEVEL] [--follow]
 3. 安装 journald 配置片段和 logrotate 策略。
 4. 重启 journald，验证持久化存储及生效的保留限制。
 5. 只输出路径和校验结果，不输出环境变量或密钥。
+
+`deploy/tencent/scripts/verify_logging.sh` 同时供安装和发布脚本调用。它校验配置文件精确内容、拒绝文件名排序在项目配置之后且会覆盖保留策略的 drop-in，检查 journald 运行状态、持久化目录、运维目录写权限和 Docker journald 驱动。验证通过前部署脚本不得构建或重建容器。
 
 生产 Compose 文件把所有服务切换到 `journald` 并配置稳定标签。只有服务器日志初始化成功后才重新创建容器。部署继续使用经过审核的完整 Git SHA。
 

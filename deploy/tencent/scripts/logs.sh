@@ -56,7 +56,28 @@ while [[ $# -gt 0 ]]; do
         printf '%s\n' '--level 缺少级别参数' >&2
         exit 2
       fi
-      OPTIONS+=("--priority" "$2")
+      case "$2" in
+        critical|CRITICAL|Critical)
+          LEVEL_PATTERN='level=CRITICAL|(^|[^A-Z])CRITICAL([^A-Z]|$)|\[crit\]'
+          ;;
+        error|ERROR|Error)
+          LEVEL_PATTERN='level=(ERROR|CRITICAL)|(^|[^A-Z])(ERROR|CRITICAL)([^A-Z]|$)|\[(error|crit)\]|Traceback'
+          ;;
+        warning|WARNING|Warning|warn|WARN|Warn)
+          LEVEL_PATTERN='level=(WARNING|ERROR|CRITICAL)|(^|[^A-Z])(WARNING|WARN|ERROR|CRITICAL)([^A-Z]|$)|\[(warn|error|crit)\]|Traceback'
+          ;;
+        info|INFO|Info)
+          LEVEL_PATTERN='level=(INFO|WARNING|ERROR|CRITICAL)|(^|[^A-Z])(INFO|WARNING|WARN|ERROR|CRITICAL)([^A-Z]|$)|\[(info|warn|error|crit)\]|Traceback'
+          ;;
+        debug|DEBUG|Debug)
+          LEVEL_PATTERN='level=(DEBUG|INFO|WARNING|ERROR|CRITICAL)|(^|[^A-Z])(DEBUG|INFO|WARNING|WARN|ERROR|CRITICAL)([^A-Z]|$)|\[(debug|info|warn|error|crit)\]|Traceback'
+          ;;
+        *)
+          printf '不支持的日志级别：%s\n' "$2" >&2
+          exit 2
+          ;;
+      esac
+      OPTIONS+=("--grep" "$LEVEL_PATTERN" "--case-sensitive=no")
       shift 2
       ;;
     --follow)

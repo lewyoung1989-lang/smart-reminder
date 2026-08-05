@@ -8,10 +8,7 @@ ENV_FILE=${2:?usage: deploy.sh EXPECTED_SHA ENV_FILE}
 source "$ROOT_DIR/deploy/tencent/scripts/operation_logging.sh"
 start_operation_log deploy
 
-if [[ ! -r /etc/systemd/journald.conf.d/50-smart-reminder.conf ]]; then
-  printf '%s\n' '生产日志尚未安装，请先运行 install_logging.sh' >&2
-  exit 1
-fi
+"$ROOT_DIR/deploy/tencent/scripts/verify_logging.sh"
 
 cd "$ROOT_DIR"
 python3 deploy/tencent/scripts/check_env.py "$ENV_FILE"
