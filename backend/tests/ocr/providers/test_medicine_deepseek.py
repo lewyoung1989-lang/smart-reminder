@@ -69,7 +69,10 @@ def test_provider_returns_only_fields_supported_by_evidence():
         (
             OCRDocument(
                 "front",
-                (_line("每片中阿莫西林含量0.25g"), _line("阿莫西林胶囊")),
+                (
+                    _line("每片中阿莫西林含量0.25g"),
+                    _line("阿莫西林胶囊"),
+                ),
             ),
             OCRDocument("expiry", (_line("有效期至"), _line("202805"))),
         )
@@ -153,9 +156,19 @@ def test_provider_rejects_unknown_json_fields_without_leaking_response():
     assert "private-upstream-response" not in str(captured.value)
 
 
-def test_transport_wraps_timeout_without_leaking_authorization(monkeypatch):
+@pytest.mark.parametrize(
+    "transport_error",
+    [
+        TimeoutError("private-timeout-detail"),
+        OSError("private-network-detail"),
+    ],
+)
+def test_transport_wraps_network_errors_without_leaking_authorization(
+    monkeypatch,
+    transport_error,
+):
     def timeout(*args, **kwargs):
-        raise TimeoutError("private-upstream-detail")
+        raise transport_error
 
     monkeypatch.setattr("apps.ocr.providers.deepseek.urlopen", timeout)
     transport = UrllibJsonTransport()
@@ -170,4 +183,31 @@ def test_transport_wraps_timeout_without_leaking_authorization(monkeypatch):
 
     assert str(captured.value) == "medicine_semantic_request_failed"
     assert "private-api-key" not in str(captured.value)
-    assert "private-upstream-detail" not in str(captured.value)
+    assert "private" not in str(captured.value)
+
+
+def test_transport_wraps_invalid_utf8_response(monkeypatch):
+    class InvalidResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return False
+
+        def read(self):
+            return b"\xff"
+
+    monkeypatch.setattr(
+        "apps.ocr.providers.deepseek.urlopen",
+        lambda *args, **kwargs: InvalidResponse(),
+    )
+
+    with pytest.raises(DeepSeekMedicineError) as captured:
+        UrllibJsonTransport().post_json(
+            "https://api.deepseek.com/chat/completions",
+            headers={},
+            payload={},
+            timeout=1,
+        )
+
+    assert str(captured.value) == "medicine_semantic_request_failed"

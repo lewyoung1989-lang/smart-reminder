@@ -109,6 +109,21 @@ def test_layout_finds_same_column_value_past_an_unrelated_column():
     assert all(window.text != "生产日期厂家" for window in windows)
 
 
+def test_vertical_value_survives_a_nearby_horizontal_label():
+    document = OCRDocument(
+        "expiry",
+        (
+            _line("生产日期", 0, 10, width=50),
+            _line("有效期至", 60, 10, width=50),
+            _line("20280108", 0, 30, width=80),
+        ),
+    )
+
+    windows = build_text_windows(document)
+
+    assert any(window.text == "生产日期20280108" for window in windows)
+
+
 def test_distant_lines_and_columns_are_not_joined():
     document = OCRDocument(
         "expiry",

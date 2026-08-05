@@ -102,6 +102,22 @@ def test_rejects_bare_dosage_form_as_medicine_name():
     assert result.medicine_name == ""
 
 
+def test_supports_common_injection_medicine_name():
+    result = extract_candidates(
+        (OCRDocument("front", (line("盐酸氨溴索注射液"),)),)
+    )
+
+    assert result.medicine_name == "盐酸氨溴索注射液"
+
+
+def test_rejects_bare_injection_dosage_form():
+    result = extract_candidates(
+        (OCRDocument("front", (line("注射液"),)),)
+    )
+
+    assert result.medicine_name == ""
+
+
 def test_specific_name_beats_larger_short_name():
     result = extract_candidates(
         (

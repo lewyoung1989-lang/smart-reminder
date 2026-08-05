@@ -36,7 +36,13 @@ class UrllibJsonTransport:
         try:
             with urlopen(request, timeout=timeout) as response:
                 return json.loads(response.read().decode("utf-8"))
-        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as error:
+        except (
+            HTTPError,
+            URLError,
+            OSError,
+            UnicodeDecodeError,
+            json.JSONDecodeError,
+        ) as error:
             raise DeepSeekMedicineError(
                 "medicine_semantic_request_failed"
             ) from error
@@ -98,10 +104,14 @@ class DeepSeekMedicineProvider:
         )
         return (
             "你是药盒 OCR 字段整理器，只能引用输入行中的原文。"
-            "药名必须是具体药品名称，不能选择成分说明、用法、含量句或纯剂型。"
-            "日期字段只返回图片中的原始日期文字，禁止补全、推断或改写。"
-            "每个非空字段必须给出 line_ids；无法确定时返回 null 并写入 ambiguities。"
-            "只输出符合给定 JSON Schema 的 JSON 对象，禁止 Markdown，禁止猜测。"
+            "药名必须是具体药品名称，不能选择成分说明、用法、"
+            "含量句或纯剂型。"
+            "日期字段只返回图片中的原始日期文字，禁止补全、"
+            "推断或改写。"
+            "每个非空字段必须给出 line_ids；无法确定时返回 null"
+            " 并写入 ambiguities。"
+            "只输出符合给定 JSON Schema 的 JSON 对象，禁止 Markdown，"
+            "禁止猜测。"
             f"输出必须符合此 JSON Schema：{schema}"
         )
 

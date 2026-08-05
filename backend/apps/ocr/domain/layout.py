@@ -86,7 +86,10 @@ def merge_documents(
     return OCRDocument(role=role, lines=tuple(ordered))
 
 
-def _adjacency_distance(current: OCRLine, following: OCRLine) -> float | None:
+def _adjacency_distance(
+    current: OCRLine,
+    following: OCRLine,
+) -> tuple[str, float] | None:
     height = max(_height(current), _height(following))
     vertical_overlap = min(_bottom(current), _bottom(following)) - max(
         _top(current),
@@ -97,7 +100,7 @@ def _adjacency_distance(current: OCRLine, following: OCRLine) -> float | None:
         vertical_overlap >= min(_height(current), _height(following)) * 0.5
         and 0 <= horizontal_gap <= height * 3
     ):
-        return horizontal_gap / height
+        return "horizontal", horizontal_gap / height
 
     vertical_gap = _top(following) - _bottom(current)
     horizontal_overlap = min(_right(current), _right(following)) - max(
@@ -109,9 +112,10 @@ def _adjacency_distance(current: OCRLine, following: OCRLine) -> float | None:
         -height * 0.25 <= vertical_gap <= height * 2.5
         and (horizontal_overlap > 0 or left_delta <= height * 2)
     ):
-        return 1 + max(0.0, vertical_gap) / height + left_delta / max(
-            _width(current),
-            _width(following),
+        return (
+            "vertical",
+            max(0.0, vertical_gap) / height
+            + left_delta / max(_width(current), _width(following)),
         )
     return None
 
@@ -122,20 +126,24 @@ def build_text_windows(document: OCRDocument) -> tuple[OCRTextWindow, ...]:
         for index, line in enumerate(document.lines)
     ]
     for index, line in enumerate(document.lines):
-        candidates = []
+        candidates = {}
         for following_index in range(index + 1, len(document.lines)):
             following = document.lines[following_index]
-            distance = _adjacency_distance(line, following)
-            if distance is not None:
-                candidates.append((distance, following_index, following))
+            adjacency = _adjacency_distance(line, following)
+            if adjacency is None:
+                continue
+            direction, distance = adjacency
+            existing = candidates.get(direction)
+            if existing is None or distance < existing[0]:
+                candidates[direction] = (distance, following_index, following)
         if not candidates:
             continue
-        _, following_index, following = min(candidates, key=lambda value: value[0])
-        windows.append(
-            OCRTextWindow(
-                f"{line.text}{following.text}",
-                min(line.score, following.score),
-                (index, following_index),
+        for _distance, following_index, following in candidates.values():
+            windows.append(
+                OCRTextWindow(
+                    f"{line.text}{following.text}",
+                    min(line.score, following.score),
+                    (index, following_index),
+                )
             )
-        )
     return tuple(windows)
