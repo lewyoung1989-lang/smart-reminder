@@ -9,6 +9,8 @@ import 'features/medicine_ocr/data/medicine_ocr_api.dart';
 import 'features/medicine_ocr/presentation/medicine_ocr_screen.dart';
 import 'features/reminder_drafts/data/reminder_draft_api.dart';
 import 'features/reminder_drafts/presentation/reminder_composer_screen.dart';
+import 'features/reminders/data/reminder_api.dart';
+import 'features/reminders/presentation/reminder_home_screen.dart';
 import 'platform/notifications/local_notification_scheduler.dart';
 import 'platform/notifications/reminder_notification_scheduler.dart';
 
@@ -41,14 +43,19 @@ class SmartReminderApp extends StatefulWidget {
 }
 
 class _SmartReminderAppState extends State<SmartReminderApp> {
-  late final ReminderDraftApi _reminderApi;
+  late final ReminderDraftApi _reminderDraftApi;
+  late final ReminderApi _reminderApi;
   late final MedicineCabinetApi _medicineCabinetApi;
   late final MedicineOcrApi _medicineOcrApi;
 
   @override
   void initState() {
     super.initState();
-    _reminderApi = ReminderDraftApi(
+    _reminderDraftApi = ReminderDraftApi(
+      baseUrl: widget.config.apiBaseUrl,
+      accessToken: widget.config.apiAccessToken,
+    );
+    _reminderApi = ReminderApi(
       baseUrl: widget.config.apiBaseUrl,
       accessToken: widget.config.apiAccessToken,
     );
@@ -64,6 +71,7 @@ class _SmartReminderAppState extends State<SmartReminderApp> {
 
   @override
   void dispose() {
+    _reminderDraftApi.close();
     _reminderApi.close();
     _medicineCabinetApi.close();
     _medicineOcrApi.close();
@@ -98,10 +106,16 @@ class _SmartReminderAppState extends State<SmartReminderApp> {
         useMaterial3: true,
       ),
       home: AppShell(
-        reminders: ReminderComposerScreen(
-          createDraft: _reminderApi.createDraft,
-          confirmDraft: _reminderApi.confirmDraft,
+        reminders: ReminderHomeScreen(
+          listReminders: ({required status, pageUrl}) =>
+              _reminderApi.list(status: status, pageUrl: pageUrl),
+          cancelReminder: _reminderApi.cancel,
           notificationScheduler: widget.notificationScheduler,
+          createReminder: (_) => ReminderComposerScreen(
+            createDraft: _reminderDraftApi.createDraft,
+            confirmDraft: _reminderDraftApi.confirmDraft,
+            notificationScheduler: widget.notificationScheduler,
+          ),
         ),
         medicineCabinet: MedicineCabinetScreen(
           listBatches: _medicineCabinetApi.listBatches,

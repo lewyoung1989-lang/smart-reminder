@@ -26,6 +26,7 @@ class RecordingNotificationGateway implements LocalNotificationGateway {
     scheduled.add((id: id, title: title, date: scheduledDate));
   }
 
+  @override
   Future<void> cancel({required int id}) async {
     cancelled.add(id);
   }

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:smart_reminder_app/features/reminder_drafts/domain/reminder_draft.dart';
 import 'package:smart_reminder_app/features/reminder_drafts/presentation/reminder_composer_screen.dart';
+import 'package:smart_reminder_app/features/reminders/domain/reminder.dart'
+    show ReminderCreationResult;
 import 'package:smart_reminder_app/platform/notifications/reminder_notification_scheduler.dart';
 
 
@@ -9,6 +11,7 @@ class RecordingNotificationScheduler implements ReminderNotificationScheduler {
   final requests = <({String reminderId, ReminderDraft draft})>[];
   Object? error;
 
+  @override
   Future<void> cancel({required String reminderId}) async {}
 
   @override
@@ -89,5 +92,42 @@ void main() {
 
     expect(confirmationCount, 1);
     expect(scheduler.requests, hasLength(2));
+  });
+
+  testWidgets('pushed composer returns the reminder creation result',
+      (tester) async {
+    final scheduler = RecordingNotificationScheduler();
+    ReminderCreationResult? result;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: FilledButton(
+              onPressed: () async {
+                result = await Navigator.of(context).push<ReminderCreationResult>(
+                  MaterialPageRoute(
+                    builder: (_) => ReminderComposerScreen(
+                      createDraft: (_) async => draft,
+                      confirmDraft: (_) async => 'reminder-1',
+                      notificationScheduler: scheduler,
+                      now: DateTime(2026, 8, 4, 10),
+                    ),
+                  ),
+                );
+              },
+              child: const Text('创建提醒'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('创建提醒'));
+    await tester.pumpAndSettle();
+    await openDraftAndConfirm(tester);
+
+    expect(result?.reminderId, 'reminder-1');
+    expect(result?.notificationScheduled, isTrue);
+    expect(find.text('创建提醒'), findsOneWidget);
   });
 }

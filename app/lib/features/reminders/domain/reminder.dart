@@ -58,3 +58,13 @@ class ReminderPage {
   final List<Reminder> reminders;
   final Uri? nextPage;
 }
+
+class ReminderCreationResult {
+  const ReminderCreationResult({
+    required this.reminderId,
+    required this.notificationScheduled,
+  });
+
+  final String reminderId;
+  final bool notificationScheduled;
+}

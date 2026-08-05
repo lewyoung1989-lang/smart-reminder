@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../platform/notifications/reminder_notification_scheduler.dart';
+import '../../reminders/domain/reminder.dart' show ReminderCreationResult;
 import '../domain/reminder_draft.dart';
 import 'reminder_draft_screen.dart';
 
@@ -72,6 +73,15 @@ class _ReminderComposerScreenState extends State<ReminderComposerScreen> {
         await scheduler.schedule(reminderId: reminderId, draft: draft);
       }
       if (!mounted) return;
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop(
+          ReminderCreationResult(
+            reminderId: reminderId,
+            notificationScheduled: scheduler != null,
+          ),
+        );
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -81,6 +91,15 @@ class _ReminderComposerScreenState extends State<ReminderComposerScreen> {
       );
     } on ReminderNotificationException {
       if (!mounted) return;
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop(
+          ReminderCreationResult(
+            reminderId: _confirmedReminderId!,
+            notificationScheduled: false,
+          ),
+        );
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('提醒已创建，但手机通知未安排')),
       );
