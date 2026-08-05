@@ -33,8 +33,7 @@ class HttpxAudioTransport:
                 data={"model": model, "response_format": "json"},
                 timeout=timeout_seconds,
             )
-            if response.status_code == 429:
-                raise AsrBusyError
+            self._raise_stable_provider_error(response)
             response.raise_for_status()
             payload = response.json()
         except httpx.TimeoutException as exc:
@@ -48,6 +47,24 @@ class HttpxAudioTransport:
             payload=payload,
             latency_ms=round((monotonic() - started_at) * 1000),
         )
+
+    def _raise_stable_provider_error(self, response):
+        if response.status_code not in (422, 429, 503, 504):
+            return
+        try:
+            payload = response.json()
+        except ValueError:
+            return
+        detail = payload.get("detail") if isinstance(payload, dict) else None
+        code = detail.get("code") if isinstance(detail, dict) else None
+        error_type = {
+            (422, "empty_transcript"): EmptyTranscriptError,
+            (429, "asr_busy"): AsrBusyError,
+            (503, "asr_unavailable"): AsrUnavailableError,
+            (504, "asr_timeout"): AsrTimeoutError,
+        }.get((response.status_code, code))
+        if error_type is not None:
+            raise error_type
 
     def close(self):
         if self._owns_client:

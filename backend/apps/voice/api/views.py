@@ -57,6 +57,11 @@ class VoiceTranscriptionView(APIView):
     ]
 
     def handle_exception(self, exc):
+        if isinstance(exc, RedisError):
+            return error_response(
+                "asr_unavailable",
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         if isinstance(exc, Throttled):
             retry_after = math.ceil(exc.wait) if exc.wait is not None else None
             return error_response(

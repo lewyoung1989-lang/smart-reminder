@@ -9,5 +9,5 @@ class VoiceTranscriptionIpThrottle(SimpleRateThrottle):
     scope = "voice_transcription_ip"
 
     def get_cache_key(self, request, view):
-        ident = self.get_ident(request)
+        ident = request.META.get("REMOTE_ADDR") or "unknown"
         return self.cache_format % {"scope": self.scope, "ident": ident}

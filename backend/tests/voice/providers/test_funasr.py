@@ -182,3 +182,33 @@ def test_http_transport_preserves_upstream_busy_signal():
             model="paraformer-zh",
             timeout_seconds=20,
         )
+
+
+@pytest.mark.parametrize(
+    ("status_code", "code", "expected_error"),
+    [
+        (422, "empty_transcript", EmptyTranscriptError),
+        (503, "asr_unavailable", AsrUnavailableError),
+        (504, "asr_timeout", AsrTimeoutError),
+    ],
+)
+def test_http_transport_preserves_trusted_upstream_errors(
+    status_code, code, expected_error
+):
+    client = httpx.Client(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(
+                status_code,
+                json={"detail": {"code": code}},
+            )
+        )
+    )
+    transport = HttpxAudioTransport(client=client)
+
+    with pytest.raises(expected_error):
+        transport.post_audio(
+            "http://funasr:8000/v1/audio/transcriptions",
+            audio=io.BytesIO(b"wav"),
+            model="paraformer-zh",
+            timeout_seconds=20,
+        )

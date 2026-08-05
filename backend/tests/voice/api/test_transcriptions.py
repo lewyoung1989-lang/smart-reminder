@@ -5,6 +5,7 @@ import wave
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 import pytest
+from redis.exceptions import RedisError
 from rest_framework.test import APIClient, APIRequestFactory, force_authenticate
 
 from apps.voice.api.views import VoiceTranscriptionView
@@ -283,3 +284,50 @@ def test_enforces_per_ip_request_rate(user, monkeypatch):
     assert first.status_code == 200
     assert second.status_code == 429
     assert second.json()["code"] == "rate_limited"
+
+
+def test_ip_rate_uses_remote_addr_not_spoofed_forwarding_header(user, monkeypatch):
+    install_service(monkeypatch, FakeTranscriptionService())
+    monkeypatch.setattr(
+        "apps.voice.api.throttles.VoiceTranscriptionUserThrottle.get_rate",
+        lambda self: "100/min",
+    )
+    monkeypatch.setattr(
+        "apps.voice.api.throttles.VoiceTranscriptionIpThrottle.get_rate",
+        lambda self: "1/min",
+    )
+    client = APIClient(REMOTE_ADDR="203.0.113.5")
+    client.force_authenticate(user)
+
+    first = client.post(
+        URL,
+        {"audio": wav_upload()},
+        format="multipart",
+        HTTP_X_FORWARDED_FOR="198.51.100.1",
+    )
+    second = client.post(
+        URL,
+        {"audio": wav_upload()},
+        format="multipart",
+        HTTP_X_FORWARDED_FOR="198.51.100.2",
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 429
+
+
+def test_maps_throttle_cache_failure_to_unavailable(api_client, user, monkeypatch):
+    class FailingCache:
+        def get(self, key, default=None):
+            raise RedisError("offline")
+
+    api_client.force_authenticate(user)
+    monkeypatch.setattr(
+        "apps.voice.api.throttles.VoiceTranscriptionUserThrottle.cache",
+        FailingCache(),
+    )
+
+    response = api_client.post(URL, {"audio": wav_upload()}, format="multipart")
+
+    assert response.status_code == 503
+    assert response.json()["code"] == "asr_unavailable"
