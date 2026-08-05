@@ -148,6 +148,9 @@ OCR_WORKER_CONCURRENCY = int(os.environ.get("OCR_WORKER_CONCURRENCY", "1"))
 OCR_TASK_SOFT_TIME_LIMIT = int(os.environ.get("OCR_TASK_SOFT_TIME_LIMIT", "45"))
 OCR_TASK_TIME_LIMIT = int(os.environ.get("OCR_TASK_TIME_LIMIT", "60"))
 OCR_MAX_RETRIES = int(os.environ.get("OCR_MAX_RETRIES", "2"))
+OCR_DEBUG_TEXT_LOGGING = (
+    os.environ.get("OCR_DEBUG_TEXT_LOGGING", "false").lower() == "true"
+)
 OCR_MODEL_ROOT = os.environ.get("OCR_MODEL_ROOT", "")
 OCR_QUEUE = os.environ.get("OCR_QUEUE", "ocr")
 OCR_STORAGE_PROVIDER = os.environ.get("OCR_STORAGE_PROVIDER", "s3")
