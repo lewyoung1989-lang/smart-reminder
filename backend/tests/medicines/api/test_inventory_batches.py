@@ -1,3 +1,4 @@
+import logging
 from datetime import date, datetime, timedelta, timezone
 from urllib.parse import urlsplit
 
@@ -37,6 +38,62 @@ def test_inventory_requires_authentication(api_client):
 
     assert response.status_code == 401
     assert response.headers["WWW-Authenticate"] == "Bearer"
+
+
+@pytest.mark.django_db
+def test_inventory_batch_delete_requires_authentication(api_client, user):
+    batch = create_batch(owner=user, name="布洛芬")
+
+    response = api_client.delete(f"/api/v1/inventory-batches/{batch.id}")
+
+    assert response.status_code == 401
+    assert InventoryBatch.objects.filter(id=batch.id).exists()
+
+
+@pytest.mark.django_db
+def test_inventory_batch_delete_removes_only_owned_batch(
+    api_client,
+    user,
+    caplog,
+):
+    medicine = MedicineItem.objects.create(owner=user, name="布洛芬")
+    removed = InventoryBatch.objects.create(
+        medicine=medicine,
+        batch_number="A",
+    )
+    kept = InventoryBatch.objects.create(
+        medicine=medicine,
+        batch_number="B",
+    )
+    api_client.force_authenticate(user)
+    caplog.set_level(logging.INFO, logger="apps.medicines.api.views")
+
+    response = api_client.delete(
+        f"/api/v1/inventory-batches/{removed.id}"
+    )
+
+    assert response.status_code == 204
+    assert not InventoryBatch.objects.filter(id=removed.id).exists()
+    assert InventoryBatch.objects.filter(id=kept.id).exists()
+    assert MedicineItem.objects.filter(id=medicine.id).exists()
+    assert f"batch_id={removed.id}" in caplog.text
+    assert "布洛芬" not in caplog.text
+
+
+@pytest.mark.django_db
+def test_inventory_batch_delete_hides_other_users_batch(
+    api_client,
+    user,
+    django_user_model,
+):
+    another = django_user_model.objects.create_user(username="other-delete")
+    batch = create_batch(owner=another, name="他人药品")
+    api_client.force_authenticate(user)
+
+    response = api_client.delete(f"/api/v1/inventory-batches/{batch.id}")
+
+    assert response.status_code == 404
+    assert InventoryBatch.objects.filter(id=batch.id).exists()
 
 
 @pytest.mark.django_db
