@@ -63,7 +63,3 @@ def prepare_ocr_variants(value: bytes, *, role: str) -> tuple[bytes, ...]:
         except (cv2.error, ImageValidationError):
             pass
     return tuple(variants)
-
-
-def validate_and_resize(value: bytes) -> bytes:
-    return prepare_ocr_variants(value, role="front")[0]

@@ -1,12 +1,16 @@
+from django.conf import settings
 from django.db import transaction
+from django.utils import timezone
 
-from apps.ocr.domain.medicine_parser import extract_candidates
+from apps.ocr.domain.layout import merge_documents
 from apps.ocr.models import OCRCandidate, OCRJob
 
-from .image_validation import validate_and_resize
+from .candidate_resolver import resolve_candidates
+from .debug_logging import log_ocr_documents
+from .image_validation import prepare_ocr_variants
 
 
-def run_job(job_id, *, storage, provider):
+def run_job(job_id, *, storage, provider, semantic_provider=None):
     with transaction.atomic():
         job = OCRJob.objects.select_for_update().get(id=job_id)
         # Celery 重投或客户端重复触发时，成功任务直接返回，避免重复识别和写入。
@@ -30,11 +34,25 @@ def run_job(job_id, *, storage, provider):
     documents = []
     for role in ("front", "expiry"):
         key = job.image_keys.get(role)
-        if key:
-            image = validate_and_resize(storage.get_bytes(key))
-            documents.append(provider.recognize(image, role=role))
+        if not key:
+            continue
+        variants = prepare_ocr_variants(storage.get_bytes(key), role=role)
+        recognized = tuple(
+            provider.recognize(image, role=role) for image in variants
+        )
+        documents.append(merge_documents(role, recognized))
 
-    candidates = extract_candidates(tuple(documents))
+    merged_documents = tuple(documents)
+    log_ocr_documents(
+        job_id,
+        merged_documents,
+        enabled=settings.OCR_DEBUG_TEXT_LOGGING,
+    )
+    candidates = resolve_candidates(
+        merged_documents,
+        semantic_provider=semantic_provider,
+        reference_date=timezone.localdate(),
+    )
     line_count = sum(len(document.lines) for document in documents)
 
     with transaction.atomic():

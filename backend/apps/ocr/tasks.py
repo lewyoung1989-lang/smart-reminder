@@ -6,6 +6,7 @@ from django.conf import settings
 
 from apps.ocr.models import OCRJob
 from apps.ocr.providers.factory import get_ocr_provider
+from apps.ocr.providers.semantic_factory import get_medicine_semantic_provider
 from apps.ocr.providers.storage import get_object_storage
 
 
@@ -26,6 +27,7 @@ def process_ocr_job(self, job_id):
             job_id,
             storage=get_object_storage(),
             provider=get_ocr_provider(),
+            semantic_provider=get_medicine_semantic_provider(),
         )
         line_count = (
             job.candidate.raw_line_count

@@ -53,13 +53,19 @@ def test_process_task_records_success_metadata(user, mocker, caplog):
     job.refresh_from_db()
     mocker.patch("apps.ocr.tasks.get_object_storage", return_value=object())
     mocker.patch("apps.ocr.tasks.get_ocr_provider", return_value=object())
-    mocker.patch("apps.ocr.tasks.run_job", return_value=job)
+    semantic_provider = object()
+    mocker.patch(
+        "apps.ocr.tasks.get_medicine_semantic_provider",
+        return_value=semantic_provider,
+    )
+    run_job = mocker.patch("apps.ocr.tasks.run_job", return_value=job)
 
     with caplog.at_level("INFO"):
         process_ocr_job.run(str(job.id))
 
     assert str(job.id) in caplog.text
     assert "line_count" in caplog.text
+    assert run_job.call_args.kwargs["semantic_provider"] is semantic_provider
 
 
 @pytest.mark.django_db
@@ -124,8 +130,8 @@ def test_process_logs_metadata_without_recognized_text(
             return OCRDocument(role, (line,))
 
     monkeypatch.setattr(
-        "apps.ocr.services.job_runner.validate_and_resize",
-        lambda value: value,
+        "apps.ocr.services.job_runner.prepare_ocr_variants",
+        lambda value, role: (value,),
     )
     mocker.patch(
         "apps.ocr.tasks.get_object_storage",
