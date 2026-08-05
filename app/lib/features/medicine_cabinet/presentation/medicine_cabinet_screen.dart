@@ -6,11 +6,17 @@ typedef InventoryBatchLoader = Future<InventoryBatchPage> Function({
   String query,
   Uri? pageUrl,
 });
+typedef InventoryBatchDeleter = Future<void> Function(String id);
 
 class MedicineCabinetScreen extends StatefulWidget {
-  const MedicineCabinetScreen({required this.listBatches, super.key});
+  const MedicineCabinetScreen({
+    required this.listBatches,
+    required this.deleteBatch,
+    super.key,
+  });
 
   final InventoryBatchLoader listBatches;
+  final InventoryBatchDeleter deleteBatch;
 
   @override
   State<MedicineCabinetScreen> createState() => _MedicineCabinetScreenState();
@@ -28,6 +34,7 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
   bool _loadMoreFailed = false;
   bool _failed = false;
   int _requestGeneration = 0;
+  final Set<String> _deletedBatchIds = {};
 
   @override
   void initState() {
@@ -73,6 +80,7 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
       }
       setState(() {
         _batches = page.batches;
+        _deletedBatchIds.clear();
         _nextPage = page.nextPage;
         _loading = false;
       });
@@ -106,7 +114,12 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
         return;
       }
       setState(() {
-        _batches = [..._batches, ...page.batches];
+        _batches = [
+          ..._batches,
+          ...page.batches.where(
+            (batch) => !_deletedBatchIds.contains(batch.id),
+          ),
+        ];
         _nextPage = page.nextPage;
         _loadingMore = false;
         _loadMoreFailed = false;
@@ -131,6 +144,59 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
   void _clearSearch() {
     _search.clear();
     _loadFirstPage(query: '');
+  }
+
+  Future<bool> _confirmDelete(InventoryBatch batch) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('删除这批药品？'),
+        content: Text(
+          [
+            '确定删除“${batch.medicineName}”吗？',
+            if (batch.batchNumber.isNotEmpty) '批号 ${batch.batchNumber}',
+            '只会删除当前批次，其他批次不受影响。',
+          ].join('\n'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(dialogContext).colorScheme.error,
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      return false;
+    }
+
+    try {
+      await widget.deleteBatch(batch.id);
+      return mounted;
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('删除失败，请稍后重试')),
+        );
+      }
+      return false;
+    }
+  }
+
+  void _removeDeletedBatch(String batchId) {
+    setState(() {
+      _deletedBatchIds.add(batchId);
+      _batches = _batches
+          .where((batch) => batch.id != batchId)
+          .toList(growable: false);
+    });
   }
 
   @override
@@ -256,11 +322,49 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
                       : null,
             );
           }
-          return _MedicineBatchRow(batch: _batches[index]);
+          final batch = _batches[index];
+          return Dismissible(
+            key: ValueKey('medicine-batch-${batch.id}'),
+            direction: DismissDirection.endToStart,
+            dismissThresholds: const {
+              DismissDirection.endToStart: 0.35,
+            },
+            background: const _DeleteBackground(),
+            confirmDismiss: (_) => _confirmDelete(batch),
+            onDismissed: (_) => _removeDeletedBatch(batch.id),
+            child: _MedicineBatchRow(batch: batch),
+          );
         },
       ),
     );
   }
+}
+
+class _DeleteBackground extends StatelessWidget {
+  const _DeleteBackground();
+
+  @override
+  Widget build(BuildContext context) => Container(
+        color: Theme.of(context).colorScheme.errorContainer,
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.delete_outline,
+              color: Theme.of(context).colorScheme.onErrorContainer,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              '删除',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onErrorContainer,
+              ),
+            ),
+          ],
+        ),
+      );
 }
 
 class _MedicineBatchRow extends StatelessWidget {

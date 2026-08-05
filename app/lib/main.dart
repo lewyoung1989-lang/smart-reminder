@@ -119,6 +119,7 @@ class _SmartReminderAppState extends State<SmartReminderApp> {
         ),
         medicineCabinet: MedicineCabinetScreen(
           listBatches: _medicineCabinetApi.listBatches,
+          deleteBatch: _medicineCabinetApi.deleteBatch,
         ),
         medicineOcr: MedicineOcrScreen(
           capture: _captureMedicineImage,

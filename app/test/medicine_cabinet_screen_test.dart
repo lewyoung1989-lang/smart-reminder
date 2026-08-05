@@ -26,9 +26,15 @@ InventoryBatch batch({
     );
 
 Widget testApp(
-  Future<InventoryBatchPage> Function({String query, Uri? pageUrl}) loader,
-) =>
-    MaterialApp(home: MedicineCabinetScreen(listBatches: loader));
+  Future<InventoryBatchPage> Function({String query, Uri? pageUrl}) loader, {
+  Future<void> Function(String id)? deleteBatch,
+}) =>
+    MaterialApp(
+      home: MedicineCabinetScreen(
+        listBatches: loader,
+        deleteBatch: deleteBatch ?? (_) async {},
+      ),
+    );
 
 void main() {
   testWidgets('shows loading and then an empty cabinet', (tester) async {
@@ -303,5 +309,202 @@ void main() {
 
     expect(find.text('没有找到匹配药品'), findsOneWidget);
     expect(find.text('药箱里还没有药品'), findsNothing);
+  });
+
+  testWidgets('swipes left and cancels batch deletion', (tester) async {
+    final deleted = <String>[];
+    await tester.pumpWidget(
+      testApp(
+        ({String query = '', Uri? pageUrl}) async => InventoryBatchPage(
+          batches: [batch(id: 'cancel', name: '取消删除药品')],
+          nextPage: null,
+        ),
+        deleteBatch: (id) async => deleted.add(id),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final dismissible = tester.widget<Dismissible>(
+      find.byKey(const ValueKey('medicine-batch-cancel')),
+    );
+    expect(dismissible.direction, DismissDirection.endToStart);
+    expect(dismissible.background, isNotNull);
+    expect(
+      dismissible.dismissThresholds[DismissDirection.endToStart],
+      0.35,
+    );
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(
+        find.byKey(const ValueKey('medicine-batch-cancel')),
+      ),
+    );
+    await gesture.moveBy(const Offset(-100, 0));
+    await tester.pump();
+    await gesture.moveBy(const Offset(-400, 0));
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(find.text('删除这批药品？'), findsOneWidget);
+    expect(find.textContaining('只会删除当前批次'), findsOneWidget);
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+
+    expect(deleted, isEmpty);
+    expect(find.text('取消删除药品'), findsOneWidget);
+  });
+
+  testWidgets('confirms deletion and removes only the swiped batch',
+      (tester) async {
+    final deleted = <String>[];
+    await tester.pumpWidget(
+      testApp(
+        ({String query = '', Uri? pageUrl}) async => InventoryBatchPage(
+          batches: [
+            batch(id: 'first', name: '同名药品'),
+            batch(id: 'second', name: '同名药品'),
+          ],
+          nextPage: null,
+        ),
+        deleteBatch: (id) async => deleted.add(id),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.drag(
+      find.byKey(const ValueKey('medicine-batch-first')),
+      const Offset(-500, 0),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, '删除'));
+    await tester.pumpAndSettle();
+
+    expect(deleted, ['first']);
+    expect(
+      find.byKey(const ValueKey('medicine-batch-first')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('medicine-batch-second')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('keeps the batch when deletion fails', (tester) async {
+    await tester.pumpWidget(
+      testApp(
+        ({String query = '', Uri? pageUrl}) async => InventoryBatchPage(
+          batches: [batch(id: 'failed', name: '删除失败药品')],
+          nextPage: null,
+        ),
+        deleteBatch: (_) async => throw Exception('network'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.drag(
+      find.byKey(const ValueKey('medicine-batch-failed')),
+      const Offset(-500, 0),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, '删除'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('删除失败药品'), findsOneWidget);
+    expect(find.text('删除失败，请稍后重试'), findsOneWidget);
+  });
+
+  testWidgets('shows the empty cabinet after deleting its last batch',
+      (tester) async {
+    await tester.pumpWidget(
+      testApp(
+        ({String query = '', Uri? pageUrl}) async => InventoryBatchPage(
+          batches: [batch(id: 'last', name: '最后一批药')],
+          nextPage: null,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.drag(
+      find.byKey(const ValueKey('medicine-batch-last')),
+      const Offset(-500, 0),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, '删除'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('药箱里还没有药品'), findsOneWidget);
+  });
+
+  testWidgets('does not restore a deleted batch from an old cursor response',
+      (tester) async {
+    final nextPage = Completer<InventoryBatchPage>();
+    final deletedBatch = batch(id: 'stale-delete', name: '等待删除药品');
+    var cursorRequests = 0;
+    await tester.pumpWidget(
+      testApp(
+        ({String query = '', Uri? pageUrl}) async {
+          if (pageUrl != null) {
+            cursorRequests += 1;
+            return nextPage.future;
+          }
+          return InventoryBatchPage(
+            batches: [
+              deletedBatch,
+              ...List.generate(
+                7,
+                (index) => batch(id: 'kept-$index', name: '保留药品 $index'),
+              ),
+            ],
+            nextPage: Uri.parse(
+              'https://api.invalid/api/v1/inventory-batches?cursor=stale',
+            ),
+          );
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.drag(
+      find.byKey(const Key('medicine-cabinet-list')),
+      const Offset(0, -700),
+    );
+    await tester.pump();
+    expect(cursorRequests, 1);
+    await tester.drag(
+      find.byKey(const Key('medicine-cabinet-list')),
+      const Offset(0, 700),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('medicine-batch-stale-delete')),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final dismissible = tester.widget<Dismissible>(
+      find.byKey(const ValueKey('medicine-batch-stale-delete')),
+    );
+    dismissible.onDismissed!(DismissDirection.endToStart);
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('medicine-batch-stale-delete')),
+      findsNothing,
+    );
+
+    nextPage.complete(
+      InventoryBatchPage(batches: [deletedBatch], nextPage: null),
+    );
+    await tester.pumpAndSettle();
+    await tester.drag(
+      find.byKey(const Key('medicine-cabinet-list')),
+      const Offset(0, -700),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('medicine-batch-stale-delete')),
+      findsNothing,
+    );
   });
 }
