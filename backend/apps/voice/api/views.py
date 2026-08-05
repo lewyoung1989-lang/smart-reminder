@@ -69,10 +69,25 @@ class VoiceTranscriptionView(APIView):
     def post(self, request):
         audio = None
         try:
+            raw_content_length = request.META.get("CONTENT_LENGTH")
+            transfer_encoding = request.META.get("HTTP_TRANSFER_ENCODING", "")
+            if raw_content_length in (None, "") or "chunked" in transfer_encoding.lower():
+                return error_response(
+                    "request_size_invalid",
+                    status.HTTP_400_BAD_REQUEST,
+                )
             try:
-                content_length = int(request.META.get("CONTENT_LENGTH", "0"))
+                content_length = int(raw_content_length)
             except (TypeError, ValueError):
-                content_length = 0
+                return error_response(
+                    "request_size_invalid",
+                    status.HTTP_400_BAD_REQUEST,
+                )
+            if content_length <= 0:
+                return error_response(
+                    "request_size_invalid",
+                    status.HTTP_400_BAD_REQUEST,
+                )
             if content_length > settings.ASR_MAX_REQUEST_BYTES:
                 return error_response("audio_too_large", status.HTTP_400_BAD_REQUEST)
 

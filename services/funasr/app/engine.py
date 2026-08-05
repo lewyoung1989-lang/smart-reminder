@@ -13,8 +13,11 @@ class FunAsrEngine:
             self._model_factory = AutoModel
         self._model = self._model_factory(
             model="paraformer-zh",
+            model_revision="v2.0.4",
             vad_model="fsmn-vad",
+            vad_model_revision="v2.0.4",
             punc_model="ct-punc",
+            punc_model_revision="v2.0.4",
             device="cpu",
             disable_update=True,
         )

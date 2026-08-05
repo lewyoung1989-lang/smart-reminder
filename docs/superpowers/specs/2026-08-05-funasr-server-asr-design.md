@@ -152,6 +152,7 @@ FunASR 作为独立容器运行，只连接 Docker 私有网络，不映射公�
 - ASR：`paraformer-zh`
 - VAD：`fsmn-vad`
 - 标点：`ct-punc`
+- 三项权重均固定为 ModelScope `v2.0.4` revision；模型页在 2026-08-05 均标注 Apache License 2.0，发布前再次复核。
 - 设备：CPU
 - 服务并发：1
 

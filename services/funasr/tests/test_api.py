@@ -1,3 +1,6 @@
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event
+
 from fastapi.testclient import TestClient
 
 from services.funasr.app.audio import AudioInputError, NormalizedAudio
@@ -111,3 +114,39 @@ def test_rejects_blank_engine_output():
 
     assert response.status_code == 422
     assert response.json()["detail"]["code"] == "empty_transcript"
+
+
+def test_rejects_concurrent_inference_while_health_remains_responsive():
+    started = Event()
+    release = Event()
+
+    class BlockingEngine(FakeEngine):
+        def transcribe(self, tensor):
+            started.set()
+            release.wait(timeout=5)
+            return "完成"
+
+    client = TestClient(
+        create_app(
+            engine=BlockingEngine(ready=True),
+            normalizer=successful_normalizer,
+            load_on_startup=False,
+        )
+    )
+    request = {
+        "files": {"file": ("recording.wav", b"wav", "audio/wav")},
+        "data": {"model": "paraformer-zh", "response_format": "json"},
+    }
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(client.post, "/v1/audio/transcriptions", **request)
+        assert started.wait(timeout=2)
+        health = client.get("/health")
+        second = client.post("/v1/audio/transcriptions", **request)
+        release.set()
+        first_response = first.result(timeout=2)
+
+    assert health.status_code == 200
+    assert second.status_code == 429
+    assert second.json()["detail"]["code"] == "asr_busy"
+    assert first_response.status_code == 200

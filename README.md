@@ -83,6 +83,14 @@ docker compose exec funasr python -c \
 
 FunASR 不映射宿主机端口，只能由 Compose 私有网络中的 Django API 调用。音频、转写文本和上游原始响应不会写入数据库或日志；上传对象和 iPhone 临时 WAV 在请求结束后清理。上线前需另外确认目标模型权重许可证、普通话样本准确率和目标 CPU 的 p95 延迟。
 
+模型缓存固定使用以下 ModelScope 权重标签；2026-08-05 通过 ModelScope 模型 API 核对，三者均标注为 Apache License 2.0。上线前仍需由发布负责人复核模型页与实际缓存文件中的许可证：
+
+| 用途 | ModelScope 模型 | Revision |
+|---|---|---|
+| ASR | [`iic/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch`](https://modelscope.cn/models/iic/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch) | `v2.0.4` |
+| VAD | [`iic/speech_fsmn_vad_zh-cn-16k-common-pytorch`](https://modelscope.cn/models/iic/speech_fsmn_vad_zh-cn-16k-common-pytorch) | `v2.0.4` |
+| 标点 | [`iic/punc_ct-transformer_zh-cn-common-vocab272727-pytorch`](https://modelscope.cn/models/iic/punc_ct-transformer_zh-cn-common-vocab272727-pytorch) | `v2.0.4` |
+
 普通开发和 CI 不需要下载模型。后端 Provider 使用 fake，模型服务使用 fake engine：
 
 ```bash

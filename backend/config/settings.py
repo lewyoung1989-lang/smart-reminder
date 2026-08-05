@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 
@@ -90,10 +91,22 @@ ASR_MIN_DURATION_SECONDS = float(os.environ.get("ASR_MIN_DURATION_SECONDS", "0.3
 ASR_MAX_DURATION_SECONDS = float(os.environ.get("ASR_MAX_DURATION_SECONDS", "20"))
 ASR_GLOBAL_CONCURRENCY = int(os.environ.get("ASR_GLOBAL_CONCURRENCY", "1"))
 ASR_CONCURRENCY_PER_USER = int(os.environ.get("ASR_CONCURRENCY_PER_USER", "1"))
+if ASR_GLOBAL_CONCURRENCY != 1 or ASR_CONCURRENCY_PER_USER != 1:
+    raise ImproperlyConfigured("V1 only supports ASR concurrency of 1")
 ASR_LEASE_TTL_SECONDS = int(os.environ.get("ASR_LEASE_TTL_SECONDS", "25"))
 ASR_USER_RATE = os.environ.get("ASR_USER_RATE", "10/min")
 ASR_IP_RATE = os.environ.get("ASR_IP_RATE", "30/min")
 ASR_REDIS_URL = os.environ.get("ASR_REDIS_URL", CELERY_BROKER_URL)
+ASR_THROTTLE_REDIS_URL = os.environ.get("ASR_THROTTLE_REDIS_URL", "")
+
+if ASR_THROTTLE_REDIS_URL:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": ASR_THROTTLE_REDIS_URL,
+            "KEY_PREFIX": "smart-reminder-asr-throttle",
+        }
+    }
 
 REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"] = {
     "voice_transcription_user": ASR_USER_RATE,

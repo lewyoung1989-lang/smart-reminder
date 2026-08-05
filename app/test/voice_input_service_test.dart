@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -7,9 +8,10 @@ import 'package:smart_reminder_app/features/voice_input/domain/voice_transcripti
 import 'package:smart_reminder_app/features/voice_input/services/voice_input_service.dart';
 
 class FakeRecorder implements AudioRecorderGateway {
-  FakeRecorder({this.permissionGranted = true});
+  FakeRecorder({this.permissionGranted = true, this.startGate});
 
   bool permissionGranted;
+  final Completer<void>? startGate;
   RecordConfig? config;
   String? startedPath;
   bool cancelled = false;
@@ -23,6 +25,7 @@ class FakeRecorder implements AudioRecorderGateway {
     this.config = config;
     startedPath = path;
     await File(path).writeAsBytes([1, 2, 3]);
+    await startGate?.future;
   }
 
   @override
@@ -163,6 +166,36 @@ void main() {
     final path = recorder.startedPath!;
 
     await voice.dispose();
+
+    expect(recorder.cancelled, isTrue);
+    expect(recorder.disposed, isTrue);
+    expect(await File(path).exists(), isFalse);
+  });
+
+  test('dispose during start cancels and deletes the reserved file', () async {
+    final gate = Completer<void>();
+    final recorder = FakeRecorder(startGate: gate);
+    final voice = service(recorder: recorder);
+
+    final starting = voice.start();
+    while (recorder.startedPath == null) {
+      await Future<void>.delayed(Duration.zero);
+    }
+    final path = recorder.startedPath!;
+    final disposing = voice.dispose();
+    gate.complete();
+
+    await expectLater(
+      starting,
+      throwsA(
+        isA<VoiceInputException>().having(
+          (error) => error.code,
+          'code',
+          'service_disposed',
+        ),
+      ),
+    );
+    await disposing;
 
     expect(recorder.cancelled, isTrue);
     expect(recorder.disposed, isTrue);

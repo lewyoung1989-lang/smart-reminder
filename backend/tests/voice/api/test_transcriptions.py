@@ -4,8 +4,10 @@ import wave
 
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
-from rest_framework.test import APIClient
+import pytest
+from rest_framework.test import APIClient, APIRequestFactory, force_authenticate
 
+from apps.voice.api.views import VoiceTranscriptionView
 from apps.voice.domain.audio import AudioValidationError, WavMetadata
 from apps.voice.domain.results import (
     AsrResponseError,
@@ -18,6 +20,11 @@ from apps.voice.services.transcription import AsrBusyError, TranscriptionOutcome
 
 
 URL = "/api/v1/voice/transcriptions"
+
+
+@pytest.fixture(autouse=True)
+def clear_throttle_cache():
+    cache.clear()
 
 
 def wav_upload(*, duration_seconds=0.5, filename="recording.wav"):
@@ -125,6 +132,36 @@ def test_rejects_oversize_multipart_request_before_parsing(
     assert response.status_code == 400
     assert response.json()["code"] == "audio_too_large"
     assert service.calls == []
+
+
+def test_rejects_multipart_request_without_content_length(user):
+    request = APIRequestFactory().post(
+        URL,
+        b"",
+        content_type="multipart/form-data; boundary=test",
+    )
+    request.META.pop("CONTENT_LENGTH", None)
+    force_authenticate(request, user=user)
+
+    response = VoiceTranscriptionView.as_view()(request)
+
+    assert response.status_code == 400
+    assert response.data["code"] == "request_size_invalid"
+
+
+def test_rejects_chunked_multipart_request(user):
+    request = APIRequestFactory().post(
+        URL,
+        b"",
+        content_type="multipart/form-data; boundary=test",
+        HTTP_TRANSFER_ENCODING="chunked",
+    )
+    force_authenticate(request, user=user)
+
+    response = VoiceTranscriptionView.as_view()(request)
+
+    assert response.status_code == 400
+    assert response.data["code"] == "request_size_invalid"
 
 
 def test_maps_audio_validation_error_and_closes_upload(

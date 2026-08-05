@@ -1,4 +1,6 @@
+import asyncio
 from contextlib import asynccontextmanager
+from threading import Lock
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 
@@ -18,6 +20,7 @@ def create_app(
 ):
     engine = engine or FunAsrEngine()
     normalizer = normalizer or normalize_wav
+    inference_guard = Lock()
 
     @asynccontextmanager
     async def lifespan(_app):
@@ -28,7 +31,7 @@ def create_app(
     app = FastAPI(title="smart-reminder-funasr", lifespan=lifespan)
 
     @app.get("/health")
-    def health():
+    async def health():
         if not engine.ready:
             raise HTTPException(
                 status_code=503,
@@ -54,12 +57,18 @@ def create_app(
         if len(payload) > max_audio_bytes:
             raise HTTPException(413, detail={"code": "audio_too_large"})
 
+        if not inference_guard.acquire(blocking=False):
+            raise HTTPException(429, detail={"code": "asr_busy"})
         try:
-            normalized = normalizer(payload)
-        except AudioInputError as exc:
-            raise HTTPException(400, detail={"code": exc.code}) from exc
-
-        transcript = engine.transcribe(normalized.tensor).strip()
+            try:
+                normalized = await asyncio.to_thread(normalizer, payload)
+            except AudioInputError as exc:
+                raise HTTPException(400, detail={"code": exc.code}) from exc
+            transcript = (
+                await asyncio.to_thread(engine.transcribe, normalized.tensor)
+            ).strip()
+        finally:
+            inference_guard.release()
         if not transcript:
             raise HTTPException(422, detail={"code": "empty_transcript"})
         return {"text": transcript}
