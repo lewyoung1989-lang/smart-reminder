@@ -34,6 +34,11 @@ def test_production_security_settings_are_loaded_from_environment():
         assert settings.SESSION_COOKIE_SECURE is True
         assert settings.CSRF_COOKIE_SECURE is True
         assert settings.SECURE_HSTS_SECONDS == 3600
+        assert "django.middleware.csrf.CsrfViewMiddleware" in settings.MIDDLEWARE
+        assert (
+            "django.middleware.clickjacking.XFrameOptionsMiddleware"
+            in settings.MIDDLEWARE
+        )
         """
     )
 
