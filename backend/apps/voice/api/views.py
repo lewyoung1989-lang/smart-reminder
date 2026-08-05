@@ -67,8 +67,16 @@ class VoiceTranscriptionView(APIView):
         return super().handle_exception(exc)
 
     def post(self, request):
-        audio = request.FILES.get("audio")
+        audio = None
         try:
+            try:
+                content_length = int(request.META.get("CONTENT_LENGTH", "0"))
+            except (TypeError, ValueError):
+                content_length = 0
+            if content_length > settings.ASR_MAX_REQUEST_BYTES:
+                return error_response("audio_too_large", status.HTTP_400_BAD_REQUEST)
+
+            audio = request.FILES.get("audio")
             serializer = VoiceTranscriptionSerializer(data=request.data)
             if not serializer.is_valid():
                 errors = serializer.errors.get("audio", [])

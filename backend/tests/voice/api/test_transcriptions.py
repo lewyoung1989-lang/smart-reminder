@@ -108,6 +108,25 @@ def test_rejects_oversize_upload_before_service_call(
     assert service.calls == []
 
 
+def test_rejects_oversize_multipart_request_before_parsing(
+    api_client, user, monkeypatch, settings
+):
+    api_client.force_authenticate(user)
+    settings.ASR_MAX_REQUEST_BYTES = 100
+    service = FakeTranscriptionService()
+    install_service(monkeypatch, service)
+
+    response = api_client.post(
+        URL,
+        {"audio": wav_upload(), "extra": "x" * 200},
+        format="multipart",
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "audio_too_large"
+    assert service.calls == []
+
+
 def test_maps_audio_validation_error_and_closes_upload(
     api_client, user, monkeypatch
 ):
