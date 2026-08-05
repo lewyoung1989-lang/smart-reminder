@@ -93,6 +93,7 @@ class _ReminderHomeScreenState extends State<ReminderHomeScreen>
     setState(() {
       state.hasLoaded = true;
       state.loading = true;
+      state.loadingMore = false;
       state.firstPageFailed = false;
       state.loadMoreFailed = false;
     });

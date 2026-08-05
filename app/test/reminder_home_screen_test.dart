@@ -339,4 +339,55 @@ void main() {
     expect(pageUrls, hasLength(2));
     expect(pageUrls.last?.queryParameters['cursor'], 'next');
   });
+
+  testWidgets('refresh invalidates an in-flight cursor loading state',
+      (tester) async {
+    final cursor = Completer<ReminderPage>();
+    var firstPageCalls = 0;
+    await tester.pumpWidget(
+      buildHome(
+        listReminders: ({required status, pageUrl}) {
+          if (pageUrl != null) return cursor.future;
+          firstPageCalls += 1;
+          return Future.value(
+            ReminderPage(
+              reminders: firstPageCalls == 1
+                  ? [
+                      for (var index = 0; index < 14; index += 1)
+                        reminder('$index', '旧列表 $index', status),
+                    ]
+                  : [reminder('fresh', '刷新结果', status)],
+              nextPage: firstPageCalls == 1
+                  ? Uri.parse(
+                      'https://api.invalid/api/v1/reminders?cursor=next&status=pending',
+                    )
+                  : null,
+            ),
+          );
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.drag(
+      find.byKey(const Key('reminder-list-pending')),
+      const Offset(0, -900),
+    );
+    await tester.pump();
+
+    final refresh = tester.widget<RefreshIndicator>(find.byType(RefreshIndicator));
+    await refresh.onRefresh();
+    cursor.complete(
+      ReminderPage(
+        reminders: [
+          reminder('stale', '旧分页结果', ReminderStatus.pending),
+        ],
+        nextPage: null,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('刷新结果'), findsOneWidget);
+    expect(find.text('旧分页结果'), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
 }
