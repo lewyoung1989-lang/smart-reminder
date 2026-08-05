@@ -122,6 +122,7 @@ class VoiceReminderDraftConfirmView(APIView):
                 schedule_json=draft_data.schedule.model_dump(mode="json"),
                 conditions_json=draft_data.precheck.model_dump(mode="json") if draft_data.precheck else {},
                 severity=draft_data.severity,
+                scheduled_at=draft_data.schedule.local_datetime,
                 source_draft=draft,
             )
             draft.status = "confirmed"
