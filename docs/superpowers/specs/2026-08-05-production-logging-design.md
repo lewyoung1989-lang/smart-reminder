@@ -102,7 +102,7 @@ logs.sh SERVICE [--since TIME] [--level LEVEL] [--follow]
 
 `deploy/tencent/scripts/verify_logging.sh` 同时供安装和发布脚本调用。它校验配置文件精确内容、拒绝文件名排序在项目配置之后且会覆盖保留策略的 drop-in，检查 journald 运行状态、持久化目录、运维目录写权限和 Docker journald 驱动。验证通过前部署脚本不得构建或重建容器。
 
-生产 Compose 文件把所有服务切换到 `journald` 并配置稳定标签。只有服务器日志初始化成功后才重新创建容器。部署继续使用经过审核的完整 Git SHA。
+生产 Compose 文件把所有服务切换到 `journald` 并配置稳定标签。只有服务器日志初始化成功后才重新创建容器。Nginx 配置以单文件 bind mount 提供，Git 更新可能替换宿主文件 inode，因此每次发布都强制重建 Nginx 容器，再执行配置检查和重载。部署继续使用经过审核的完整 Git SHA。
 
 ## 失败处理
 

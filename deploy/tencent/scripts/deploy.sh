@@ -51,7 +51,7 @@ COMPOSE=(
 for _attempt in $(seq 1 24); do
   if "${COMPOSE[@]}" exec -T api python -c \
     "import urllib.request; request=urllib.request.Request('http://127.0.0.1:8000/api/v1/health', headers={'Host':'aipupu.cloud','X-Forwarded-Proto':'https'}); assert urllib.request.urlopen(request, timeout=3).status == 200"; then
-    "${COMPOSE[@]}" --profile production up -d nginx
+    "${COMPOSE[@]}" --profile production up -d --force-recreate nginx
     "${COMPOSE[@]}" --profile production exec -T nginx nginx -t
     "${COMPOSE[@]}" --profile production exec -T nginx nginx -s reload
     exit 0

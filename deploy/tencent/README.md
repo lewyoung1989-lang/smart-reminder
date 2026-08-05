@@ -168,6 +168,8 @@ cd /opt/smart-reminder/app
 
 该脚本为两个域名申请同一张证书。HTTP 服务只响应 ACME 验证，其余路径返回 `503`，不会通过明文 HTTP 暴露 API 或对象上传。
 
+发布脚本会强制重建 Nginx 容器，因为 Git 更新配置文件时可能替换单文件 bind mount 的宿主 inode；只执行 reload 不能保证容器读到新文件。重建后脚本仍会执行 `nginx -t`，成功才 reload。
+
 证书签发成功后部署审核过的提交：
 
 ```bash

@@ -297,7 +297,9 @@ def test_deploy_initializes_minio_and_smoke_checks_ocr_before_start():
 
 def test_deploy_validates_and_reloads_nginx_after_api_replacement():
     script = (SCRIPTS / "deploy.sh").read_text()
-    start_nginx = script.index("--profile production up -d nginx")
+    start_nginx = script.index(
+        "--profile production up -d --force-recreate nginx"
+    )
     validate_nginx = script.index("exec -T nginx nginx -t")
     reload_nginx = script.index("exec -T nginx nginx -s reload")
     assert start_nginx < validate_nginx < reload_nginx

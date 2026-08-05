@@ -283,6 +283,8 @@ helper 只负责打开每类稳定日志文件（`deploy.log`、`backup.log`、`
 
 `install_logging.sh` 安装四个 systemd 文件，执行 `daemon-reload` 并启用两个 timer，但不立即触发备份或证书任务。
 
+部署 Nginx 时必须使用 `up -d --force-recreate nginx`。Git fast-forward 可能替换单文件 bind mount 的宿主 inode，只有重建容器才能保证新日志配置已挂载；随后再运行 `nginx -t` 和 reload。
+
 - [ ] **步骤 4：运行运维测试并确认通过**
 
 运行：`cd backend && pytest tests/deployment/test_operations_scripts.py -q`
