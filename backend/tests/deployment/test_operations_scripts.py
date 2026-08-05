@@ -292,5 +292,13 @@ def test_runbook_covers_security_release_backup_and_rollback():
         "MinIO Console",
         "24 小时",
         "check_ocr",
+        "/var/log/journal/",
+        "/opt/smart-reminder/logs/deploy/",
+        "/opt/smart-reminder/logs/backup/",
+        "/opt/smart-reminder/logs/cert/",
+        "install_logging.sh",
+        "logs.sh api",
+        "journalctl --disk-usage",
+        "保留 7 天",
     ):
         assert required in runbook
