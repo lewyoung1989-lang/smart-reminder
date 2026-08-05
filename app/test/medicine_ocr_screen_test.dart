@@ -7,7 +7,8 @@ import 'package:smart_reminder_app/features/medicine_ocr/presentation/medicine_o
 void main() {
   Widget buildCaptureScreen({
     required Future<List<int>?> Function(String kind) capture,
-  }) => MaterialApp(
+  }) =>
+      MaterialApp(
         home: MedicineOcrScreen(
           capture: capture,
           createJob: ({required frontBytes, expiryBytes}) async =>
@@ -124,5 +125,27 @@ void main() {
 
     expect(find.text('无法打开相机，请检查相机权限后重试'), findsNothing);
     expect(find.text('拍摄药盒正面'), findsOneWidget);
+  });
+
+  testWidgets('camera cancellation clears a previous capture error',
+      (tester) async {
+    var calls = 0;
+    await tester.pumpWidget(
+      buildCaptureScreen(
+        capture: (_) async {
+          calls += 1;
+          if (calls == 1) throw Exception('camera unavailable');
+          return null;
+        },
+      ),
+    );
+
+    await tester.tap(find.text('拍摄药盒正面'));
+    await tester.pump();
+    expect(find.text('无法打开相机，请检查相机权限后重试'), findsOneWidget);
+
+    await tester.tap(find.text('拍摄药盒正面'));
+    await tester.pump();
+    expect(find.text('无法打开相机，请检查相机权限后重试'), findsNothing);
   });
 }

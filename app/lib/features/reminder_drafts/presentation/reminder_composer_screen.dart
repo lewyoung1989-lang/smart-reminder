@@ -5,7 +5,6 @@ import '../../reminders/domain/reminder.dart' show ReminderCreationResult;
 import '../domain/reminder_draft.dart';
 import 'reminder_draft_screen.dart';
 
-
 class ReminderComposerScreen extends StatefulWidget {
   const ReminderComposerScreen({
     required this.createDraft,
@@ -23,7 +22,6 @@ class ReminderComposerScreen extends StatefulWidget {
   @override
   State<ReminderComposerScreen> createState() => _ReminderComposerScreenState();
 }
-
 
 class _ReminderComposerScreenState extends State<ReminderComposerScreen> {
   final _controller = TextEditingController();
@@ -66,7 +64,8 @@ class _ReminderComposerScreenState extends State<ReminderComposerScreen> {
     final draft = _draft;
     if (draft == null) return;
     try {
-      final reminderId = _confirmedReminderId ?? await widget.confirmDraft(draft.id);
+      final reminderId =
+          _confirmedReminderId ?? await widget.confirmDraft(draft.id);
       _confirmedReminderId = reminderId;
       final scheduler = widget.notificationScheduler;
       if (scheduler != null) {
@@ -105,6 +104,22 @@ class _ReminderComposerScreenState extends State<ReminderComposerScreen> {
       );
     } catch (_) {
       if (!mounted) return;
+      final reminderId = _confirmedReminderId;
+      if (reminderId != null) {
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop(
+            ReminderCreationResult(
+              reminderId: reminderId,
+              notificationScheduled: false,
+            ),
+          );
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('提醒已创建，但手机通知未安排')),
+        );
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('创建失败，请稍后重试')),
       );

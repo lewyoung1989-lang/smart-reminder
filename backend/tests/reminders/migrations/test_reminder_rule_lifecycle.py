@@ -1,4 +1,7 @@
+import importlib
 from pathlib import Path
+from types import SimpleNamespace
+from uuid import UUID
 
 import pytest
 from django.conf import settings
@@ -73,3 +76,32 @@ def test_lifecycle_migration_backfills_aware_and_naive_schedule_times():
         "2026-08-03T23:30:00+00:00",
         "2026-08-03T23:30:00+00:00",
     ]
+
+
+def test_lifecycle_backfill_fails_with_the_invalid_rule_id():
+    migration = importlib.import_module(
+        "apps.reminders.migrations.0004_reminderrule_lifecycle"
+    )
+    rule_id = UUID("00000000-0000-0000-0000-000000000123")
+    rule = SimpleNamespace(
+        id=rule_id,
+        schedule_json={"local_datetime": "not-a-date"},
+        timezone="Asia/Shanghai",
+    )
+
+    class FakeManager:
+        @staticmethod
+        def all():
+            return [rule]
+
+    class FakeRule:
+        objects = FakeManager()
+
+    class FakeApps:
+        @staticmethod
+        def get_model(app_label, model_name):
+            assert (app_label, model_name) == ("reminders", "ReminderRule")
+            return FakeRule
+
+    with pytest.raises(RuntimeError, match=str(rule_id)):
+        migration.backfill_scheduled_at(FakeApps(), schema_editor=None)

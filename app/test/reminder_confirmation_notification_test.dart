@@ -6,7 +6,6 @@ import 'package:smart_reminder_app/features/reminders/domain/reminder.dart'
     show ReminderCreationResult;
 import 'package:smart_reminder_app/platform/notifications/reminder_notification_scheduler.dart';
 
-
 class RecordingNotificationScheduler implements ReminderNotificationScheduler {
   final requests = <({String reminderId, ReminderDraft draft})>[];
   Object? error;
@@ -23,7 +22,6 @@ class RecordingNotificationScheduler implements ReminderNotificationScheduler {
     if (error case final value?) throw value;
   }
 }
-
 
 void main() {
   final draft = ReminderDraft(
@@ -66,7 +64,8 @@ void main() {
     expect(find.text('提醒已创建，通知已安排'), findsOneWidget);
   });
 
-  testWidgets('permission denial reports a warning without reconfirming', (tester) async {
+  testWidgets('permission denial reports a warning without reconfirming',
+      (tester) async {
     final scheduler = RecordingNotificationScheduler()
       ..error = const NotificationPermissionDenied();
     var confirmationCount = 0;
@@ -94,6 +93,27 @@ void main() {
     expect(scheduler.requests, hasLength(2));
   });
 
+  testWidgets('unexpected scheduler failure still reports server creation',
+      (tester) async {
+    final scheduler = RecordingNotificationScheduler()
+      ..error = Exception('unexpected scheduler failure');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReminderComposerScreen(
+          createDraft: (_) async => draft,
+          confirmDraft: (_) async => 'reminder-1',
+          notificationScheduler: scheduler,
+          now: DateTime(2026, 8, 4, 10),
+        ),
+      ),
+    );
+
+    await openDraftAndConfirm(tester);
+
+    expect(find.text('提醒已创建，但手机通知未安排'), findsOneWidget);
+    expect(find.text('创建失败，请稍后重试'), findsNothing);
+  });
+
   testWidgets('pushed composer returns the reminder creation result',
       (tester) async {
     final scheduler = RecordingNotificationScheduler();
@@ -104,7 +124,8 @@ void main() {
           builder: (context) => Scaffold(
             body: FilledButton(
               onPressed: () async {
-                result = await Navigator.of(context).push<ReminderCreationResult>(
+                result =
+                    await Navigator.of(context).push<ReminderCreationResult>(
                   MaterialPageRoute(
                     builder: (_) => ReminderComposerScreen(
                       createDraft: (_) async => draft,

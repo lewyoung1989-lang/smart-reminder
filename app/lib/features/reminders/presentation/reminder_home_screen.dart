@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../platform/notifications/reminder_notification_scheduler.dart';
+import '../data/reminder_api.dart';
 import '../domain/reminder.dart';
 
 typedef ListReminders = Future<ReminderPage> Function({
@@ -87,6 +88,26 @@ class _ReminderHomeScreenState extends State<ReminderHomeScreen>
     }
   }
 
+  void _invalidate(ReminderStatus status) {
+    final state = _states[status]!;
+    state
+      ..generation += 1
+      ..hasLoaded = false
+      ..loading = false
+      ..loadingMore = false
+      ..firstPageFailed = false
+      ..loadMoreFailed = false;
+  }
+
+  void _removePending(String reminderId) {
+    final pendingState = _states[ReminderStatus.pending]!;
+    setState(() {
+      pendingState.items = pendingState.items
+          .where((item) => item.id != reminderId)
+          .toList(growable: false);
+    });
+  }
+
   Future<void> _loadFirst(ReminderStatus status) async {
     final state = _states[status]!;
     final generation = ++state.generation;
@@ -151,9 +172,7 @@ class _ReminderHomeScreenState extends State<ReminderHomeScreen>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          result.notificationScheduled
-              ? '提醒已创建，通知已安排'
-              : '提醒已创建，但手机通知未安排',
+          result.notificationScheduled ? '提醒已创建，通知已安排' : '提醒已创建，但手机通知未安排',
         ),
       ),
     );
@@ -187,6 +206,26 @@ class _ReminderHomeScreenState extends State<ReminderHomeScreen>
     setState(() => _cancelling.add(reminder.id));
     try {
       await widget.cancelReminder(reminder.id);
+    } on ReminderApiException catch (error) {
+      if (error.statusCode == 409 && error.code == 'reminder_expired') {
+        if (!mounted) return;
+        _removePending(reminder.id);
+        _invalidate(ReminderStatus.expired);
+        await _loadFirst(ReminderStatus.pending);
+        if (!mounted) return;
+        setState(() => _cancelling.remove(reminder.id));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('提醒时间已过，不能取消')),
+        );
+        return;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('取消失败，请检查网络后重试')),
+        );
+        setState(() => _cancelling.remove(reminder.id));
+      }
+      return;
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -198,12 +237,7 @@ class _ReminderHomeScreenState extends State<ReminderHomeScreen>
     }
 
     if (mounted) {
-      final pendingState = _states[ReminderStatus.pending]!;
-      setState(() {
-        pendingState.items = pendingState.items
-            .where((item) => item.id != reminder.id)
-            .toList(growable: false);
-      });
+      _removePending(reminder.id);
     }
 
     var localCancellationFailed = false;
@@ -213,19 +247,14 @@ class _ReminderHomeScreenState extends State<ReminderHomeScreen>
       localCancellationFailed = true;
     }
 
-    final cancelledState = _states[ReminderStatus.cancelled]!;
-    cancelledState
-      ..hasLoaded = false
-      ..generation += 1;
+    _invalidate(ReminderStatus.cancelled);
     await _loadFirst(ReminderStatus.pending);
     if (!mounted) return;
     setState(() => _cancelling.remove(reminder.id));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          localCancellationFailed
-              ? '提醒已取消，但手机通知可能仍存在'
-              : '提醒已取消',
+          localCancellationFailed ? '提醒已取消，但手机通知可能仍存在' : '提醒已取消',
         ),
       ),
     );

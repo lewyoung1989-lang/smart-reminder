@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:smart_reminder_app/features/reminders/domain/reminder.dart';
+import 'package:smart_reminder_app/features/reminders/data/reminder_api.dart';
 import 'package:smart_reminder_app/features/reminders/presentation/reminder_home_screen.dart';
 import 'package:smart_reminder_app/platform/notifications/reminder_notification_scheduler.dart';
 
@@ -10,7 +12,8 @@ Reminder reminder(
   String id,
   String title,
   ReminderStatus status,
-) => Reminder(
+) =>
+    Reminder(
       id: id,
       title: title,
       timezone: 'Asia/Shanghai',
@@ -47,7 +50,8 @@ Widget buildHome({
   Future<Reminder> Function(String id)? cancelReminder,
   ReminderNotificationScheduler? scheduler,
   WidgetBuilder? createReminder,
-}) => MaterialApp(
+}) =>
+    MaterialApp(
       home: ReminderHomeScreen(
         listReminders: listReminders,
         cancelReminder: cancelReminder ??
@@ -85,7 +89,10 @@ void main() {
     expect(requested, [ReminderStatus.pending, ReminderStatus.expired]);
     expect(find.text('expired'), findsOneWidget);
 
-    await tester.tap(find.text('已取消'));
+    tester
+        .widget<TabBar>(find.byType(TabBar))
+        .controller!
+        .animateTo(2, duration: Duration.zero);
     await tester.pumpAndSettle();
     expect(requested, [
       ReminderStatus.pending,
@@ -278,7 +285,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final refresh = tester.widget<RefreshIndicator>(find.byType(RefreshIndicator));
+    final refresh =
+        tester.widget<RefreshIndicator>(find.byType(RefreshIndicator));
     final olderRequest = refresh.onRefresh();
     await tester.pump();
     final newerRequest = refresh.onRefresh();
@@ -374,7 +382,8 @@ void main() {
     );
     await tester.pump();
 
-    final refresh = tester.widget<RefreshIndicator>(find.byType(RefreshIndicator));
+    final refresh =
+        tester.widget<RefreshIndicator>(find.byType(RefreshIndicator));
     await refresh.onRefresh();
     cursor.complete(
       ReminderPage(
@@ -389,5 +398,107 @@ void main() {
     expect(find.text('刷新结果'), findsOneWidget);
     expect(find.text('旧分页结果'), findsNothing);
     expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
+  testWidgets('cancellation restarts an in-flight cancelled tab request',
+      (tester) async {
+    final oldCancelledRequest = Completer<ReminderPage>();
+    var active = true;
+    var cancelledCalls = 0;
+    await tester.pumpWidget(
+      buildHome(
+        listReminders: ({required status, pageUrl}) {
+          if (status == ReminderStatus.cancelled) {
+            cancelledCalls += 1;
+            if (cancelledCalls == 1) return oldCancelledRequest.future;
+            return Future.value(
+              ReminderPage(
+                reminders: [
+                  reminder('one', '已取消记录', ReminderStatus.cancelled),
+                ],
+                nextPage: null,
+              ),
+            );
+          }
+          return Future.value(
+            ReminderPage(
+              reminders: status == ReminderStatus.pending && active
+                  ? [reminder('one', '待取消记录', ReminderStatus.pending)]
+                  : [],
+              nextPage: null,
+            ),
+          );
+        },
+        cancelReminder: (id) async {
+          active = false;
+          return reminder(id, '待取消记录', ReminderStatus.cancelled);
+        },
+        scheduler: RecordingScheduler(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final tabController =
+        tester.widget<TabBar>(find.byType(TabBar)).controller!;
+    tabController.animateTo(2, duration: Duration.zero);
+    tabController.animateTo(0, duration: Duration.zero);
+    expect(cancelledCalls, 1);
+    tester.widget<IconButton>(find.byKey(const Key('cancel-one'))).onPressed!();
+    await tester.pump();
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '确认取消'));
+    await tester.pump(const Duration(milliseconds: 400));
+    oldCancelledRequest.complete(
+      const ReminderPage(reminders: [], nextPage: null),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    tester
+        .widget<TabBar>(find.byType(TabBar))
+        .controller!
+        .animateTo(2, duration: Duration.zero);
+    await tester.pumpAndSettle();
+
+    expect(cancelledCalls, 2);
+    expect(find.text('已取消记录'), findsOneWidget);
+  });
+
+  testWidgets('expired cancellation conflict refreshes without local cancel',
+      (tester) async {
+    var pendingCalls = 0;
+    final scheduler = RecordingScheduler();
+    await tester.pumpWidget(
+      buildHome(
+        listReminders: ({required status, pageUrl}) async {
+          if (status == ReminderStatus.pending) pendingCalls += 1;
+          return ReminderPage(
+            reminders: status == ReminderStatus.pending && pendingCalls == 1
+                ? [reminder('one', '刚刚过期', ReminderStatus.pending)]
+                : [],
+            nextPage: null,
+          );
+        },
+        cancelReminder: (_) async => throw ReminderApiException(
+          409,
+          jsonEncode({
+            'code': 'reminder_expired',
+            'detail': '提醒时间已过，不能取消',
+          }),
+        ),
+        scheduler: scheduler,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('cancel-one')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '确认取消'));
+    await tester.pumpAndSettle();
+
+    expect(pendingCalls, 2);
+    expect(scheduler.cancelled, isEmpty);
+    expect(find.text('刚刚过期'), findsNothing);
+    expect(find.text('提醒时间已过，不能取消'), findsOneWidget);
+    expect(find.text('取消失败，请检查网络后重试'), findsNothing);
   });
 }

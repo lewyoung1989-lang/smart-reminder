@@ -30,10 +30,36 @@ http.Response jsonResponse(int status, Object body) => http.Response(
     );
 
 void main() {
+  Map<String, dynamic> reminderJson({
+    String severity = 'notification',
+    String status = 'pending',
+  }) =>
+      {
+        'id': 'reminder-1',
+        'title': '喝水',
+        'timezone': 'Asia/Shanghai',
+        'scheduled_at': '2026-08-05T12:30:00+08:00',
+        'severity': severity,
+        'status': status,
+        'cancelled_at': null,
+      };
+
+  test('rejects unknown reminder severity and status values', () {
+    expect(
+      () => Reminder.fromJson(reminderJson(severity: 'email')),
+      throwsFormatException,
+    );
+    expect(
+      () => Reminder.fromJson(reminderJson(status: 'snoozed')),
+      throwsFormatException,
+    );
+  });
+
   test('lists a status page and parses reminder lifecycle fields', () async {
     final client = RecordingClient([
       jsonResponse(200, {
-        'next': 'https://api.invalid/api/v1/reminders?cursor=next&status=pending',
+        'next':
+            'https://api.invalid/api/v1/reminders?cursor=next&status=pending',
         'previous': null,
         'results': [
           {
@@ -120,20 +146,18 @@ void main() {
     final cancelled = await api.cancel('reminder-1');
 
     expect(client.requests.first.method, 'POST');
-    expect(client.requests.first.url.path, '/api/v1/reminders/reminder-1/cancel');
+    expect(
+        client.requests.first.url.path, '/api/v1/reminders/reminder-1/cancel');
     expect(cancelled.status, ReminderStatus.cancelled);
     expect(cancelled.cancelledAt, isNotNull);
 
-    await expectLater(
-      api.cancel('reminder-2'),
-      throwsA(
-        isA<ReminderApiException>().having(
-          (error) => error.statusCode,
-          'statusCode',
-          409,
-        ),
-      ),
-    );
+    try {
+      await api.cancel('reminder-2');
+      fail('expected reminder conflict');
+    } on ReminderApiException catch (error) {
+      expect(error.statusCode, 409);
+      expect(error.code, 'reminder_expired');
+    }
     expect(client.requests, hasLength(2));
   });
 }

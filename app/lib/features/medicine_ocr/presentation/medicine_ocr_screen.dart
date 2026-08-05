@@ -64,7 +64,13 @@ class _MedicineOcrScreenState extends State<MedicineOcrScreen> {
   Future<void> _capture(String kind) async {
     try {
       final bytes = await widget.capture(kind);
-      if (!mounted || bytes == null) {
+      if (!mounted) {
+        return;
+      }
+      if (bytes == null) {
+        if (_error != null) {
+          setState(() => _error = null);
+        }
         return;
       }
       setState(() {

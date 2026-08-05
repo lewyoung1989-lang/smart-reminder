@@ -75,6 +75,15 @@ class ReminderApiException implements Exception {
   final int statusCode;
   final String body;
 
+  String? get code {
+    try {
+      final payload = jsonDecode(body) as Map<String, dynamic>;
+      return payload['code'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
+
   @override
   String toString() => 'ReminderApiException($statusCode)';
 }

@@ -207,7 +207,6 @@ class ReminderCancelView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, reminder_id):
-        now = timezone.now()
         with transaction.atomic():
             try:
                 rule = ReminderRule.objects.select_for_update().get(
@@ -220,6 +219,7 @@ class ReminderCancelView(APIView):
                     status=status.HTTP_404_NOT_FOUND,
                 )
 
+            now = timezone.now()
             if not rule.enabled and rule.cancelled_at is not None:
                 serializer = ReminderRuleSerializer(rule, context={"now": now})
                 return Response(serializer.data, status=status.HTTP_200_OK)

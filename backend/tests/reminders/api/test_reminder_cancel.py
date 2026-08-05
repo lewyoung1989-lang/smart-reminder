@@ -96,3 +96,41 @@ def test_cancel_returns_404_for_missing_or_other_owner(
 
     assert other_response.status_code == 404
     assert missing_response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_cancel_evaluates_expiry_after_locking_the_reminder(
+    api_client,
+    user,
+    mocker,
+):
+    rule = create_rule(
+        owner=user,
+        title="lock before clock",
+        scheduled_at=NOW + timedelta(minutes=5),
+    )
+    events = []
+    queryset = ReminderRule.objects.select_for_update()
+    real_get = queryset.get
+
+    def locked_get(*args, **kwargs):
+        events.append("locked")
+        return real_get(*args, **kwargs)
+
+    def current_time():
+        events.append("now")
+        return NOW
+
+    mocker.patch.object(queryset, "get", side_effect=locked_get)
+    mocker.patch.object(
+        ReminderRule.objects,
+        "select_for_update",
+        return_value=queryset,
+    )
+    mocker.patch("apps.reminders.api.views.timezone.now", side_effect=current_time)
+    api_client.force_authenticate(user)
+
+    response = api_client.post(f"/api/v1/reminders/{rule.id}/cancel")
+
+    assert response.status_code == 200
+    assert events == ["locked", "now"]

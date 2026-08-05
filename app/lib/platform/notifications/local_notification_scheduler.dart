@@ -5,7 +5,6 @@ import 'package:timezone/timezone.dart' as tz;
 import '../../features/reminder_drafts/domain/reminder_draft.dart';
 import 'reminder_notification_scheduler.dart';
 
-
 abstract interface class LocalNotificationGateway {
   Future<bool> requestPermissions();
 
@@ -17,7 +16,6 @@ abstract interface class LocalNotificationGateway {
 
   Future<void> cancel({required int id});
 }
-
 
 class LocalNotificationScheduler implements ReminderNotificationScheduler {
   LocalNotificationScheduler({
@@ -56,7 +54,13 @@ class LocalNotificationScheduler implements ReminderNotificationScheduler {
       scheduledAt.second,
     );
 
-    if (!await gateway.requestPermissions()) {
+    late final bool permissionGranted;
+    try {
+      permissionGranted = await gateway.requestPermissions();
+    } catch (_) {
+      throw const NotificationSchedulingFailed();
+    }
+    if (!permissionGranted) {
       throw const NotificationPermissionDenied();
     }
     try {
@@ -88,7 +92,6 @@ class LocalNotificationScheduler implements ReminderNotificationScheduler {
   }
 }
 
-
 class FlutterLocalNotificationGateway implements LocalNotificationGateway {
   FlutterLocalNotificationGateway({FlutterLocalNotificationsPlugin? plugin})
       : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
@@ -109,7 +112,8 @@ class FlutterLocalNotificationGateway implements LocalNotificationGateway {
   @override
   Future<bool> requestPermissions() async {
     return await _plugin
-            .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
+            .resolvePlatformSpecificImplementation<
+                IOSFlutterLocalNotificationsPlugin>()
             ?.requestPermissions(alert: true, badge: true, sound: true) ??
         false;
   }

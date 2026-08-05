@@ -25,15 +25,21 @@ class Reminder {
         id: json['id'] as String,
         title: json['title'] as String,
         timezone: json['timezone'] as String,
-        scheduledAt:
-            DateTime.parse(json['scheduled_at'] as String).toLocal(),
-        severity: json['severity'] == 'alarm'
-            ? ReminderSeverity.alarm
-            : ReminderSeverity.notification,
+        scheduledAt: DateTime.parse(json['scheduled_at'] as String).toLocal(),
+        severity: switch (json['severity']) {
+          'alarm' => ReminderSeverity.alarm,
+          'notification' => ReminderSeverity.notification,
+          final value => throw FormatException(
+              'Unsupported reminder severity: $value',
+            ),
+        },
         status: switch (json['status']) {
+          'pending' => ReminderStatus.pending,
           'expired' => ReminderStatus.expired,
           'cancelled' => ReminderStatus.cancelled,
-          _ => ReminderStatus.pending,
+          final value => throw FormatException(
+              'Unsupported reminder status: $value',
+            ),
         },
         cancelledAt: json['cancelled_at'] == null
             ? null
