@@ -1,0 +1,12 @@
+/opt/smart-reminder/logs/*/*.log {
+    daily
+    rotate 7
+    maxage 7
+    missingok
+    notifempty
+    compress
+    delaycompress
+    dateext
+    su ubuntu ubuntu
+    create 0640 ubuntu ubuntu
+}

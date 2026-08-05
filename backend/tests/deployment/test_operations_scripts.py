@@ -1,3 +1,4 @@
+import os
 import subprocess
 from pathlib import Path
 
@@ -7,7 +8,13 @@ SCRIPTS = REPO_ROOT / "deploy/tencent/scripts"
 
 
 def test_release_scripts_are_valid_bash():
-    for name in ("bootstrap_tls.sh", "configure_secrets.sh", "deploy.sh"):
+    for name in (
+        "bootstrap_tls.sh",
+        "configure_secrets.sh",
+        "deploy.sh",
+        "install_logging.sh",
+        "logs.sh",
+    ):
         result = subprocess.run(
             ["bash", "-n", str(SCRIPTS / name)],
             capture_output=True,
@@ -15,6 +22,85 @@ def test_release_scripts_are_valid_bash():
             check=False,
         )
         assert result.returncode == 0, result.stderr
+
+
+def test_journald_and_logrotate_keep_logs_for_seven_days():
+    journald = (
+        REPO_ROOT / "deploy/tencent/logging/50-smart-reminder.conf"
+    ).read_text()
+    assert "Storage=persistent" in journald
+    assert "Compress=yes" in journald
+    assert "MaxRetentionSec=7day" in journald
+    assert "SystemMaxUse=1G" in journald
+
+    rotate = (
+        REPO_ROOT / "deploy/tencent/logging/smart-reminder.logrotate"
+    ).read_text()
+    assert "/opt/smart-reminder/logs/*/*.log" in rotate
+    assert "daily" in rotate
+    assert "rotate 7" in rotate
+    assert "maxage 7" in rotate
+    assert "create 0640 ubuntu ubuntu" in rotate
+
+
+def test_logging_installer_uses_expected_paths_and_permissions():
+    script = (SCRIPTS / "install_logging.sh").read_text()
+    for path in ("logs/deploy", "logs/backup", "logs/cert"):
+        assert path in script
+    assert "0750" in script
+    assert "ubuntu" in script
+    assert "systemd-journald" in script
+    assert "50-smart-reminder.conf" in script
+    assert "smart-reminder.logrotate" in script
+
+
+def test_log_query_rejects_unknown_service_and_uses_stable_tag(tmp_path):
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    capture = tmp_path / "journalctl.args"
+    journalctl = fake_bin / "journalctl"
+    journalctl.write_text(
+        "#!/usr/bin/env bash\nprintf '%s\\n' \"$@\" >\"$CAPTURE_FILE\"\n"
+    )
+    journalctl.chmod(0o755)
+    env = os.environ.copy()
+    env.update(PATH=f"{fake_bin}:{env['PATH']}", CAPTURE_FILE=str(capture))
+
+    rejected = subprocess.run(
+        ["bash", str(SCRIPTS / "logs.sh"), "unknown"],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    assert rejected.returncode != 0
+    assert not capture.exists()
+
+    accepted = subprocess.run(
+        [
+            "bash",
+            str(SCRIPTS / "logs.sh"),
+            "api",
+            "--since",
+            "2 hours ago",
+            "--level",
+            "error",
+            "--follow",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    assert accepted.returncode == 0, accepted.stderr
+    arguments = capture.read_text().splitlines()
+    assert "CONTAINER_TAG=smart-reminder/api" in arguments
+    assert "--since" in arguments
+    assert "2 hours ago" in arguments
+    assert "--priority" in arguments
+    assert "error" in arguments
+    assert "--follow" in arguments
+    assert "--output=short-iso-precise" in arguments
 
 
 def test_secret_configurator_does_not_echo_or_source_production_values():
