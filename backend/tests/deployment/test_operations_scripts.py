@@ -116,17 +116,19 @@ def test_log_query_rejects_unknown_service_and_uses_stable_tag(tmp_path):
     assert "--output=short-iso-precise" in arguments
 
 
-def test_logging_verifier_rejects_later_journald_override(tmp_path):
+def test_logging_verifier_rejects_same_file_and_later_journald_overrides(tmp_path):
     assert "export LC_ALL=C" in (SCRIPTS / "verify_logging.sh").read_text()
 
     system_root = tmp_path / "system"
     journal_dropins = system_root / "etc/systemd/journald.conf.d"
     journal_dropins.mkdir(parents=True)
     (system_root / "var/log/journal").mkdir(parents=True)
-    (journal_dropins / "50-smart-reminder.conf").write_text(
+    managed_config = journal_dropins / "50-smart-reminder.conf"
+    valid_config = (
         "[Journal]\nStorage=persistent\nCompress=yes\n"
         "MaxRetentionSec=7day\nSystemMaxUse=1G\n"
     )
+    managed_config.write_text(valid_config)
     log_root = tmp_path / "logs"
     for category in ("deploy", "backup", "cert"):
         (log_root / category).mkdir(parents=True)
@@ -158,8 +160,33 @@ def test_logging_verifier_rejects_later_journald_override(tmp_path):
     )
     assert accepted.returncode == 0, accepted.stderr
 
+    managed_config.write_text(valid_config + "SystemMaxUse=10G\n")
+    same_file_rejected = subprocess.run(
+        ["bash", str(SCRIPTS / "verify_logging.sh")],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    assert same_file_rejected.returncode != 0
+    assert "50-smart-reminder.conf" in same_file_rejected.stderr
+
+    managed_config.write_text(
+        valid_config + "SystemMaxUse \\\n = 10G\n"
+    )
+    continued_same_file_rejected = subprocess.run(
+        ["bash", str(SCRIPTS / "verify_logging.sh")],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    assert continued_same_file_rejected.returncode != 0
+    assert "50-smart-reminder.conf" in continued_same_file_rejected.stderr
+
+    managed_config.write_text(valid_config)
     (journal_dropins / "60-override.conf").write_text(
-        "[Journal]\nSystemMaxUse=10G\n"
+        "[Journal]\nSystemMaxUse = 10G\n"
     )
     rejected = subprocess.run(
         ["bash", str(SCRIPTS / "verify_logging.sh")],
@@ -170,6 +197,19 @@ def test_logging_verifier_rejects_later_journald_override(tmp_path):
     )
     assert rejected.returncode != 0
     assert "60-override.conf" in rejected.stderr
+
+    (journal_dropins / "60-override.conf").write_text(
+        "\ufeff[Journal]\nSystemMaxUse=10G\n"
+    )
+    bom_rejected = subprocess.run(
+        ["bash", str(SCRIPTS / "verify_logging.sh")],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    assert bom_rejected.returncode != 0
+    assert "60-override.conf" in bom_rejected.stderr
 
 
 def test_operation_logger_creates_private_daily_log_and_rejects_bad_directory(
