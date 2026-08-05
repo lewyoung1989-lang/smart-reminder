@@ -119,4 +119,43 @@ void main() {
       ),
     );
   });
+
+  test('deletes one inventory batch with authorization', () async {
+    final client = RecordingClient([http.Response('', 204)]);
+    final api = MedicineCabinetApi(
+      baseUrl: 'https://api.invalid',
+      accessToken: 'token',
+      client: client,
+    );
+
+    await api.deleteBatch('batch id/1');
+
+    expect(client.requests.single.method, 'DELETE');
+    expect(
+      client.requests.single.url.toString(),
+      'https://api.invalid/api/v1/inventory-batches/batch%20id%2F1',
+    );
+    expect(client.requests.single.headers['Authorization'], 'Bearer token');
+  });
+
+  test('throws a stable exception when batch deletion fails', () async {
+    final api = MedicineCabinetApi(
+      baseUrl: 'https://api.invalid',
+      accessToken: 'token',
+      client: RecordingClient([
+        jsonResponse(500, {'detail': 'failed'})
+      ]),
+    );
+
+    await expectLater(
+      api.deleteBatch('batch-1'),
+      throwsA(
+        isA<MedicineCabinetApiException>().having(
+          (error) => error.statusCode,
+          'statusCode',
+          500,
+        ),
+      ),
+    );
+  });
 }

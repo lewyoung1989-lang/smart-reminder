@@ -53,6 +53,17 @@ class MedicineCabinetApi {
     );
   }
 
+  Future<void> deleteBatch(String batchId) async {
+    final encodedBatchId = Uri.encodeComponent(batchId);
+    final uri = Uri.parse(
+      '${_baseUri.origin}/api/v1/inventory-batches/$encodedBatchId',
+    );
+    final response = await _client.delete(uri, headers: _headers);
+    if (response.statusCode != 204) {
+      throw MedicineCabinetApiException(response.statusCode, response.body);
+    }
+  }
+
   Map<String, String> get _headers => {
         'Authorization': 'Bearer $accessToken',
         'Accept': 'application/json',
