@@ -5,21 +5,29 @@ import 'package:smart_reminder_app/features/medicine_ocr/domain/ocr_job.dart';
 import 'package:smart_reminder_app/features/medicine_ocr/presentation/medicine_ocr_screen.dart';
 
 void main() {
-  testWidgets('switches between reminders and medicine entry', (tester) async {
+  testWidgets('switches among reminders, cabinet, and medicine entry',
+      (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: AppShell(
           reminders: Text('提醒页面'),
-          medicineOcr: Text('药箱页面'),
+          medicineCabinet: Text('药箱页面'),
+          medicineOcr: Text('拍照页面'),
         ),
       ),
     );
 
     expect(find.text('提醒页面'), findsOneWidget);
-    await tester.tap(find.text('药箱录入'));
-    await tester.pump();
+    expect(find.text('药箱'), findsOneWidget);
+    expect(find.text('拍照录入'), findsOneWidget);
 
+    await tester.tap(find.text('药箱'));
+    await tester.pump();
     expect(find.text('药箱页面'), findsOneWidget);
+
+    await tester.tap(find.text('拍照录入'));
+    await tester.pump();
+    expect(find.text('拍照页面'), findsOneWidget);
   });
 
   testWidgets(

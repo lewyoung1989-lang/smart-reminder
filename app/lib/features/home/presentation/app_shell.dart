@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 class AppShell extends StatefulWidget {
   const AppShell({
     required this.reminders,
+    required this.medicineCabinet,
     required this.medicineOcr,
     super.key,
   });
 
   final Widget reminders;
+  final Widget medicineCabinet;
   final Widget medicineOcr;
 
   @override
@@ -21,7 +23,11 @@ class _AppShellState extends State<AppShell> {
   Widget build(BuildContext context) => Scaffold(
         body: IndexedStack(
           index: _index,
-          children: [widget.reminders, widget.medicineOcr],
+          children: [
+            widget.reminders,
+            widget.medicineCabinet,
+            widget.medicineOcr,
+          ],
         ),
         bottomNavigationBar: NavigationBar(
           selectedIndex: _index,
@@ -35,7 +41,12 @@ class _AppShellState extends State<AppShell> {
             NavigationDestination(
               icon: Icon(Icons.medication_outlined),
               selectedIcon: Icon(Icons.medication),
-              label: '药箱录入',
+              label: '药箱',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.document_scanner_outlined),
+              selectedIcon: Icon(Icons.document_scanner),
+              label: '拍照录入',
             ),
           ],
         ),

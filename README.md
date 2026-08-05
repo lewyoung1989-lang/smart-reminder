@@ -11,6 +11,8 @@
 
 药盒 OCR 当前使用自建 RapidOCR，候选结果必须人工核对后才会写入药箱。AlarmKit 强闹钟、语音识别和天气预检查仍在后续阶段。
 
+App 底部当前分为“提醒”“药箱”“拍照录入”三个入口。“药箱”可按药品名、规格或批号搜索，展示每批库存的有效期状态；“拍照录入”保持独立，识别并确认后再将药品加入药箱。
+
 ## 本地后端
 
 ```bash
@@ -79,6 +81,7 @@ cd app
 | POST | `/api/v1/reminder-drafts/{id}/confirm` | 人工确认并创建正式提醒 |
 | POST | `/api/v1/voice/reminder-drafts` | 兼容上一阶段的转写草稿路径 |
 | POST | `/api/v1/voice/reminder-drafts/{id}/confirm` | 兼容上一阶段的确认路径 |
+| GET | `/api/v1/inventory-batches` | 分页查询当前用户的药品库存，可用 `q` 搜索 |
 | POST | `/api/v1/ocr/uploads` | 获取私有药盒图片的限时上传地址 |
 | POST | `/api/v1/ocr/jobs` | 创建药盒 OCR 任务 |
 | GET | `/api/v1/ocr/jobs/{id}` | 查询任务状态与结构化候选值 |

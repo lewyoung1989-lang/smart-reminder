@@ -3,6 +3,8 @@ import 'package:image_picker/image_picker.dart';
 
 import 'config/app_config.dart';
 import 'features/home/presentation/app_shell.dart';
+import 'features/medicine_cabinet/data/medicine_cabinet_api.dart';
+import 'features/medicine_cabinet/presentation/medicine_cabinet_screen.dart';
 import 'features/medicine_ocr/data/medicine_ocr_api.dart';
 import 'features/medicine_ocr/presentation/medicine_ocr_screen.dart';
 import 'features/reminder_drafts/data/reminder_draft_api.dart';
@@ -40,12 +42,17 @@ class SmartReminderApp extends StatefulWidget {
 
 class _SmartReminderAppState extends State<SmartReminderApp> {
   late final ReminderDraftApi _reminderApi;
+  late final MedicineCabinetApi _medicineCabinetApi;
   late final MedicineOcrApi _medicineOcrApi;
 
   @override
   void initState() {
     super.initState();
     _reminderApi = ReminderDraftApi(
+      baseUrl: widget.config.apiBaseUrl,
+      accessToken: widget.config.apiAccessToken,
+    );
+    _medicineCabinetApi = MedicineCabinetApi(
       baseUrl: widget.config.apiBaseUrl,
       accessToken: widget.config.apiAccessToken,
     );
@@ -58,6 +65,7 @@ class _SmartReminderAppState extends State<SmartReminderApp> {
   @override
   void dispose() {
     _reminderApi.close();
+    _medicineCabinetApi.close();
     _medicineOcrApi.close();
     super.dispose();
   }
@@ -94,6 +102,9 @@ class _SmartReminderAppState extends State<SmartReminderApp> {
           createDraft: _reminderApi.createDraft,
           confirmDraft: _reminderApi.confirmDraft,
           notificationScheduler: widget.notificationScheduler,
+        ),
+        medicineCabinet: MedicineCabinetScreen(
+          listBatches: _medicineCabinetApi.listBatches,
         ),
         medicineOcr: MedicineOcrScreen(
           capture: _captureMedicineImage,
