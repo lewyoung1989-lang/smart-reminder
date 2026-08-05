@@ -4,6 +4,7 @@ import httpx
 import pytest
 
 from apps.voice.domain.results import (
+    AsrBusyError,
     AsrResponseError,
     AsrTimeoutError,
     AsrUnavailableError,
@@ -158,6 +159,23 @@ def test_http_transport_rejects_non_json_response():
     transport = HttpxAudioTransport(client=client)
 
     with pytest.raises(AsrResponseError):
+        transport.post_audio(
+            "http://funasr:8000/v1/audio/transcriptions",
+            audio=io.BytesIO(b"wav"),
+            model="paraformer-zh",
+            timeout_seconds=20,
+        )
+
+
+def test_http_transport_preserves_upstream_busy_signal():
+    client = httpx.Client(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(429, json={"detail": {"code": "asr_busy"}})
+        )
+    )
+    transport = HttpxAudioTransport(client=client)
+
+    with pytest.raises(AsrBusyError):
         transport.post_audio(
             "http://funasr:8000/v1/audio/transcriptions",
             audio=io.BytesIO(b"wav"),

@@ -1,11 +1,7 @@
 from dataclasses import dataclass
 
 from apps.voice.domain.audio import WavMetadata, validate_wav
-from apps.voice.domain.results import AsrResult
-
-
-class AsrBusyError(Exception):
-    pass
+from apps.voice.domain.results import AsrBusyError, AsrResult
 
 
 @dataclass(frozen=True)

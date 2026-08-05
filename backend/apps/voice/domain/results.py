@@ -12,6 +12,10 @@ class AsrError(Exception):
     pass
 
 
+class AsrBusyError(AsrError):
+    pass
+
+
 class AsrResponseError(AsrError):
     pass
 

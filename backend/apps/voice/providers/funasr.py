@@ -4,6 +4,7 @@ from time import monotonic
 import httpx
 
 from apps.voice.domain.results import (
+    AsrBusyError,
     AsrResponseError,
     AsrResult,
     AsrTimeoutError,
@@ -32,6 +33,8 @@ class HttpxAudioTransport:
                 data={"model": model, "response_format": "json"},
                 timeout=timeout_seconds,
             )
+            if response.status_code == 429:
+                raise AsrBusyError
             response.raise_for_status()
             payload = response.json()
         except httpx.TimeoutException as exc:
