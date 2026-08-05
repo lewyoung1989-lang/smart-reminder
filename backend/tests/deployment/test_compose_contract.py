@@ -57,14 +57,27 @@ def test_internal_services_publish_no_host_ports():
     assert services["nginx"]["ports"] == ["80:80", "443:443"]
 
 
-def test_production_services_restart_and_rotate_logs():
+def test_production_services_use_journald_with_stable_tags():
     services = load_production_compose()["services"]
+    for name, service in services.items():
+        assert service["logging"] == {
+            "driver": "journald",
+            "options": {"tag": f"smart-reminder/{name}"},
+        }
+
     for name in ("postgres", "redis", "api", "worker", "beat", "nginx"):
         assert services[name]["restart"] == "unless-stopped"
-        assert services[name]["logging"]["options"] == {
-            "max-size": "10m",
-            "max-file": "5",
-        }
+
+
+def test_gunicorn_access_log_excludes_query_strings_and_headers():
+    command = load_production_compose()["services"]["api"]["command"]
+
+    assert "--access-logfile -" in command
+    assert "--error-logfile -" in command
+    assert "%(U)s" in command
+    assert "%(q)s" not in command
+    assert "%(r)s" not in command
+    assert "x-request-id" in command.lower()
 
 
 def test_minio_is_private_initialized_and_not_profile_gated():

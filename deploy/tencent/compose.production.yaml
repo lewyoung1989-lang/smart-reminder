@@ -1,8 +1,5 @@
 x-logging: &production_logging
-  driver: json-file
-  options:
-    max-size: 10m
-    max-file: "5"
+  driver: journald
 
 x-backend-environment: &production_backend_environment
   DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?DJANGO_SECRET_KEY is required}
@@ -24,6 +21,7 @@ x-backend-environment: &production_backend_environment
   DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
   DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-flash}
   DEEPSEEK_TIMEOUT_SECONDS: ${DEEPSEEK_TIMEOUT_SECONDS:-8}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
 
 x-ocr-environment: &production_ocr_environment
   <<: *production_backend_environment
@@ -43,12 +41,18 @@ services:
   postgres:
     ports: !reset []
     restart: unless-stopped
-    logging: *production_logging
+    logging:
+      <<: *production_logging
+      options:
+        tag: smart-reminder/postgres
 
   redis:
     ports: !reset []
     restart: unless-stopped
-    logging: *production_logging
+    logging:
+      <<: *production_logging
+      options:
+        tag: smart-reminder/redis
 
   minio:
     ports: !reset []
@@ -62,7 +66,10 @@ services:
       timeout: 3s
       retries: 20
     restart: unless-stopped
-    logging: *production_logging
+    logging:
+      <<: *production_logging
+      options:
+        tag: smart-reminder/minio
 
   minio-init:
     image: minio/mc:RELEASE.2025-04-16T18-13-26Z
@@ -81,15 +88,25 @@ services:
       minio:
         condition: service_healthy
     restart: "no"
-    logging: *production_logging
+    logging:
+      <<: *production_logging
+      options:
+        tag: smart-reminder/minio-init
 
   api:
     image: smart-reminder-api:${APP_VERSION:?APP_VERSION is required}
     ports: !reset []
     environment: *production_ocr_environment
-    command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 30
+    command: >-
+      gunicorn config.wsgi:application --bind 0.0.0.0:8000
+      --workers 2 --timeout 30 --access-logfile - --error-logfile -
+      --access-logformat
+      'request_id=%({x-request-id}i)s method=%(m)s path=%(U)s status=%(s)s bytes=%(b)s duration_us=%(D)s'
     restart: unless-stopped
-    logging: *production_logging
+    logging:
+      <<: *production_logging
+      options:
+        tag: smart-reminder/api
     healthcheck:
       test:
         - CMD
@@ -109,7 +126,10 @@ services:
     environment: *production_backend_environment
     command: celery -A config worker -Q celery --loglevel=INFO
     restart: unless-stopped
-    logging: *production_logging
+    logging:
+      <<: *production_logging
+      options:
+        tag: smart-reminder/worker
 
   ocr-worker:
     image: smart-reminder-ocr:${APP_VERSION:?APP_VERSION is required}
@@ -123,13 +143,19 @@ services:
       minio-init:
         condition: service_completed_successfully
     restart: unless-stopped
-    logging: *production_logging
+    logging:
+      <<: *production_logging
+      options:
+        tag: smart-reminder/ocr-worker
 
   beat:
     image: smart-reminder-api:${APP_VERSION:?APP_VERSION is required}
     environment: *production_backend_environment
     restart: unless-stopped
-    logging: *production_logging
+    logging:
+      <<: *production_logging
+      options:
+        tag: smart-reminder/beat
 
   nginx-bootstrap:
     image: nginx:1.27-alpine
@@ -140,7 +166,10 @@ services:
       - ./deploy/tencent/nginx/bootstrap.conf:/etc/nginx/conf.d/default.conf:ro
       - certbot_www:/var/www/certbot:ro
     restart: unless-stopped
-    logging: *production_logging
+    logging:
+      <<: *production_logging
+      options:
+        tag: smart-reminder/nginx-bootstrap
 
   nginx:
     image: nginx:1.27-alpine
@@ -156,7 +185,10 @@ services:
       api:
         condition: service_healthy
     restart: unless-stopped
-    logging: *production_logging
+    logging:
+      <<: *production_logging
+      options:
+        tag: smart-reminder/nginx
 
   certbot:
     image: certbot/certbot:v4.1.1
@@ -164,6 +196,10 @@ services:
     volumes:
       - certbot_www:/var/www/certbot
       - certbot_etc:/etc/letsencrypt
+    logging:
+      <<: *production_logging
+      options:
+        tag: smart-reminder/certbot
 
 volumes:
   certbot_www:
