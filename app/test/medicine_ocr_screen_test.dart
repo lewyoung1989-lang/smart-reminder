@@ -5,6 +5,18 @@ import 'package:smart_reminder_app/features/medicine_ocr/domain/ocr_job.dart';
 import 'package:smart_reminder_app/features/medicine_ocr/presentation/medicine_ocr_screen.dart';
 
 void main() {
+  Widget buildCaptureScreen({
+    required Future<List<int>?> Function(String kind) capture,
+  }) => MaterialApp(
+        home: MedicineOcrScreen(
+          capture: capture,
+          createJob: ({required frontBytes, expiryBytes}) async =>
+              const OcrJob(id: 'job-1', status: 'queued'),
+          getJob: (_) async => const OcrJob(id: 'job-1', status: 'queued'),
+          confirmJob: (_, __) async {},
+        ),
+      );
+
   testWidgets('switches among reminders, cabinet, and medicine entry',
       (tester) async {
     await tester.pumpWidget(
@@ -86,4 +98,31 @@ void main() {
       expect(confirmed?['expiry_date'], '2028-05-31');
     },
   );
+
+  testWidgets('camera failure stays on capture screen with guidance',
+      (tester) async {
+    await tester.pumpWidget(
+      buildCaptureScreen(
+        capture: (_) async => throw Exception('camera denied'),
+      ),
+    );
+
+    await tester.tap(find.text('拍摄药盒正面'));
+    await tester.pump();
+
+    expect(find.text('无法打开相机，请检查相机权限后重试'), findsOneWidget);
+    expect(find.text('拍摄药盒正面'), findsOneWidget);
+  });
+
+  testWidgets('cancelling camera does not show an error', (tester) async {
+    await tester.pumpWidget(
+      buildCaptureScreen(capture: (_) async => null),
+    );
+
+    await tester.tap(find.text('拍摄药盒正面'));
+    await tester.pump();
+
+    expect(find.text('无法打开相机，请检查相机权限后重试'), findsNothing);
+    expect(find.text('拍摄药盒正面'), findsOneWidget);
+  });
 }

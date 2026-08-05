@@ -62,19 +62,28 @@ class _MedicineOcrScreenState extends State<MedicineOcrScreen> {
   }
 
   Future<void> _capture(String kind) async {
-    final bytes = await widget.capture(kind);
-    if (!mounted || bytes == null) {
-      return;
+    try {
+      final bytes = await widget.capture(kind);
+      if (!mounted || bytes == null) {
+        return;
+      }
+      setState(() {
+        if (kind == 'front') {
+          _frontBytes = bytes;
+        }
+        if (kind == 'expiry') {
+          _expiryBytes = bytes;
+        }
+        _error = null;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _error = '无法打开相机，请检查相机权限后重试';
+      });
     }
-    setState(() {
-      if (kind == 'front') {
-        _frontBytes = bytes;
-      }
-      if (kind == 'expiry') {
-        _expiryBytes = bytes;
-      }
-      _error = null;
-    });
   }
 
   Future<void> _start() async {

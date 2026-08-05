@@ -1,4 +1,5 @@
 import os
+import plistlib
 import shutil
 import subprocess
 from pathlib import Path
@@ -6,6 +7,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 WRAPPER = REPO_ROOT / "scripts/flutterw"
+IOS_INFO_PLIST = REPO_ROOT / "app/ios/Runner/Info.plist"
 
 
 def run(*args, cwd):
@@ -47,3 +49,9 @@ def test_flutter_wrapper_reuses_sdk_from_main_worktree(tmp_path):
 
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "flutter:doctor"
+
+
+def test_ios_declares_camera_usage_description():
+    plist = plistlib.loads(IOS_INFO_PLIST.read_bytes())
+
+    assert plist["NSCameraUsageDescription"].strip()
