@@ -98,6 +98,11 @@ ASR_USER_RATE = os.environ.get("ASR_USER_RATE", "10/min")
 ASR_IP_RATE = os.environ.get("ASR_IP_RATE", "30/min")
 ASR_REDIS_URL = os.environ.get("ASR_REDIS_URL", CELERY_BROKER_URL)
 ASR_THROTTLE_REDIS_URL = os.environ.get("ASR_THROTTLE_REDIS_URL", "")
+ASR_TRUSTED_PROXY_IPS = [
+    address.strip()
+    for address in os.environ.get("ASR_TRUSTED_PROXY_IPS", "").split(",")
+    if address.strip()
+]
 
 if ASR_THROTTLE_REDIS_URL:
     CACHES = {

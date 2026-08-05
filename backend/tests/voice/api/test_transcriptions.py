@@ -316,6 +316,37 @@ def test_ip_rate_uses_remote_addr_not_spoofed_forwarding_header(user, monkeypatc
     assert second.status_code == 429
 
 
+def test_trusted_proxy_uses_sanitized_client_ip(user, monkeypatch, settings):
+    settings.ASR_TRUSTED_PROXY_IPS = ["10.0.0.10"]
+    install_service(monkeypatch, FakeTranscriptionService())
+    monkeypatch.setattr(
+        "apps.voice.api.throttles.VoiceTranscriptionUserThrottle.get_rate",
+        lambda self: "100/min",
+    )
+    monkeypatch.setattr(
+        "apps.voice.api.throttles.VoiceTranscriptionIpThrottle.get_rate",
+        lambda self: "1/min",
+    )
+    client = APIClient(REMOTE_ADDR="10.0.0.10")
+    client.force_authenticate(user)
+
+    first = client.post(
+        URL,
+        {"audio": wav_upload()},
+        format="multipart",
+        HTTP_X_FORWARDED_FOR="198.51.100.1",
+    )
+    second = client.post(
+        URL,
+        {"audio": wav_upload()},
+        format="multipart",
+        HTTP_X_FORWARDED_FOR="198.51.100.2",
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+
+
 def test_maps_throttle_cache_failure_to_unavailable(api_client, user, monkeypatch):
     class FailingCache:
         def get(self, key, default=None):
