@@ -82,6 +82,12 @@ cd app
 
 请求需要 `Authorization: Bearer <token>`。文字和语音最终使用同一套结构化草稿、确认和幂等逻辑。
 
+## 设计文档
+
+- 总体设计：`docs/superpowers/specs/2026-08-03-smart-life-reminder-design.md`
+- FunASR 服务端语音识别：`docs/superpowers/specs/2026-08-05-funasr-server-asr-design.md`
+- V2 提升路线图：`docs/superpowers/specs/2026-08-05-smart-reminder-v2-enhancements.md`
+
 ## Docker Compose
 
 安装 Docker Desktop 后运行：
