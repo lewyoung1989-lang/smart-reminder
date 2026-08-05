@@ -58,6 +58,14 @@ def test_deploy_initializes_minio_and_smoke_checks_ocr_before_start():
     assert build < minio < initialize < migrate < smoke < start
 
 
+def test_deploy_validates_and_reloads_nginx_after_api_replacement():
+    script = (SCRIPTS / "deploy.sh").read_text()
+    start_nginx = script.index("--profile production up -d nginx")
+    validate_nginx = script.index("exec -T nginx nginx -t")
+    reload_nginx = script.index("exec -T nginx nginx -s reload")
+    assert start_nginx < validate_nginx < reload_nginx
+
+
 def test_tls_bootstrap_uses_webroot_and_never_starts_plain_http_api():
     script = (SCRIPTS / "bootstrap_tls.sh").read_text()
     assert "certonly" in script
