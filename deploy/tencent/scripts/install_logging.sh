@@ -11,6 +11,7 @@ INSTALL_ROOT=/opt/smart-reminder
 DEPLOY_USER=ubuntu
 JOURNAL_CONFIG="$ROOT_DIR/deploy/tencent/logging/50-smart-reminder.conf"
 LOGROTATE_CONFIG="$ROOT_DIR/deploy/tencent/logging/smart-reminder.logrotate"
+SYSTEMD_SOURCE="$ROOT_DIR/deploy/tencent/systemd"
 
 if [[ ! -d "$INSTALL_ROOT/app" ]]; then
   printf '项目目录不存在：%s\n' "$INSTALL_ROOT/app" >&2
@@ -32,6 +33,14 @@ install -m 0644 "$JOURNAL_CONFIG" \
 install -m 0644 "$LOGROTATE_CONFIG" \
   /etc/logrotate.d/smart-reminder
 
+for unit in \
+  smart-reminder-postgres-backup.service \
+  smart-reminder-postgres-backup.timer \
+  smart-reminder-cert-renew.service \
+  smart-reminder-cert-renew.timer; do
+  install -m 0644 "$SYSTEMD_SOURCE/$unit" "/etc/systemd/system/$unit"
+done
+
 install -d -m 2755 /var/log/journal
 systemd-tmpfiles --create --prefix /var/log/journal
 systemctl restart systemd-journald
@@ -50,6 +59,10 @@ for setting in \
 done
 
 logrotate --debug /etc/logrotate.d/smart-reminder >/dev/null
+systemctl daemon-reload
+systemctl enable --now \
+  smart-reminder-postgres-backup.timer \
+  smart-reminder-cert-renew.timer
 
 printf '%s\n' '日志系统安装完成：'
 printf '  运行日志：%s\n' /var/log/journal/

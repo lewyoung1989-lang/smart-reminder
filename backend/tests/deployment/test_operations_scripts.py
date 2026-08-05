@@ -5,6 +5,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPTS = REPO_ROOT / "deploy/tencent/scripts"
+SYSTEMD = REPO_ROOT / "deploy/tencent/systemd"
 
 
 def test_release_scripts_are_valid_bash():
@@ -14,6 +15,8 @@ def test_release_scripts_are_valid_bash():
         "deploy.sh",
         "install_logging.sh",
         "logs.sh",
+        "operation_logging.sh",
+        "renew_certificate.sh",
     ):
         result = subprocess.run(
             ["bash", "-n", str(SCRIPTS / name)],
@@ -101,6 +104,88 @@ def test_log_query_rejects_unknown_service_and_uses_stable_tag(tmp_path):
     assert "error" in arguments
     assert "--follow" in arguments
     assert "--output=short-iso-precise" in arguments
+
+
+def test_operation_logger_creates_private_daily_log_and_rejects_bad_directory(
+    tmp_path,
+):
+    log_root = tmp_path / "logs"
+    (log_root / "backup").mkdir(parents=True)
+    env = os.environ.copy()
+    env["SMART_REMINDER_LOG_ROOT"] = str(log_root)
+    command = (
+        'set -Eeuo pipefail; source "$1"; start_operation_log backup; '
+        "printf '%s\\n' operation-test"
+    )
+
+    accepted = subprocess.run(
+        ["bash", "-c", command, "operation-test", SCRIPTS / "operation_logging.sh"],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    assert accepted.returncode == 0, accepted.stderr
+    logs = list((log_root / "backup").glob("backup-*.log"))
+    assert len(logs) == 1
+    assert logs[0].stat().st_mode & 0o777 == 0o640
+    assert "operation-test" in logs[0].read_text()
+
+    env["SMART_REMINDER_LOG_ROOT"] = str(tmp_path / "missing")
+    rejected = subprocess.run(
+        ["bash", "-c", command, "operation-test", SCRIPTS / "operation_logging.sh"],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    assert rejected.returncode != 0
+
+
+def test_operational_scripts_use_their_stable_log_categories():
+    expected = {
+        "deploy.sh": "deploy",
+        "backup_postgres.sh": "backup",
+        "renew_certificate.sh": "cert",
+    }
+    for name, category in expected.items():
+        script = (SCRIPTS / name).read_text()
+        assert "operation_logging.sh" in script
+        assert f"start_operation_log {category}" in script
+        assert "set -x" not in script
+
+    helper = (SCRIPTS / "operation_logging.sh").read_text()
+    assert "umask 027" in helper
+    assert "tee -a" in helper
+    assert "chmod 0640" in helper
+    assert "SMART_REMINDER_LOG_ROOT" in helper
+
+
+def test_systemd_units_call_repo_scripts_without_reading_secret_values():
+    backup_service = (
+        SYSTEMD / "smart-reminder-postgres-backup.service"
+    ).read_text()
+    backup_timer = (SYSTEMD / "smart-reminder-postgres-backup.timer").read_text()
+    cert_service = (SYSTEMD / "smart-reminder-cert-renew.service").read_text()
+    cert_timer = (SYSTEMD / "smart-reminder-cert-renew.timer").read_text()
+
+    assert "User=ubuntu" in backup_service
+    assert "/opt/smart-reminder/app/deploy/tencent/scripts/backup_postgres.sh" in (
+        backup_service
+    )
+    assert "/opt/smart-reminder/app/deploy/tencent/scripts/renew_certificate.sh" in (
+        cert_service
+    )
+    assert "EnvironmentFile=" not in backup_service + cert_service
+    assert "OnCalendar=*-*-* 03:00:00" in backup_timer
+    assert "OnCalendar=monthly" in cert_timer
+    assert "Persistent=true" in backup_timer + cert_timer
+
+    installer = (SCRIPTS / "install_logging.sh").read_text()
+    assert "smart-reminder-postgres-backup.timer" in installer
+    assert "smart-reminder-cert-renew.timer" in installer
+    assert "systemctl daemon-reload" in installer
+    assert "systemctl enable --now" in installer
 
 
 def test_secret_configurator_does_not_echo_or_source_production_values():

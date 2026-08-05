@@ -5,6 +5,14 @@ ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 EXPECTED_SHA=${1:?usage: deploy.sh EXPECTED_SHA ENV_FILE}
 ENV_FILE=${2:?usage: deploy.sh EXPECTED_SHA ENV_FILE}
 
+source "$ROOT_DIR/deploy/tencent/scripts/operation_logging.sh"
+start_operation_log deploy
+
+if [[ ! -r /etc/systemd/journald.conf.d/50-smart-reminder.conf ]]; then
+  printf '%s\n' '生产日志尚未安装，请先运行 install_logging.sh' >&2
+  exit 1
+fi
+
 cd "$ROOT_DIR"
 python3 deploy/tencent/scripts/check_env.py "$ENV_FILE"
 
@@ -21,6 +29,8 @@ if [[ -n "$(git status --porcelain)" ]]; then
   echo "Working tree must be clean" >&2
   exit 1
 fi
+
+printf '准备部署提交：%s\n' "$ACTUAL_SHA"
 
 export APP_VERSION
 APP_VERSION=$(git rev-parse --short=12 HEAD)

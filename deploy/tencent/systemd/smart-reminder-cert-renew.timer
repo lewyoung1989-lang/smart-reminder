@@ -1,0 +1,11 @@
+[Unit]
+Description=每月执行智能提醒 TLS 证书续期
+
+[Timer]
+OnCalendar=monthly
+RandomizedDelaySec=6h
+Persistent=true
+Unit=smart-reminder-cert-renew.service
+
+[Install]
+WantedBy=timers.target
