@@ -1,7 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
 import 'config/app_config.dart';
+import 'core/network/authenticated_client.dart';
+import 'features/auth/application/auth_controller.dart';
+import 'features/auth/data/auth_api.dart';
+import 'features/auth/data/secure_token_store.dart';
+import 'features/auth/data/token_store.dart';
+import 'features/auth/presentation/auth_screen.dart';
+import 'features/auth/presentation/startup_screen.dart';
 import 'features/home/presentation/app_shell.dart';
 import 'features/medicine_cabinet/data/medicine_cabinet_api.dart';
 import 'features/medicine_cabinet/presentation/medicine_cabinet_screen.dart';
@@ -11,6 +19,7 @@ import 'features/reminder_drafts/data/reminder_draft_api.dart';
 import 'features/reminder_drafts/presentation/reminder_composer_screen.dart';
 import 'features/reminders/data/reminder_api.dart';
 import 'features/reminders/presentation/reminder_home_screen.dart';
+import 'features/profile/presentation/profile_screen.dart';
 import 'platform/notifications/local_notification_scheduler.dart';
 import 'platform/notifications/reminder_notification_scheduler.dart';
 
@@ -32,11 +41,13 @@ class SmartReminderApp extends StatefulWidget {
   const SmartReminderApp({
     required this.config,
     required this.notificationScheduler,
+    this.tokenStore,
     super.key,
   });
 
   final AppConfig config;
   final ReminderNotificationScheduler notificationScheduler;
+  final TokenStore? tokenStore;
 
   @override
   State<SmartReminderApp> createState() => _SmartReminderAppState();
@@ -47,26 +58,57 @@ class _SmartReminderAppState extends State<SmartReminderApp> {
   late final ReminderApi _reminderApi;
   late final MedicineCabinetApi _medicineCabinetApi;
   late final MedicineOcrApi _medicineOcrApi;
+  late final TokenStore _tokenStore;
+  late final AuthApi _refreshApi;
+  late final AuthenticatedClient _authenticatedClient;
+  late final AuthApi _authApi;
+  late final AuthController _authController;
 
   @override
   void initState() {
     super.initState();
+    _tokenStore =
+        widget.tokenStore ?? SecureTokenStore(FlutterSecureKeyValueStore());
+    _refreshApi = AuthApi(
+      baseUrl: widget.config.apiBaseUrl,
+      client: http.Client(),
+    );
+    _authenticatedClient = AuthenticatedClient(
+      apiBaseUri: Uri.parse(widget.config.apiBaseUrl),
+      inner: http.Client(),
+      tokenStore: _tokenStore,
+      refreshTokens: _refreshApi.refresh,
+    );
+    _authApi = AuthApi(
+      baseUrl: widget.config.apiBaseUrl,
+      client: _authenticatedClient,
+    );
+    _authController = AuthController(
+      tokenStore: _tokenStore,
+      gateway: _authApi,
+    )..addListener(_authChanged);
+    _authenticatedClient.onSessionExpired = _authController.expireSession;
     _reminderDraftApi = ReminderDraftApi(
       baseUrl: widget.config.apiBaseUrl,
-      accessToken: widget.config.apiAccessToken,
+      client: _authenticatedClient,
     );
     _reminderApi = ReminderApi(
       baseUrl: widget.config.apiBaseUrl,
-      accessToken: widget.config.apiAccessToken,
+      client: _authenticatedClient,
     );
     _medicineCabinetApi = MedicineCabinetApi(
       baseUrl: widget.config.apiBaseUrl,
-      accessToken: widget.config.apiAccessToken,
+      client: _authenticatedClient,
     );
     _medicineOcrApi = MedicineOcrApi(
       baseUrl: widget.config.apiBaseUrl,
-      accessToken: widget.config.apiAccessToken,
+      client: _authenticatedClient,
     );
+    _authController.restore();
+  }
+
+  void _authChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -75,6 +117,11 @@ class _SmartReminderAppState extends State<SmartReminderApp> {
     _reminderApi.close();
     _medicineCabinetApi.close();
     _medicineOcrApi.close();
+    _authController
+      ..removeListener(_authChanged)
+      ..dispose();
+    _authApi.close();
+    _refreshApi.close();
     super.dispose();
   }
 
@@ -105,29 +152,59 @@ class _SmartReminderAppState extends State<SmartReminderApp> {
         ),
         useMaterial3: true,
       ),
-      home: AppShell(
-        reminders: ReminderHomeScreen(
-          listReminders: ({required status, pageUrl}) =>
-              _reminderApi.list(status: status, pageUrl: pageUrl),
-          cancelReminder: _reminderApi.cancel,
-          notificationScheduler: widget.notificationScheduler,
-          createReminder: (_) => ReminderComposerScreen(
-            createDraft: _reminderDraftApi.createDraft,
-            confirmDraft: _reminderDraftApi.confirmDraft,
-            notificationScheduler: widget.notificationScheduler,
-          ),
-        ),
-        medicineCabinet: MedicineCabinetScreen(
-          listBatches: _medicineCabinetApi.listBatches,
-          deleteBatch: _medicineCabinetApi.deleteBatch,
-        ),
-        medicineOcr: MedicineOcrScreen(
-          capture: _captureMedicineImage,
-          createJob: _medicineOcrApi.createJob,
-          getJob: _medicineOcrApi.getJob,
-          confirmJob: _medicineOcrApi.confirmJob,
-        ),
-      ),
+      home: _home(),
     );
   }
+
+  Widget _home() => switch (_authController.status) {
+        AuthStatus.booting => const StartupScreen(),
+        AuthStatus.connectionError => StartupScreen(
+            onRetry: _authController.restore,
+          ),
+        AuthStatus.unauthenticated => AuthScreen(
+            onLogin: (phone, password) => _authController.login(
+              phone: phone,
+              password: password,
+            ),
+            onRegister: (phone, password, passwordConfirm) =>
+                _authController.register(
+              phone: phone,
+              password: password,
+              passwordConfirm: passwordConfirm,
+            ),
+          ),
+        AuthStatus.authenticated => AppShell(
+            reminders: ReminderHomeScreen(
+              listReminders: ({required status, pageUrl}) =>
+                  _reminderApi.list(status: status, pageUrl: pageUrl),
+              cancelReminder: _reminderApi.cancel,
+              notificationScheduler: widget.notificationScheduler,
+              createReminder: (_) => ReminderComposerScreen(
+                createDraft: _reminderDraftApi.createDraft,
+                confirmDraft: _reminderDraftApi.confirmDraft,
+                notificationScheduler: widget.notificationScheduler,
+              ),
+            ),
+            medicineCabinet: MedicineCabinetScreen(
+              listBatches: _medicineCabinetApi.listBatches,
+              deleteBatch: _medicineCabinetApi.deleteBatch,
+            ),
+            medicineOcr: MedicineOcrScreen(
+              capture: _captureMedicineImage,
+              createJob: _medicineOcrApi.createJob,
+              getJob: _medicineOcrApi.getJob,
+              confirmJob: _medicineOcrApi.confirmJob,
+            ),
+            profile: ProfileScreen(
+              user: _authController.user!,
+              onChangePassword: (current, password, confirm) =>
+                  _authController.changePassword(
+                currentPassword: current,
+                newPassword: password,
+                newPasswordConfirm: confirm,
+              ),
+              onLogout: _authController.logout,
+            ),
+          ),
+      };
 }

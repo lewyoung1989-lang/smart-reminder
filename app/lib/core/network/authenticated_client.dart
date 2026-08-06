@@ -17,6 +17,7 @@ class AuthenticatedClient extends http.BaseClient {
     required http.Client inner,
     required TokenStore tokenStore,
     required RefreshTokens refreshTokens,
+    this.onSessionExpired,
   })  : _inner = inner,
         _tokenStore = tokenStore,
         _refreshTokens = refreshTokens;
@@ -25,6 +26,7 @@ class AuthenticatedClient extends http.BaseClient {
   final http.Client _inner;
   final TokenStore _tokenStore;
   final RefreshTokens _refreshTokens;
+  void Function()? onSessionExpired;
   Future<AuthTokens>? _refreshInFlight;
 
   @override
@@ -54,6 +56,7 @@ class AuthenticatedClient extends http.BaseClient {
     if (retried.statusCode == 401) {
       await retried.stream.drain<void>();
       await _tokenStore.clear();
+      onSessionExpired?.call();
       throw const SessionExpiredException();
     }
     return retried;
@@ -81,6 +84,7 @@ class AuthenticatedClient extends http.BaseClient {
       return tokens;
     } catch (_) {
       await _tokenStore.clear();
+      onSessionExpired?.call();
       throw const SessionExpiredException();
     }
   }

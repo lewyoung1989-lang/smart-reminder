@@ -76,7 +76,6 @@ void main() {
     ]);
     final api = ReminderApi(
       baseUrl: 'https://api.invalid',
-      accessToken: 'token',
       client: client,
     );
 
@@ -85,7 +84,7 @@ void main() {
     expect(client.requests.single.method, 'GET');
     expect(client.requests.single.url.path, '/api/v1/reminders');
     expect(client.requests.single.url.queryParameters['status'], 'pending');
-    expect(client.requests.single.headers['Authorization'], 'Bearer token');
+    expect(client.requests.single.headers['Authorization'], isNull);
     expect(page.reminders.single.title, '喝水');
     expect(page.reminders.single.status, ReminderStatus.pending);
     expect(page.reminders.single.cancelledAt, isNull);
@@ -99,7 +98,6 @@ void main() {
     ]);
     final api = ReminderApi(
       baseUrl: 'https://api.invalid',
-      accessToken: 'token',
       client: client,
     );
 
@@ -139,7 +137,6 @@ void main() {
     ]);
     final api = ReminderApi(
       baseUrl: 'https://api.invalid',
-      accessToken: 'token',
       client: client,
     );
 

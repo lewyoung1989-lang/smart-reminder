@@ -52,7 +52,6 @@ void main() {
     ]);
     final api = MedicineOcrApi(
       baseUrl: 'https://api.invalid',
-      accessToken: 'token',
       client: client,
     );
 
@@ -98,7 +97,6 @@ void main() {
     ]);
     final api = MedicineOcrApi(
       baseUrl: 'https://api.invalid',
-      accessToken: 'token',
       client: client,
     );
 
@@ -110,6 +108,6 @@ void main() {
 
     expect(job.candidate?.medicineName, '布洛芬缓释胶囊');
     expect(job.candidate?.expiryDate, DateTime(2028, 5, 31));
-    expect(client.requests.last.headers['Authorization'], 'Bearer token');
+    expect(client.requests.last.headers['Authorization'], isNull);
   });
 }

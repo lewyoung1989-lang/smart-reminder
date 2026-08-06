@@ -4,7 +4,26 @@ import 'package:http/http.dart' as http;
 
 import '../domain/auth_models.dart';
 
-class AuthApi {
+abstract interface class AuthGateway {
+  Future<AuthSession> register({
+    required String phone,
+    required String password,
+    required String passwordConfirm,
+  });
+  Future<AuthSession> login({
+    required String phone,
+    required String password,
+  });
+  Future<AuthUser> me();
+  Future<void> logout(String refreshToken);
+  Future<AuthSession> changePassword({
+    required String currentPassword,
+    required String newPassword,
+    required String newPasswordConfirm,
+  });
+}
+
+class AuthApi implements AuthGateway {
   AuthApi({required String baseUrl, http.Client? client})
       : _baseUri = Uri.parse(baseUrl),
         _client = client ?? http.Client();
@@ -12,6 +31,7 @@ class AuthApi {
   final Uri _baseUri;
   final http.Client _client;
 
+  @override
   Future<AuthSession> register({
     required String phone,
     required String password,
@@ -26,6 +46,7 @@ class AuthApi {
     return AuthSession.fromJson(_jsonObject(response));
   }
 
+  @override
   Future<AuthSession> login({
     required String phone,
     required String password,
@@ -46,6 +67,7 @@ class AuthApi {
     return AuthTokens.fromJson(_jsonObject(response));
   }
 
+  @override
   Future<AuthUser> me() async {
     final response = await _client.get(
       _baseUri.resolve('/api/v1/auth/me'),
@@ -55,6 +77,7 @@ class AuthApi {
     return AuthUser.fromJson(_jsonObject(response));
   }
 
+  @override
   Future<void> logout(String refreshToken) async {
     final response = await _post('/api/v1/auth/logout', {
       'refresh_token': refreshToken,
@@ -62,6 +85,7 @@ class AuthApi {
     _requireStatus(response, 204);
   }
 
+  @override
   Future<AuthSession> changePassword({
     required String currentPassword,
     required String newPassword,

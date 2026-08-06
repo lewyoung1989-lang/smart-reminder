@@ -7,14 +7,14 @@ import '../domain/inventory_batch.dart';
 class MedicineCabinetApi {
   MedicineCabinetApi({
     required String baseUrl,
-    required this.accessToken,
     http.Client? client,
   })  : _baseUri = Uri.parse(baseUrl),
-        _client = client ?? http.Client();
+        _client = client ?? http.Client(),
+        _ownsClient = client == null;
 
   final Uri _baseUri;
-  final String accessToken;
   final http.Client _client;
+  final bool _ownsClient;
 
   Future<InventoryBatchPage> listBatches({
     String query = '',
@@ -65,7 +65,6 @@ class MedicineCabinetApi {
   }
 
   Map<String, String> get _headers => {
-        'Authorization': 'Bearer $accessToken',
         'Accept': 'application/json',
       };
 
@@ -74,7 +73,9 @@ class MedicineCabinetApi {
       candidate.host == base.host &&
       candidate.port == base.port;
 
-  void close() => _client.close();
+  void close() {
+    if (_ownsClient) _client.close();
+  }
 }
 
 class MedicineCabinetApiException implements Exception {

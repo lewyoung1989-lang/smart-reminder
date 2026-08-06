@@ -53,7 +53,6 @@ void main() {
     ]);
     final api = MedicineCabinetApi(
       baseUrl: 'https://api.invalid',
-      accessToken: 'token',
       client: client,
     );
 
@@ -62,7 +61,7 @@ void main() {
     expect(client.requests.single.method, 'GET');
     expect(client.requests.single.url.path, '/api/v1/inventory-batches');
     expect(client.requests.single.url.queryParameters['q'], '布洛芬');
-    expect(client.requests.single.headers['Authorization'], 'Bearer token');
+    expect(client.requests.single.headers['Authorization'], isNull);
     expect(page.batches.single.medicineName, '布洛芬胶囊');
     expect(
       page.batches.single.expiryStatus,
@@ -79,7 +78,6 @@ void main() {
     ]);
     final api = MedicineCabinetApi(
       baseUrl: 'https://api.invalid',
-      accessToken: 'token',
       client: client,
     );
 
@@ -102,7 +100,6 @@ void main() {
   test('throws a stable exception for server errors', () async {
     final api = MedicineCabinetApi(
       baseUrl: 'https://api.invalid',
-      accessToken: 'token',
       client: RecordingClient([
         jsonResponse(503, {'detail': 'unavailable'})
       ]),
@@ -120,11 +117,10 @@ void main() {
     );
   });
 
-  test('deletes one inventory batch with authorization', () async {
+  test('deletes one inventory batch through the shared client', () async {
     final client = RecordingClient([http.Response('', 204)]);
     final api = MedicineCabinetApi(
       baseUrl: 'https://api.invalid',
-      accessToken: 'token',
       client: client,
     );
 
@@ -135,13 +131,12 @@ void main() {
       client.requests.single.url.toString(),
       'https://api.invalid/api/v1/inventory-batches/batch%20id%2F1',
     );
-    expect(client.requests.single.headers['Authorization'], 'Bearer token');
+    expect(client.requests.single.headers['Authorization'], isNull);
   });
 
   test('throws a stable exception when batch deletion fails', () async {
     final api = MedicineCabinetApi(
       baseUrl: 'https://api.invalid',
-      accessToken: 'token',
       client: RecordingClient([
         jsonResponse(500, {'detail': 'failed'})
       ]),

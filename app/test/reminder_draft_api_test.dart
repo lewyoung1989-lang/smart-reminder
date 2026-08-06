@@ -5,9 +5,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:smart_reminder_app/features/reminder_drafts/data/reminder_draft_api.dart';
 
-
 void main() {
-  test('create draft posts text with bearer authentication', () async {
+  test('create draft delegates authentication to its client', () async {
     late http.Request recorded;
     final client = MockClient((request) async {
       recorded = request;
@@ -32,15 +31,15 @@ void main() {
     });
     final api = ReminderDraftApi(
       baseUrl: 'http://192.168.1.10:8000',
-      accessToken: 'local-token',
       client: client,
     );
 
     final draft = await api.createDraft('1分钟后提醒我喝水');
 
     expect(recorded.method, 'POST');
-    expect(recorded.url.toString(), 'http://192.168.1.10:8000/api/v1/reminder-drafts');
-    expect(recorded.headers['Authorization'], 'Bearer local-token');
+    expect(recorded.url.toString(),
+        'http://192.168.1.10:8000/api/v1/reminder-drafts');
+    expect(recorded.headers['Authorization'], isNull);
     expect(jsonDecode(recorded.body), {'text': '1分钟后提醒我喝水'});
     expect(draft.title, '喝水');
     expect(draft.parserSource, 'local');
@@ -60,7 +59,6 @@ void main() {
     });
     final api = ReminderDraftApi(
       baseUrl: 'http://127.0.0.1:8000',
-      accessToken: 'local-token',
       client: client,
     );
 

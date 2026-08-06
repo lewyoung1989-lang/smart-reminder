@@ -26,6 +26,7 @@ void main() {
           reminders: Text('提醒页面'),
           medicineCabinet: Text('药箱页面'),
           medicineOcr: Text('拍照页面'),
+          profile: Text('我的页面'),
         ),
       ),
     );

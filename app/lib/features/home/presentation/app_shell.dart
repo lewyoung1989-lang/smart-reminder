@@ -5,12 +5,14 @@ class AppShell extends StatefulWidget {
     required this.reminders,
     required this.medicineCabinet,
     required this.medicineOcr,
+    required this.profile,
     super.key,
   });
 
   final Widget reminders;
   final Widget medicineCabinet;
   final Widget medicineOcr;
+  final Widget profile;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -27,6 +29,7 @@ class _AppShellState extends State<AppShell> {
             widget.reminders,
             widget.medicineCabinet,
             widget.medicineOcr,
+            widget.profile,
           ],
         ),
         bottomNavigationBar: NavigationBar(
@@ -47,6 +50,11 @@ class _AppShellState extends State<AppShell> {
               icon: Icon(Icons.document_scanner_outlined),
               selectedIcon: Icon(Icons.document_scanner),
               label: '拍照录入',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.person_outline),
+              selectedIcon: Icon(Icons.person),
+              label: '我的',
             ),
           ],
         ),

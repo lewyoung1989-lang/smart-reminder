@@ -79,11 +79,13 @@ void main() {
 
   test('refresh failure clears tokens and reports session expiry', () async {
     final store = MemoryTokenStore(oldTokens);
+    var expiryNotifications = 0;
     final client = AuthenticatedClient(
       apiBaseUri: Uri.parse('https://api.invalid'),
       inner: AuthRecordingClient(),
       tokenStore: store,
       refreshTokens: (_) async => throw StateError('refresh rejected'),
+      onSessionExpired: () => expiryNotifications += 1,
     );
 
     await expectLater(
@@ -91,6 +93,7 @@ void main() {
       throwsA(isA<SessionExpiredException>()),
     );
     expect(await store.read(), isNull);
+    expect(expiryNotifications, 1);
   });
 
   test('external signed upload never receives the API token', () async {

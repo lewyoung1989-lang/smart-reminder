@@ -4,17 +4,16 @@ import 'package:http/http.dart' as http;
 
 import '../domain/reminder_draft.dart';
 
-
 class ReminderDraftApi {
   ReminderDraftApi({
     required this.baseUrl,
-    required this.accessToken,
     http.Client? client,
-  }) : _client = client ?? http.Client();
+  })  : _client = client ?? http.Client(),
+        _ownsClient = client == null;
 
   final String baseUrl;
-  final String accessToken;
   final http.Client _client;
+  final bool _ownsClient;
 
   Future<ReminderDraft> createDraft(String text) async {
     final response = await _client.post(
@@ -43,13 +42,13 @@ class ReminderDraftApi {
   }
 
   Map<String, String> get _headers => {
-        'Authorization': 'Bearer $accessToken',
         'Content-Type': 'application/json',
       };
 
-  void close() => _client.close();
+  void close() {
+    if (_ownsClient) _client.close();
+  }
 }
-
 
 class ReminderDraftApiException implements Exception {
   const ReminderDraftApiException(this.statusCode, this.body);

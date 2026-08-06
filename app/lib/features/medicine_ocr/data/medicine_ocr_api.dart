@@ -15,16 +15,15 @@ class _UploadGrant {
 class MedicineOcrApi {
   MedicineOcrApi({
     required this.baseUrl,
-    required this.accessToken,
     http.Client? client,
-  }) : _client = client ?? http.Client();
+  })  : _client = client ?? http.Client(),
+        _ownsClient = client == null;
 
   final String baseUrl;
-  final String accessToken;
   final http.Client _client;
+  final bool _ownsClient;
 
   Map<String, String> get _apiHeaders => {
-        'Authorization': 'Bearer $accessToken',
         'Content-Type': 'application/json',
       };
 
@@ -122,7 +121,9 @@ class MedicineOcrApi {
     }
   }
 
-  void close() => _client.close();
+  void close() {
+    if (_ownsClient) _client.close();
+  }
 }
 
 class MedicineOcrApiException implements Exception {
