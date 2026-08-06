@@ -8,6 +8,7 @@ REQUIRED = {
     "DOMAIN",
     "FILES_DOMAIN",
     "DJANGO_SECRET_KEY",
+    "JWT_SIGNING_KEY",
     "DJANGO_DEBUG",
     "DJANGO_ALLOWED_HOSTS",
     "DJANGO_CSRF_TRUSTED_ORIGINS",
@@ -16,6 +17,7 @@ REQUIRED = {
     "POSTGRES_PASSWORD",
     "CELERY_BROKER_URL",
     "CELERY_RESULT_BACKEND",
+    "AUTH_CACHE_URL",
     "DEEPSEEK_API_KEY",
     "OCR_PROVIDER",
     "OCR_STORAGE_PROVIDER",
@@ -81,6 +83,15 @@ def validate(values: dict[str, str]) -> list[str]:
         errors.append("DJANGO_DEBUG must be false")
     if values.get("DJANGO_SECURE_SSL_REDIRECT") not in {None, "", "true"}:
         errors.append("DJANGO_SECURE_SSL_REDIRECT must be true")
+    if values.get("AUTH_CACHE_URL") not in {
+        None,
+        "",
+        "redis://redis:6379/4",
+    }:
+        errors.append("AUTH_CACHE_URL must be redis://redis:6379/4")
+    jwt_key = values.get("JWT_SIGNING_KEY", "")
+    if jwt_key and len(jwt_key) < 32:
+        errors.append("JWT_SIGNING_KEY must contain at least 32 characters")
     if values.get("OCR_DEBUG_TEXT_LOGGING") not in {
         None,
         "",

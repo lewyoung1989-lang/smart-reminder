@@ -51,11 +51,16 @@ ensure_value OCR_PROVIDER rapidocr
 ensure_value OCR_STORAGE_PROVIDER s3
 ensure_value OCR_JOB_RETENTION_HOURS 24
 ensure_value OCR_QUEUE ocr
+ensure_value AUTH_CACHE_URL redis://redis:6379/4
 ensure_value S3_INTERNAL_ENDPOINT http://minio:9000
 ensure_value S3_PUBLIC_ENDPOINT https://files.aipupu.cloud
 ensure_value S3_BUCKET smart-reminder-private
 ensure_value S3_REGION us-east-1
 ensure_value S3_ADDRESSING_STYLE path
+
+if [[ -z "$(get_value JWT_SIGNING_KEY)" ]]; then
+  replace_value JWT_SIGNING_KEY "$(openssl rand -hex 32)"
+fi
 
 if [[ -z "$(get_value DEEPSEEK_API_KEY)" ]]; then
   printf 'DeepSeek API key: ' >&2

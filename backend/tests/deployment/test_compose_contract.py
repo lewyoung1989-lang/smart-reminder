@@ -164,3 +164,15 @@ def test_api_healthcheck_uses_the_allowed_production_host():
     services = load_production_compose()["services"]
     command = services["api"]["healthcheck"]["test"][-1]
     assert "'Host':'aipupu.cloud'" in command
+
+
+def test_backend_services_receive_auth_cache_and_jwt_configuration():
+    services = load_production_compose()["services"]
+    for name in ("api", "worker", "ocr-worker", "beat"):
+        environment = services[name]["environment"]
+        assert environment["AUTH_CACHE_URL"] == (
+            "${AUTH_CACHE_URL:-redis://redis:6379/4}"
+        )
+        assert environment["JWT_SIGNING_KEY"] == (
+            "${JWT_SIGNING_KEY:?JWT_SIGNING_KEY is required}"
+        )

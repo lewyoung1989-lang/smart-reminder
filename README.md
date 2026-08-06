@@ -11,7 +11,7 @@
 
 药盒 OCR 当前使用自建 RapidOCR，候选结果必须人工核对后才会写入药箱。AlarmKit 强闹钟、语音识别和天气预检查仍在后续阶段。
 
-App 底部当前分为“提醒”“药箱”“拍照录入”三个入口。“药箱”可按药品名、规格或批号搜索，展示每批库存的有效期状态；“拍照录入”保持独立，识别并确认后再将药品加入药箱。
+App 底部当前分为“提醒”“药箱”“拍照录入”“我的”四个入口。“药箱”可按药品名、规格或批号搜索，展示每批库存的有效期状态；“拍照录入”保持独立，识别并确认后再将药品加入药箱；“我的”提供账号状态、修改密码和退出登录。
 
 ## 本地后端
 
@@ -19,13 +19,12 @@ App 底部当前分为“提醒”“药箱”“拍照录入”三个入口。�
 make install
 cp .env.example .env
 .venv/bin/python backend/manage.py migrate
-.venv/bin/python backend/manage.py create_local_test_token
 make run-backend
 ```
 
 健康检查：`http://127.0.0.1:8000/api/v1/health`
 
-`create_local_test_token` 会输出本地开发 Bearer Token。该命令只在 `DEBUG=True` 时可用；Token 不应提交到 Git、截图分享或用于线上环境。
+新版 App 直接使用手机号注册登录。`create_local_test_token` 只用于旧版 App 兼容回归或手工 API 调试，并且只在 `DEBUG=True` 时可用；输出的 Token 不应提交到 Git、截图分享或用于线上环境。
 
 ## DeepSeek
 
@@ -47,17 +46,17 @@ DEEPSEEK_TIMEOUT_SECONDS=8
 1. Mac 与 iPhone 连接同一局域网。
 2. 执行 `ipconfig getifaddr en0` 获取 Mac 局域网 IP。
 3. 把这个 IP 加入 `.env` 的 `DJANGO_ALLOWED_HOSTS`，然后重启后端。
-4. 使用上一步生成的 Token 启动 Flutter App：
+4. 启动 Flutter App：
 
 ```bash
 cd app
 ../scripts/flutterw run \
-  --dart-define=API_BASE_URL=http://<MAC局域网IP>:8000 \
-  --dart-define=API_ACCESS_TOKEN=<本地Token>
+  --dart-define=API_BASE_URL=http://<MAC局域网IP>:8000
 ```
 
-5. 输入“1分钟后提醒我喝水”，检查草稿时间后点击“确认创建”。
-6. 首次确认时允许通知，将 App 切到后台，约一分钟后应收到“喝水”通知。
+5. 在 App 中注册测试手机号并登录；新账号从空数据开始。
+6. 输入“1分钟后提醒我喝水”，检查草稿时间后点击“确认创建”。
+7. 首次确认时允许通知，将 App 切到后台，约一分钟后应收到“喝水”通知。
 
 如果通知权限被拒绝，服务端提醒仍会创建，但 App 会明确显示“提醒已创建，但手机通知未安排”。再次点击确认只重试手机通知，不会重复创建服务端提醒。
 
@@ -77,6 +76,12 @@ cd app
 | 方法 | 路径 | 用途 |
 |---|---|---|
 | GET | `/api/v1/health` | 服务健康检查 |
+| POST | `/api/v1/auth/register` | 手机号密码注册 |
+| POST | `/api/v1/auth/login` | 手机号密码登录 |
+| POST | `/api/v1/auth/refresh` | 轮换 Refresh Token |
+| POST | `/api/v1/auth/logout` | 退出当前设备 |
+| GET | `/api/v1/auth/me` | 查询当前账号摘要 |
+| POST | `/api/v1/auth/password/change` | 修改密码并撤销旧会话 |
 | POST | `/api/v1/reminder-drafts` | 解析文字并创建短期草稿 |
 | POST | `/api/v1/reminder-drafts/{id}/confirm` | 人工确认并创建正式提醒 |
 | POST | `/api/v1/voice/reminder-drafts` | 兼容上一阶段的转写草稿路径 |
@@ -87,7 +92,7 @@ cd app
 | GET | `/api/v1/ocr/jobs/{id}` | 查询任务状态与结构化候选值 |
 | POST | `/api/v1/ocr/jobs/{id}/confirm` | 人工确认候选并创建药品库存 |
 
-请求需要 `Authorization: Bearer <token>`。文字和语音最终使用同一套结构化草稿、确认和幂等逻辑。
+业务请求需要 `Authorization: Bearer <token>`。新版 App 在 iOS Keychain 中保存每个用户自己的 JWT，并自动轮换 Refresh Token；旧版 DRF Token 仅在迁移窗口保留兼容。文字和语音最终使用同一套结构化草稿、确认和幂等逻辑。
 
 ## Docker Compose
 

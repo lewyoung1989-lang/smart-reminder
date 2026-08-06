@@ -3,6 +3,7 @@ x-logging: &production_logging
 
 x-backend-environment: &production_backend_environment
   DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?DJANGO_SECRET_KEY is required}
+  JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:?JWT_SIGNING_KEY is required}
   DJANGO_DEBUG: ${DJANGO_DEBUG:-false}
   DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-aipupu.cloud}
   DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-https://aipupu.cloud}
@@ -17,6 +18,7 @@ x-backend-environment: &production_backend_environment
   POSTGRES_PORT: "5432"
   CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
   CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+  AUTH_CACHE_URL: ${AUTH_CACHE_URL:-redis://redis:6379/4}
   DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?DEEPSEEK_API_KEY is required}
   DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
   DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-flash}

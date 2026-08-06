@@ -22,6 +22,7 @@ def valid_example_values():
     values = parse_example_values()
     values.update(
         DJANGO_SECRET_KEY="test-django-secret",
+        JWT_SIGNING_KEY="test-jwt-signing-secret-at-least-32-bytes",
         POSTGRES_PASSWORD="test-postgres-secret",
         DEEPSEEK_API_KEY="test-deepseek-key",
         CERTBOT_EMAIL="owner@example.com",
@@ -57,8 +58,10 @@ def test_example_lists_required_production_variables_without_secrets():
     assert values["OCR_SEMANTIC_PROVIDER"] == "deepseek"
     assert values["OCR_SEMANTIC_TIMEOUT_SECONDS"] == "8"
     assert values["OCR_DEBUG_TEXT_LOGGING"] == "false"
+    assert values["AUTH_CACHE_URL"] == "redis://redis:6379/4"
     for secret in (
         "DJANGO_SECRET_KEY",
+        "JWT_SIGNING_KEY",
         "POSTGRES_PASSWORD",
         "DEEPSEEK_API_KEY",
         "CERTBOT_EMAIL",
@@ -94,9 +97,16 @@ def test_validator_rejects_missing_secrets(tmp_path):
 
     assert result.returncode == 1
     assert "DJANGO_SECRET_KEY" in result.stderr
+    assert "JWT_SIGNING_KEY" in result.stderr
     assert "POSTGRES_PASSWORD" in result.stderr
     assert "DEEPSEEK_API_KEY" in result.stderr
     assert "CERTBOT_EMAIL" in result.stderr
+
+
+def test_readme_does_not_compile_a_shared_token_into_the_app():
+    readme = (REPO_ROOT / "README.md").read_text()
+
+    assert "--dart-define=API_ACCESS_TOKEN" not in readme
 
 
 def test_validator_rejects_invalid_minio_boundary(tmp_path):

@@ -118,14 +118,14 @@ install -m 0600 deploy/tencent/env.production.example \
   /opt/smart-reminder/shared/.env.production
 ```
 
-已有环境文件通过非回显脚本升级并补齐 DeepSeek、Certbot 和 MinIO 凭据：
+已有环境文件通过非回显脚本升级并补齐 JWT、DeepSeek、Certbot 和 MinIO 凭据：
 
 ```bash
 ./deploy/tencent/scripts/configure_secrets.sh \
   /opt/smart-reminder/shared/.env.production
 ```
 
-脚本不会 `source` 环境文件，也不会把密钥放入命令参数。生产配置必须同时包含 `S3_INTERNAL_ENDPOINT=http://minio:9000` 和 `S3_PUBLIC_ENDPOINT=https://files.aipupu.cloud`；前者供 API/OCR Worker 内部读删，后者只用于生成 iPhone 上传签名。
+脚本不会 `source` 环境文件，也不会把密钥放入命令参数。`JWT_SIGNING_KEY` 使用独立随机值，`AUTH_CACHE_URL=redis://redis:6379/4` 使用 Redis 独立逻辑库保存认证限流计数。生产配置必须同时包含 `S3_INTERNAL_ENDPOINT=http://minio:9000` 和 `S3_PUBLIC_ENDPOINT=https://files.aipupu.cloud`；前者供 API/OCR Worker 内部读删，后者只用于生成 iPhone 上传签名。
 
 检查权限和配置，不显示文件内容：
 
@@ -177,6 +177,8 @@ cd /opt/smart-reminder/app
   "$DEPLOY_SHA" \
   /opt/smart-reminder/shared/.env.production
 ```
+
+首次发布手机号登录前，先执行 PostgreSQL 备份并记录备份文件路径。发布脚本会执行 `accounts` 和 SimpleJWT blacklist 迁移；迁移失败时不得启动新 API。部署后先用旧版 App 的 DRF Bearer Token 验证提醒、药箱和 OCR，再用新版 App 注册一个新手机号账号，验证登录、重启恢复、修改密码和退出。旧 `iphone-test` 数据不迁移。
 
 验证：
 
@@ -384,9 +386,12 @@ OCR Worker 内存不足时先停止 `ocr-worker`，核心提醒 API 可继续运
 
 在 iPhone 上完成以下流程：
 
-1. 创建一条文字提醒草稿、确认并验证本地通知。
-2. 拍摄药盒正面和有效期区域，确认上传地址 host 为 `files.aipupu.cloud`。
-3. 等待 OCR 候选，修改错误字段后人工确认。
-4. 确认前药箱不得新增库存；确认后新增库存，并验证两张临时图片已删除。
+1. 注册一个未使用的中国大陆手机号，确认进入空提醒和空药箱。
+2. 退出后重新登录，杀掉并重启 App，确认 Keychain 会话可以恢复。
+3. 创建一条文字提醒草稿、确认并验证本地通知。
+4. 拍摄药盒正面和有效期区域，确认上传地址 host 为 `files.aipupu.cloud`。
+5. 等待 OCR 候选，修改错误字段后人工确认。
+6. 确认前药箱不得新增库存；确认后新增库存，并验证两张临时图片已删除。
+7. 修改密码后确认当前设备继续登录，旧 Refresh Token 无法再刷新；退出后回到登录页。
 
 生产环境不再使用 Mac 局域网 HTTP 地址。

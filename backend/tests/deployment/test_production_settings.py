@@ -18,6 +18,8 @@ def test_production_security_settings_are_loaded_from_environment():
             "DJANGO_SECURE_SSL_REDIRECT": "true",
             "DJANGO_SECURE_HSTS_SECONDS": "3600",
             "LOG_LEVEL": "WARNING",
+            "AUTH_CACHE_URL": "redis://redis:6379/4",
+            "JWT_SIGNING_KEY": "test-jwt-signing-secret-at-least-32-bytes",
         }
     )
     script = textwrap.dedent(
@@ -51,6 +53,13 @@ def test_production_security_settings_are_loaded_from_environment():
         assert settings.LOGGING["formatters"]["production"]["format"] == (
             "%(asctime)s level=%(levelname)s logger=%(name)s "
             "message=%(message)s"
+        )
+        assert settings.CACHES["auth"]["BACKEND"] == (
+            "django.core.cache.backends.redis.RedisCache"
+        )
+        assert settings.CACHES["auth"]["LOCATION"] == "redis://redis:6379/4"
+        assert settings.SIMPLE_JWT["SIGNING_KEY"] == (
+            "test-jwt-signing-secret-at-least-32-bytes"
         )
         """
     )
