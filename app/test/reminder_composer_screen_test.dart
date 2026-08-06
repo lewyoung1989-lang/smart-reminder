@@ -191,6 +191,80 @@ void main() {
     expect(find.byTooltip('开始语音输入'), findsOneWidget);
   });
 
+  testWidgets('popping the route cancels an active recording once',
+      (tester) async {
+    var cancelCalls = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => FilledButton(
+            onPressed: () => Navigator.of(context).push<void>(
+              MaterialPageRoute(
+                builder: (_) => ReminderComposerScreen(
+                  createDraft: (_) async => testDraft(),
+                  confirmDraft: (_) async => 'reminder-1',
+                  startRecording: () async {},
+                  stopRecording: () async => '不会使用',
+                  cancelRecording: () async => cancelCalls += 1,
+                ),
+              ),
+            ),
+            child: const Text('创建提醒'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('创建提醒'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('开始语音输入'));
+    await tester.pump();
+    Navigator.of(tester.element(find.byType(ReminderComposerScreen))).pop();
+    await tester.pumpAndSettle();
+
+    expect(cancelCalls, 1);
+  });
+
+  testWidgets('pop while recording starts ignores asynchronous cancel errors',
+      (tester) async {
+    final startGate = Completer<void>();
+    var cancelCalls = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => FilledButton(
+            onPressed: () => Navigator.of(context).push<void>(
+              MaterialPageRoute(
+                builder: (_) => ReminderComposerScreen(
+                  createDraft: (_) async => testDraft(),
+                  confirmDraft: (_) async => 'reminder-1',
+                  startRecording: () => startGate.future,
+                  stopRecording: () async => '不会使用',
+                  cancelRecording: () async {
+                    cancelCalls += 1;
+                    throw StateError('cleanup failed');
+                  },
+                ),
+              ),
+            ),
+            child: const Text('创建提醒'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('创建提醒'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('开始语音输入'));
+    await tester.pump();
+    Navigator.of(tester.element(find.byType(ReminderComposerScreen))).pop();
+    await tester.pumpAndSettle();
+    startGate.complete();
+    await tester.pumpAndSettle();
+
+    expect(cancelCalls, 1);
+  });
+
   testWidgets('recording automatically stops at the configured limit', (
     tester,
   ) async {

@@ -50,8 +50,24 @@ class _ReminderComposerScreenState extends State<ReminderComposerScreen> {
   @override
   void dispose() {
     _recordingTimer?.cancel();
+    final cancelRecording = widget.cancelRecording;
+    if (cancelRecording != null &&
+        (_voiceState == _VoiceInputState.starting ||
+            _voiceState == _VoiceInputState.recording)) {
+      unawaited(_cancelRecordingOnDispose(cancelRecording));
+    }
     _controller.dispose();
     super.dispose();
+  }
+
+  Future<void> _cancelRecordingOnDispose(
+    Future<void> Function() cancelRecording,
+  ) async {
+    try {
+      await cancelRecording();
+    } catch (_) {
+      // Route disposal cannot surface cleanup failures or update disposed UI.
+    }
   }
 
   Future<void> _parse() async {
