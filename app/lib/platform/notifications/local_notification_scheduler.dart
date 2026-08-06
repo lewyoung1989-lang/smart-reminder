@@ -5,7 +5,6 @@ import 'package:timezone/timezone.dart' as tz;
 import '../../features/reminder_drafts/domain/reminder_draft.dart';
 import 'reminder_notification_scheduler.dart';
 
-
 abstract interface class LocalNotificationGateway {
   Future<bool> requestPermissions();
 
@@ -14,8 +13,9 @@ abstract interface class LocalNotificationGateway {
     required String title,
     required tz.TZDateTime scheduledDate,
   });
-}
 
+  Future<void> cancel({required int id});
+}
 
 class LocalNotificationScheduler implements ReminderNotificationScheduler {
   LocalNotificationScheduler({
@@ -54,7 +54,13 @@ class LocalNotificationScheduler implements ReminderNotificationScheduler {
       scheduledAt.second,
     );
 
-    if (!await gateway.requestPermissions()) {
+    late final bool permissionGranted;
+    try {
+      permissionGranted = await gateway.requestPermissions();
+    } catch (_) {
+      throw const NotificationSchedulingFailed();
+    }
+    if (!permissionGranted) {
       throw const NotificationPermissionDenied();
     }
     try {
@@ -68,6 +74,15 @@ class LocalNotificationScheduler implements ReminderNotificationScheduler {
     }
   }
 
+  @override
+  Future<void> cancel({required String reminderId}) async {
+    try {
+      await gateway.cancel(id: _stableNotificationId(reminderId));
+    } catch (_) {
+      throw const NotificationCancellationFailed();
+    }
+  }
+
   static int _stableNotificationId(String reminderId) {
     var hash = 0;
     for (final codeUnit in reminderId.codeUnits) {
@@ -76,7 +91,6 @@ class LocalNotificationScheduler implements ReminderNotificationScheduler {
     return hash;
   }
 }
-
 
 class FlutterLocalNotificationGateway implements LocalNotificationGateway {
   FlutterLocalNotificationGateway({FlutterLocalNotificationsPlugin? plugin})
@@ -98,7 +112,8 @@ class FlutterLocalNotificationGateway implements LocalNotificationGateway {
   @override
   Future<bool> requestPermissions() async {
     return await _plugin
-            .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
+            .resolvePlatformSpecificImplementation<
+                IOSFlutterLocalNotificationsPlugin>()
             ?.requestPermissions(alert: true, badge: true, sound: true) ??
         false;
   }
@@ -125,5 +140,10 @@ class FlutterLocalNotificationGateway implements LocalNotificationGateway {
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       payload: 'reminder:$id',
     );
+  }
+
+  @override
+  Future<void> cancel({required int id}) async {
+    await _plugin.cancel(id: id);
   }
 }

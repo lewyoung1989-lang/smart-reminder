@@ -92,6 +92,29 @@ def test_deepseek_requests_json_and_validates_draft():
     assert "只允许创建提醒" in transport.payload["messages"][0]["content"]
 
 
+def test_deepseek_localizes_naive_datetime_using_declared_timezone():
+    provider, _ = _provider(
+        _completion(
+            _valid_draft(
+                schedule={
+                    "type": "once",
+                    "local_datetime": "2026-08-10T10:00:00",
+                    "timezone": "Asia/Shanghai",
+                }
+            )
+        )
+    )
+
+    result = provider.parse(
+        "下周一上午十点提醒我体检",
+        now=NOW,
+        timezone="Asia/Shanghai",
+    )
+
+    assert result.schedule is not None
+    assert result.schedule.local_datetime.tzinfo == ZoneInfo("Asia/Shanghai")
+
+
 @pytest.mark.parametrize(
     "draft",
     [

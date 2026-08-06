@@ -2,7 +2,21 @@
 set -eu
 
 PROJECT_ROOT=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
-FLUTTER_BIN="$PROJECT_ROOT/.tools/flutter/bin/flutter"
+TOOLS_ROOT="$PROJECT_ROOT/.tools"
+FLUTTER_BIN="$TOOLS_ROOT/flutter/bin/flutter"
+
+if [ ! -x "$FLUTTER_BIN" ]; then
+  GIT_COMMON_DIR=$(git -C "$PROJECT_ROOT" rev-parse --git-common-dir 2>/dev/null || true)
+  if [ -n "$GIT_COMMON_DIR" ]; then
+    case "$GIT_COMMON_DIR" in
+      /*) ;;
+      *) GIT_COMMON_DIR="$PROJECT_ROOT/$GIT_COMMON_DIR" ;;
+    esac
+    COMMON_ROOT=$(CDPATH= cd -- "$GIT_COMMON_DIR/.." && pwd)
+    TOOLS_ROOT="$COMMON_ROOT/.tools"
+    FLUTTER_BIN="$TOOLS_ROOT/flutter/bin/flutter"
+  fi
+fi
 
 if [ ! -x "$FLUTTER_BIN" ]; then
   echo "Flutter SDK not found at $FLUTTER_BIN" >&2
@@ -12,8 +26,8 @@ fi
 export CI="${CI:-true}"
 export DART_SUPPRESS_ANALYTICS="${DART_SUPPRESS_ANALYTICS:-true}"
 export FLUTTER_SUPPRESS_ANALYTICS="${FLUTTER_SUPPRESS_ANALYTICS:-true}"
-export XDG_CONFIG_HOME="$PROJECT_ROOT/.tools/config"
-export PUB_CACHE="$PROJECT_ROOT/.tools/pub-cache"
+export XDG_CONFIG_HOME="$TOOLS_ROOT/config"
+export PUB_CACHE="$TOOLS_ROOT/pub-cache"
 
 mkdir -p "$XDG_CONFIG_HOME" "$PUB_CACHE"
 exec "$FLUTTER_BIN" "$@"

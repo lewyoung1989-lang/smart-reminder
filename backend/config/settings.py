@@ -40,6 +40,33 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool(
 )
 SECURE_HSTS_PRELOAD = env_bool("DJANGO_SECURE_HSTS_PRELOAD", False)
 
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").strip().upper()
+if LOG_LEVEL not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
+    raise ValueError("LOG_LEVEL must be DEBUG, INFO, WARNING, ERROR, or CRITICAL")
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "production": {
+            "format": (
+                "%(asctime)s level=%(levelname)s logger=%(name)s "
+                "message=%(message)s"
+            ),
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "production",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": LOG_LEVEL,
+    },
+}
+
 INSTALLED_APPS = [
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -49,13 +76,17 @@ INSTALLED_APPS = [
     "apps.core",
     "apps.reminders",
     "apps.voice",
+    "apps.medicines.apps.MedicinesConfig",
+    "apps.ocr.apps.OCRConfig",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -144,4 +175,50 @@ if ASR_THROTTLE_REDIS_URL:
 REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"] = {
     "voice_transcription_user": ASR_USER_RATE,
     "voice_transcription_ip": ASR_IP_RATE,
+}
+
+OCR_PROVIDER = os.environ.get("OCR_PROVIDER", "rapidocr")
+OCR_LANGUAGE = os.environ.get("OCR_LANGUAGE", "ch")
+OCR_TEXT_SCORE = float(os.environ.get("OCR_TEXT_SCORE", "0.50"))
+OCR_MAX_IMAGE_BYTES = int(os.environ.get("OCR_MAX_IMAGE_BYTES", str(8 * 1024 * 1024)))
+OCR_MAX_IMAGE_SIDE = int(os.environ.get("OCR_MAX_IMAGE_SIDE", "2048"))
+OCR_JOB_RETENTION_HOURS = int(os.environ.get("OCR_JOB_RETENTION_HOURS", "24"))
+OCR_WORKER_CONCURRENCY = int(os.environ.get("OCR_WORKER_CONCURRENCY", "1"))
+OCR_TASK_SOFT_TIME_LIMIT = int(os.environ.get("OCR_TASK_SOFT_TIME_LIMIT", "45"))
+OCR_TASK_TIME_LIMIT = int(os.environ.get("OCR_TASK_TIME_LIMIT", "60"))
+OCR_MAX_RETRIES = int(os.environ.get("OCR_MAX_RETRIES", "2"))
+OCR_DEBUG_TEXT_LOGGING = (
+    os.environ.get("OCR_DEBUG_TEXT_LOGGING", "false").lower() == "true"
+)
+OCR_SEMANTIC_PROVIDER = os.environ.get("OCR_SEMANTIC_PROVIDER", "deepseek")
+OCR_SEMANTIC_TIMEOUT_SECONDS = float(
+    os.environ.get("OCR_SEMANTIC_TIMEOUT_SECONDS", "8")
+)
+OCR_MODEL_ROOT = os.environ.get("OCR_MODEL_ROOT", "")
+OCR_QUEUE = os.environ.get("OCR_QUEUE", "ocr")
+OCR_STORAGE_PROVIDER = os.environ.get("OCR_STORAGE_PROVIDER", "s3")
+OCR_UPLOAD_URL_TTL_SECONDS = int(os.environ.get("OCR_UPLOAD_URL_TTL_SECONDS", "600"))
+
+S3_INTERNAL_ENDPOINT = os.environ.get(
+    "S3_INTERNAL_ENDPOINT",
+    os.environ.get("S3_ENDPOINT", "http://localhost:9000"),
+)
+S3_PUBLIC_ENDPOINT = os.environ.get(
+    "S3_PUBLIC_ENDPOINT",
+    S3_INTERNAL_ENDPOINT,
+)
+S3_BUCKET = os.environ.get("S3_BUCKET", "smart-reminder-private")
+S3_REGION = os.environ.get("S3_REGION", "us-east-1")
+S3_ADDRESSING_STYLE = os.environ.get("S3_ADDRESSING_STYLE", "path")
+S3_ACCESS_KEY_ID = os.environ.get("S3_ACCESS_KEY_ID", "")
+S3_SECRET_ACCESS_KEY = os.environ.get("S3_SECRET_ACCESS_KEY", "")
+
+CELERY_TASK_ROUTES = {"apps.ocr.tasks.*": {"queue": OCR_QUEUE}}
+CELERY_TASK_SOFT_TIME_LIMIT = OCR_TASK_SOFT_TIME_LIMIT
+CELERY_TASK_TIME_LIMIT = OCR_TASK_TIME_LIMIT
+CELERY_BEAT_SCHEDULE = {
+    "purge-expired-ocr-images-hourly": {
+        "task": "apps.ocr.tasks.purge_expired_ocr_images",
+        "schedule": 3600.0,
+    },
 }

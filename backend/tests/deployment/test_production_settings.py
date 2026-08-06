@@ -17,6 +17,7 @@ def test_production_security_settings_are_loaded_from_environment():
             "DJANGO_CSRF_TRUSTED_ORIGINS": "https://aipupu.cloud",
             "DJANGO_SECURE_SSL_REDIRECT": "true",
             "DJANGO_SECURE_HSTS_SECONDS": "3600",
+            "LOG_LEVEL": "WARNING",
         }
     )
     script = textwrap.dedent(
@@ -34,6 +35,23 @@ def test_production_security_settings_are_loaded_from_environment():
         assert settings.SESSION_COOKIE_SECURE is True
         assert settings.CSRF_COOKIE_SECURE is True
         assert settings.SECURE_HSTS_SECONDS == 3600
+        assert "django.middleware.csrf.CsrfViewMiddleware" in settings.MIDDLEWARE
+        assert (
+            "django.middleware.clickjacking.XFrameOptionsMiddleware"
+            in settings.MIDDLEWARE
+        )
+        assert settings.LOGGING["handlers"] == {
+            "console": {
+                "class": "logging.StreamHandler",
+                "formatter": "production",
+            }
+        }
+        assert settings.LOGGING["root"]["handlers"] == ["console"]
+        assert settings.LOGGING["root"]["level"] == "WARNING"
+        assert settings.LOGGING["formatters"]["production"]["format"] == (
+            "%(asctime)s level=%(levelname)s logger=%(name)s "
+            "message=%(message)s"
+        )
         """
     )
 

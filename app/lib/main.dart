@@ -1,10 +1,18 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import 'config/app_config.dart';
+import 'features/home/presentation/app_shell.dart';
+import 'features/medicine_cabinet/data/medicine_cabinet_api.dart';
+import 'features/medicine_cabinet/presentation/medicine_cabinet_screen.dart';
+import 'features/medicine_ocr/data/medicine_ocr_api.dart';
+import 'features/medicine_ocr/presentation/medicine_ocr_screen.dart';
 import 'features/reminder_drafts/data/reminder_draft_api.dart';
 import 'features/reminder_drafts/presentation/reminder_composer_screen.dart';
+import 'features/reminders/data/reminder_api.dart';
+import 'features/reminders/presentation/reminder_home_screen.dart';
 import 'features/voice_input/data/audio_recorder_gateway.dart';
 import 'features/voice_input/data/voice_transcription_api.dart';
 import 'features/voice_input/services/voice_input_service.dart';
@@ -40,14 +48,29 @@ class SmartReminderApp extends StatefulWidget {
 }
 
 class _SmartReminderAppState extends State<SmartReminderApp> {
-  late final ReminderDraftApi _api;
+  late final ReminderDraftApi _reminderDraftApi;
+  late final ReminderApi _reminderApi;
+  late final MedicineCabinetApi _medicineCabinetApi;
+  late final MedicineOcrApi _medicineOcrApi;
   late final VoiceTranscriptionApi _voiceApi;
   late final VoiceInputService _voiceInput;
 
   @override
   void initState() {
     super.initState();
-    _api = ReminderDraftApi(
+    _reminderDraftApi = ReminderDraftApi(
+      baseUrl: widget.config.apiBaseUrl,
+      accessToken: widget.config.apiAccessToken,
+    );
+    _reminderApi = ReminderApi(
+      baseUrl: widget.config.apiBaseUrl,
+      accessToken: widget.config.apiAccessToken,
+    );
+    _medicineCabinetApi = MedicineCabinetApi(
+      baseUrl: widget.config.apiBaseUrl,
+      accessToken: widget.config.apiAccessToken,
+    );
+    _medicineOcrApi = MedicineOcrApi(
       baseUrl: widget.config.apiBaseUrl,
       accessToken: widget.config.apiAccessToken,
     );
@@ -65,8 +88,21 @@ class _SmartReminderAppState extends State<SmartReminderApp> {
   void dispose() {
     unawaited(_voiceInput.dispose());
     _voiceApi.close();
-    _api.close();
+    _reminderDraftApi.close();
+    _reminderApi.close();
+    _medicineCabinetApi.close();
+    _medicineOcrApi.close();
     super.dispose();
+  }
+
+  Future<List<int>?> _captureMedicineImage(String kind) async {
+    // 客户端先压缩并限制长边，降低移动网络上传耗时和云端 OCR 内存占用。
+    final image = await ImagePicker().pickImage(
+      source: ImageSource.camera,
+      imageQuality: 82,
+      maxWidth: 2048,
+    );
+    return image?.readAsBytes();
   }
 
   @override
@@ -86,16 +122,34 @@ class _SmartReminderAppState extends State<SmartReminderApp> {
         ),
         useMaterial3: true,
       ),
-      home: ReminderComposerScreen(
-        createDraft: _api.createDraft,
-        confirmDraft: _api.confirmDraft,
-        startRecording: _voiceInput.start,
-        stopRecording: () async {
-          final result = await _voiceInput.stopAndTranscribe();
-          return result.transcript;
-        },
-        cancelRecording: _voiceInput.cancel,
-        notificationScheduler: widget.notificationScheduler,
+      home: AppShell(
+        reminders: ReminderHomeScreen(
+          listReminders: ({required status, pageUrl}) =>
+              _reminderApi.list(status: status, pageUrl: pageUrl),
+          cancelReminder: _reminderApi.cancel,
+          notificationScheduler: widget.notificationScheduler,
+          createReminder: (_) => ReminderComposerScreen(
+            createDraft: _reminderDraftApi.createDraft,
+            confirmDraft: _reminderDraftApi.confirmDraft,
+            startRecording: _voiceInput.start,
+            stopRecording: () async {
+              final result = await _voiceInput.stopAndTranscribe();
+              return result.transcript;
+            },
+            cancelRecording: _voiceInput.cancel,
+            notificationScheduler: widget.notificationScheduler,
+          ),
+        ),
+        medicineCabinet: MedicineCabinetScreen(
+          listBatches: _medicineCabinetApi.listBatches,
+          deleteBatch: _medicineCabinetApi.deleteBatch,
+        ),
+        medicineOcr: MedicineOcrScreen(
+          capture: _captureMedicineImage,
+          createJob: _medicineOcrApi.createJob,
+          getJob: _medicineOcrApi.getJob,
+          confirmJob: _medicineOcrApi.confirmJob,
+        ),
       ),
     );
   }

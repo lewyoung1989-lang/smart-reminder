@@ -1,0 +1,11 @@
+[Unit]
+Description=智能提醒 TLS 证书续期
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/smart-reminder/app
+ExecStart=/opt/smart-reminder/app/deploy/tencent/scripts/renew_certificate.sh /opt/smart-reminder/shared/.env.production

@@ -1,0 +1,11 @@
+[Unit]
+Description=智能提醒 PostgreSQL 数据库备份
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/smart-reminder/app
+ExecStart=/opt/smart-reminder/app/deploy/tencent/scripts/backup_postgres.sh /opt/smart-reminder/shared/.env.production

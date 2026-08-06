@@ -5,6 +5,9 @@ ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 ENV_FILE=${1:?usage: backup_postgres.sh ENV_FILE}
 VALIDATOR="$ROOT_DIR/deploy/tencent/scripts/check_env.py"
 
+source "$ROOT_DIR/deploy/tencent/scripts/operation_logging.sh"
+start_operation_log backup
+
 python3 "$VALIDATOR" "$ENV_FILE"
 BACKUP_DIR=$(python3 "$VALIDATOR" "$ENV_FILE" --get BACKUP_DIR)
 BACKUP_RETENTION_DAYS=$(python3 "$VALIDATOR" "$ENV_FILE" --get BACKUP_RETENTION_DAYS)
@@ -19,12 +22,11 @@ TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
 BACKUP_FILE="$BACKUP_DIR/smart_reminder-$TIMESTAMP.dump"
 TEMP_FILE="$BACKUP_DIR/.smart_reminder-$TIMESTAMP.dump.tmp"
 
-cleanup() {
+operation_cleanup() {
   if [[ -n "${TEMP_FILE:-}" ]]; then
     rm -f -- "$TEMP_FILE"
   fi
 }
-trap cleanup EXIT
 
 COMPOSE=(
   docker compose

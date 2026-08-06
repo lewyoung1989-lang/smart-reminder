@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../platform/notifications/reminder_notification_scheduler.dart';
+import '../../reminders/domain/reminder.dart' show ReminderCreationResult;
 import '../../voice_input/data/voice_transcription_api.dart';
 import '../../voice_input/services/voice_input_service.dart';
 import '../domain/reminder_draft.dart';
@@ -90,6 +91,15 @@ class _ReminderComposerScreenState extends State<ReminderComposerScreen> {
         await scheduler.schedule(reminderId: reminderId, draft: draft);
       }
       if (!mounted) return;
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop(
+          ReminderCreationResult(
+            reminderId: reminderId,
+            notificationScheduled: scheduler != null,
+          ),
+        );
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -99,11 +109,36 @@ class _ReminderComposerScreenState extends State<ReminderComposerScreen> {
       );
     } on ReminderNotificationException {
       if (!mounted) return;
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop(
+          ReminderCreationResult(
+            reminderId: _confirmedReminderId!,
+            notificationScheduled: false,
+          ),
+        );
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('提醒已创建，但手机通知未安排')),
       );
     } catch (_) {
       if (!mounted) return;
+      final reminderId = _confirmedReminderId;
+      if (reminderId != null) {
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop(
+            ReminderCreationResult(
+              reminderId: reminderId,
+              notificationScheduled: false,
+            ),
+          );
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('提醒已创建，但手机通知未安排')),
+        );
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('创建失败，请稍后重试')),
       );

@@ -56,6 +56,9 @@ def test_confirmation_creates_one_reminder_rule(api_client, user):
     assert second.status_code == 200
     assert first.json()["reminder_id"] == second.json()["reminder_id"]
     assert ReminderRule.objects.filter(owner=user).count() == 1
+    rule = ReminderRule.objects.get(owner=user)
+    assert rule.scheduled_at.isoformat() == "2026-08-03T23:30:00+00:00"
+    assert rule.cancelled_at is None
 
 
 @pytest.mark.django_db

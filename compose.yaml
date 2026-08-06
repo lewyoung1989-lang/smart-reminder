@@ -41,6 +41,8 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
     env_file:
       - path: .env
         required: false
@@ -58,6 +60,15 @@ services:
       ASR_BASE_URL: http://funasr:8000
       ASR_REDIS_URL: redis://redis:6379/0
       ASR_THROTTLE_REDIS_URL: redis://redis:6379/2
+      OCR_STORAGE_PROVIDER: ${OCR_STORAGE_PROVIDER:-s3}
+      OCR_MODEL_ROOT: ${OCR_MODEL_ROOT:-}
+      S3_INTERNAL_ENDPOINT: ${S3_INTERNAL_ENDPOINT:-http://minio:9000}
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
+      S3_BUCKET: ${S3_BUCKET:-smart-reminder-private}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_ADDRESSING_STYLE: ${S3_ADDRESSING_STYLE:-path}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-smart-reminder}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-local-development-only}
     command: sh -c "python manage.py migrate && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2"
     ports:
       - "8000:8000"
@@ -108,8 +119,29 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
     environment: *backend_environment
-    command: celery -A config worker --loglevel=INFO
+    command: celery -A config worker -Q celery --loglevel=INFO
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  ocr-worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.ocr
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+        DEBIAN_MIRROR: ${DEBIAN_MIRROR:-http://deb.debian.org/debian}
+        DEBIAN_SECURITY_MIRROR: ${DEBIAN_SECURITY_MIRROR:-http://deb.debian.org/debian-security}
+    environment: *backend_environment
+    command: celery -A config worker -Q ocr --concurrency=1 --prefetch-multiplier=1 --loglevel=INFO
+    mem_reservation: 700m
+    mem_limit: 1200m
+    cpus: 1.0
     depends_on:
       postgres:
         condition: service_healthy
@@ -120,6 +152,8 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
     environment: *backend_environment
     command: celery -A config beat --loglevel=INFO
     depends_on:

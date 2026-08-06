@@ -4,13 +4,19 @@ import 'package:smart_reminder_app/platform/notifications/local_notification_sch
 import 'package:smart_reminder_app/platform/notifications/reminder_notification_scheduler.dart';
 import 'package:timezone/timezone.dart' as tz;
 
-
 class RecordingNotificationGateway implements LocalNotificationGateway {
   bool permissionGranted = true;
+  Object? permissionError;
+  int permissionRequestCount = 0;
   final scheduled = <({int id, String title, tz.TZDateTime date})>[];
+  final cancelled = <int>[];
 
   @override
-  Future<bool> requestPermissions() async => permissionGranted;
+  Future<bool> requestPermissions() async {
+    permissionRequestCount += 1;
+    if (permissionError case final error?) throw error;
+    return permissionGranted;
+  }
 
   @override
   Future<void> schedule({
@@ -20,8 +26,12 @@ class RecordingNotificationGateway implements LocalNotificationGateway {
   }) async {
     scheduled.add((id: id, title: title, date: scheduledDate));
   }
-}
 
+  @override
+  Future<void> cancel({required int id}) async {
+    cancelled.add(id);
+  }
+}
 
 void main() {
   final now = DateTime(2026, 8, 4, 10);
@@ -58,7 +68,8 @@ void main() {
 
   test('permission denial stops scheduling', () async {
     final gateway = RecordingNotificationGateway()..permissionGranted = false;
-    final scheduler = LocalNotificationScheduler(gateway: gateway, now: () => now);
+    final scheduler =
+        LocalNotificationScheduler(gateway: gateway, now: () => now);
 
     await expectLater(
       scheduler.schedule(
@@ -70,9 +81,26 @@ void main() {
     expect(gateway.scheduled, isEmpty);
   });
 
+  test('permission platform error is reported as scheduling failure', () async {
+    final gateway = RecordingNotificationGateway()
+      ..permissionError = Exception('platform channel failed');
+    final scheduler =
+        LocalNotificationScheduler(gateway: gateway, now: () => now);
+
+    await expectLater(
+      scheduler.schedule(
+        reminderId: 'reminder-1',
+        draft: draftAt(DateTime(2026, 8, 4, 10, 1)),
+      ),
+      throwsA(isA<NotificationSchedulingFailed>()),
+    );
+    expect(gateway.scheduled, isEmpty);
+  });
+
   test('past or missing time is rejected before asking permission', () async {
     final gateway = RecordingNotificationGateway();
-    final scheduler = LocalNotificationScheduler(gateway: gateway, now: () => now);
+    final scheduler =
+        LocalNotificationScheduler(gateway: gateway, now: () => now);
 
     await expectLater(
       scheduler.schedule(
@@ -86,5 +114,21 @@ void main() {
       throwsA(isA<InvalidNotificationSchedule>()),
     );
     expect(gateway.scheduled, isEmpty);
+  });
+
+  test('cancels the stable scheduled id without requesting permission',
+      () async {
+    final gateway = RecordingNotificationGateway();
+    final scheduler =
+        LocalNotificationScheduler(gateway: gateway, now: () => now);
+
+    await scheduler.schedule(
+      reminderId: 'reminder-1',
+      draft: draftAt(DateTime(2026, 8, 4, 10, 1)),
+    );
+    await scheduler.cancel(reminderId: 'reminder-1');
+
+    expect(gateway.cancelled.single, gateway.scheduled.single.id);
+    expect(gateway.permissionRequestCount, 1);
   });
 }

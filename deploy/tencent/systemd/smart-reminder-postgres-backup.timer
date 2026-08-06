@@ -1,0 +1,11 @@
+[Unit]
+Description=每天执行智能提醒 PostgreSQL 数据库备份
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=smart-reminder-postgres-backup.service
+
+[Install]
+WantedBy=timers.target

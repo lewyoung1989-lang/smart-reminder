@@ -33,6 +33,8 @@ class ReminderRule(models.Model):
     schedule_json = models.JSONField()
     conditions_json = models.JSONField(default=dict)
     severity = models.CharField(max_length=32)
+    scheduled_at = models.DateTimeField(db_index=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
     enabled = models.BooleanField(default=True)
     source_draft = models.OneToOneField(
         ReminderDraft,

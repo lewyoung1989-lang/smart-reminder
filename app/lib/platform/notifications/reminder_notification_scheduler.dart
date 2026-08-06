@@ -6,6 +6,8 @@ abstract interface class ReminderNotificationScheduler {
     required String reminderId,
     required ReminderDraft draft,
   });
+
+  Future<void> cancel({required String reminderId});
 }
 
 
@@ -26,4 +28,9 @@ class InvalidNotificationSchedule extends ReminderNotificationException {
 
 class NotificationSchedulingFailed extends ReminderNotificationException {
   const NotificationSchedulingFailed();
+}
+
+
+class NotificationCancellationFailed extends ReminderNotificationException {
+  const NotificationCancellationFailed();
 }

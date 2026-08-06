@@ -1,8 +1,9 @@
 flowchart LR
-  Local["Mac 本地开发\nFlutter + Docker Compose"] --> LAN["iPhone 局域网真机测试\nMac LAN IP + Debug HTTP 例外"]
+  Local["Mac 本地开发\nFlutter + Docker Compose / MinIO"] --> LAN["iPhone 局域网真机测试\nPublic Endpoint = Mac LAN IP"]
   LAN --> Gate{"核心闭环通过？\n提醒 / 天气 / 语音草稿 / OCR"}
   Gate -->|否| Local
-  Gate -->|是| Staging["腾讯云低成本预发布\nLighthouse / TencentDB / COS"]
-  Staging --> External["真实外部能力\nAPNs / ASR / OCR / DeepSeek"]
+  Gate -->|是| Staging["腾讯云亲友预发布\nAPI 域名 + 文件域名 / 私有 MinIO"]
+  Staging --> OCRWorker["独立 OCR Worker\nRapidOCR / CPU / 并发 1 / 1.2GB 上限"]
+  OCRWorker --> External["真实外部能力\nAPNs / ASR / DeepSeek"]
   External --> Beta["TestFlight 亲友内测\n监控 / 备份 / 隐私验证"]
   Beta --> Production["公开生产\nHTTPS / 备案 / 独立凭据 / 扩容"]

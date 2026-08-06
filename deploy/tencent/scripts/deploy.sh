@@ -5,6 +5,11 @@ ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 EXPECTED_SHA=${1:?usage: deploy.sh EXPECTED_SHA ENV_FILE}
 ENV_FILE=${2:?usage: deploy.sh EXPECTED_SHA ENV_FILE}
 
+source "$ROOT_DIR/deploy/tencent/scripts/operation_logging.sh"
+start_operation_log deploy
+
+"$ROOT_DIR/deploy/tencent/scripts/verify_logging.sh"
+
 cd "$ROOT_DIR"
 python3 deploy/tencent/scripts/check_env.py "$ENV_FILE"
 
@@ -22,6 +27,8 @@ if [[ -n "$(git status --porcelain)" ]]; then
   exit 1
 fi
 
+printf '准备部署提交：%s\n' "$ACTUAL_SHA"
+
 export APP_VERSION
 APP_VERSION=$(git rev-parse --short=12 HEAD)
 COMPOSE=(
@@ -33,15 +40,20 @@ COMPOSE=(
 )
 
 "${COMPOSE[@]}" config --quiet
-"${COMPOSE[@]}" build api
-"${COMPOSE[@]}" up -d postgres redis
+"${COMPOSE[@]}" build api ocr-worker
+"${COMPOSE[@]}" up -d postgres redis minio
+"${COMPOSE[@]}" run --rm minio-init
 "${COMPOSE[@]}" run --rm api python manage.py migrate --noinput
-"${COMPOSE[@]}" up -d api worker beat
+"${COMPOSE[@]}" run --rm ocr-worker python manage.py check_ocr \
+  tests/ocr/fixtures/medicine_front.jpg
+"${COMPOSE[@]}" up -d api worker ocr-worker beat
 
 for _attempt in $(seq 1 24); do
   if "${COMPOSE[@]}" exec -T api python -c \
     "import urllib.request; request=urllib.request.Request('http://127.0.0.1:8000/api/v1/health', headers={'Host':'aipupu.cloud','X-Forwarded-Proto':'https'}); assert urllib.request.urlopen(request, timeout=3).status == 200"; then
-    "${COMPOSE[@]}" --profile production up -d nginx
+    "${COMPOSE[@]}" --profile production up -d --force-recreate nginx
+    "${COMPOSE[@]}" --profile production exec -T nginx nginx -t
+    "${COMPOSE[@]}" --profile production exec -T nginx nginx -s reload
     exit 0
   fi
   sleep 5
