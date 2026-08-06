@@ -1,5 +1,6 @@
 Django==5.2.5
 djangorestframework==3.16.1
+djangorestframework-simplejwt==5.5.1
 pydantic==2.11.7
 python-dotenv==1.1.1
 psycopg[binary]==3.2.9
