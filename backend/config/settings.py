@@ -177,6 +177,7 @@ REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"] = {
     "voice_transcription_ip": ASR_IP_RATE,
 }
 
+OCR_ENABLED = os.environ.get("OCR_ENABLED", "true").lower() == "true"
 OCR_PROVIDER = os.environ.get("OCR_PROVIDER", "rapidocr")
 OCR_LANGUAGE = os.environ.get("OCR_LANGUAGE", "ch")
 OCR_TEXT_SCORE = float(os.environ.get("OCR_TEXT_SCORE", "0.50"))

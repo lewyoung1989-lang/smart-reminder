@@ -1,6 +1,8 @@
+from django.conf import settings
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import status
+from rest_framework.exceptions import APIException
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -38,7 +40,20 @@ def _candidate_payload(job):
     }
 
 
-class UploadView(APIView):
+class OCRDisabled(APIException):
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    default_detail = {"code": "ocr_disabled"}
+    default_code = "ocr_disabled"
+
+
+class OcrEnabledAPIView(APIView):
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        if not settings.OCR_ENABLED:
+            raise OCRDisabled()
+
+
+class UploadView(OcrEnabledAPIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -66,7 +81,7 @@ class UploadView(APIView):
         )
 
 
-class JobListCreateView(APIView):
+class JobListCreateView(OcrEnabledAPIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -93,7 +108,7 @@ class JobListCreateView(APIView):
         )
 
 
-class JobDetailView(APIView):
+class JobDetailView(OcrEnabledAPIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, job_id):
@@ -110,7 +125,7 @@ class JobDetailView(APIView):
         return Response(payload)
 
 
-class JobConfirmView(APIView):
+class JobConfirmView(OcrEnabledAPIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, job_id):

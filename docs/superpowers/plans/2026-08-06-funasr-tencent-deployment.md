@@ -27,7 +27,7 @@ Expected: main history includes the reviewed FunASR/Tencent and OCR preservation
 
 The resolved tree must contain `services/funasr/`, `backend/apps/voice/`, `deploy/tencent/`, the voice-input Flutter files, the Tencent production settings, and both deployment and FunASR tests.
 
-- [ ] **Step 3: Run the merged backend and lightweight FunASR suites**
+- [x] **Step 3: Run the merged backend and lightweight FunASR suites**
 
 Run:
 
@@ -54,13 +54,13 @@ No merge commit is needed because the task starts from the merged main baseline.
 - Modify: `deploy/tencent/nginx/aipupu.cloud.conf`
 - Modify: `deploy/tencent/README.md`
 
-- [ ] **Step 1: Write failing production contracts**
+- [x] **Step 1: Write failing production contracts**
 
 Add assertions that production publishes no FunASR port; rotates FunASR logs; uses a fixed private Nginx address matching `ASR_TRUSTED_PROXY_IPS`; passes all ASR settings to Django; gives FunASR a production image tag and release-script readiness gate; raises the Nginx upload limit above the Django multipart limit; and makes `deploy.sh` build the FunASR image, initialize its persistent model volume, start it, and wait for readiness before starting the application tier.
 
 The contracts must also prove final base-plus-production semantics: MinIO, MinIO init, OCR Worker, and Beat are in the `ocr` profile; API has no OCR startup dependency; disabled OCR stops existing services without removing containers or volumes; the FunASR model volume is read-only for inference; Nginx has fixed address `172.29.0.10` on `172.29.0.0/24`; and the ordinary Celery Worker is fixed to concurrency/prefetch 1.
 
-- [ ] **Step 2: Run focused tests and verify RED**
+- [x] **Step 2: Run focused tests and verify RED**
 
 Run:
 
@@ -70,11 +70,11 @@ Run:
 
 Expected: the new FunASR production assertions fail because the deployment overlay and release script do not yet contain those contracts.
 
-- [ ] **Step 3: Implement the minimum production integration**
+- [x] **Step 3: Implement the minimum production integration**
 
-Use `smart-reminder-funasr:${APP_VERSION}` for both model initialization and inference. Keep the model volume persistent and private; do not expose port 8000. Configure the complete ASR environment, one global and one per-user concurrent request, and the fixed Nginx proxy IP. The deploy sequence must validate configuration/revision/logging, build API and FunASR while the old API/Nginx stay live, start PostgreSQL/Redis, conditionally stop OCR services, explicitly initialize models with `--no-deps`, start FunASR with `--no-deps`, wait for `/health`, pass a real synthetic Mandarin WAV transcription, migrate, then replace API/worker. Only `OCR_ENABLED=true` starts the `ocr` profile and performs MinIO init plus OCR smoke before Nginx recreation.
+Use `smart-reminder-funasr:${APP_VERSION}` for both model initialization and inference. Keep the model volume persistent and private; do not expose port 8000. Configure the complete ASR environment, one global and one per-user concurrent request, and the fixed Nginx proxy IP. The deploy sequence must validate configuration/revision/logging, capture the previous API image, build API and FunASR while the old API/Nginx stay live, start PostgreSQL/Redis, conditionally stop OCR services, check the pinned model marker, stop old FunASR before initializing a missing or stale cache with `--no-deps`, start FunASR with `--no-deps`, wait for `/health`, pass a real synthetic Mandarin WAV transcription, run candidate dependency preflight, migrate, then replace API/worker. Validate production Nginx in a one-off container before force-recreating the live proxy. If the new API health gate fails, retag the captured image and force-recreate API/worker. Only `OCR_ENABLED=true` starts the `ocr` profile and performs MinIO init plus OCR smoke before Nginx recreation.
 
-- [ ] **Step 4: Run focused tests and verify GREEN**
+- [x] **Step 4: Run focused tests and verify GREEN**
 
 Run:
 
@@ -85,17 +85,17 @@ bash -n deploy/tencent/scripts/deploy.sh
 
 Expected: all deployment tests pass and Bash syntax is valid.
 
-- [ ] **Step 5: Document 4 GB operation and rollback**
+- [x] **Step 5: Document 4 GB operation and rollback**
 
 The runbook must state that OCR is excluded from this release, FunASR is single-concurrency, the first model download can take a long time, and operators must capture `docker stats`, `free -h`, disk usage, model readiness, transcription latency, and OOM evidence. On memory failure, keep the previous API release running and stop the new FunASR containers; do not delete database or model volumes.
 
-- [ ] **Step 6: Commit the production integration**
+- [x] **Step 6: Commit the production integration**
 
 Run:
 
 ```bash
 git add backend/tests/deployment deploy/tencent services/funasr docs/superpowers/plans/2026-08-06-funasr-tencent-deployment.md docs/superpowers/specs/2026-08-05-smart-reminder-v2-enhancements.md
-git commit -m "ops: deploy FunASR on Tencent single server"
+git commit -m "fix: harden FunASR production rollout"
 ```
 
 ### Task 3: Verify and deploy the exact reviewed revision
@@ -105,11 +105,11 @@ git commit -m "ops: deploy FunASR on Tencent single server"
 - Remote checkout: `/opt/smart-reminder/app`
 - Remote environment: `/opt/smart-reminder/shared/.env.production`
 
-- [ ] **Step 1: Run the complete local release gate**
+- [x] **Step 1: Run the complete local release gate**
 
 Run backend, FunASR, Flutter tests, Flutter analyzer, Django checks, migration drift, deployment tests, Bash syntax checks, and `git diff --check`.
 
-- [ ] **Step 2: Review the integration diff**
+- [x] **Step 2: Review the integration diff**
 
 Compare the integration branch with both parent feature branches. Fix all Critical or Important findings and rerun affected verification.
 

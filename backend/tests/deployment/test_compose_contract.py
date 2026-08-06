@@ -206,6 +206,42 @@ def test_funasr_is_single_process_and_resource_bounded_for_four_gb_host():
     assert 64 <= service["pids_limit"] <= 256
 
 
+def test_model_init_has_same_resource_envelope_as_funasr():
+    services = load_production_compose()["services"]
+    inference = services["funasr"]
+    model_init = services["funasr-model-init"]
+
+    for key in (
+        "cpus",
+        "mem_reservation",
+        "mem_limit",
+        "pids_limit",
+    ):
+        assert model_init[key] == inference[key]
+    for key in (
+        "OMP_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "OPENBLAS_NUM_THREADS",
+        "NUMEXPR_NUM_THREADS",
+    ):
+        assert model_init["environment"][key] == "2"
+
+
+def test_nginx_check_uses_production_config_without_host_ports():
+    service = load_production_compose()["services"]["nginx-check"]
+    assert service["image"] == "nginx:1.27-alpine"
+    assert service.get("ports", []) == []
+    assert service["profiles"] == ["production"]
+    assert service["restart"] == "no"
+    assert "asr_proxy" in service["networks"]
+    assert any(
+        mount.endswith(
+            "deploy/tencent/nginx/aipupu.cloud.conf:/etc/nginx/conf.d/default.conf:ro"
+        )
+        for mount in service["volumes"]
+    )
+
+
 def test_asr_proxy_network_has_fixed_nginx_source_address():
     compose = load_production_compose()
     services = compose["services"]
@@ -225,6 +261,7 @@ def test_asr_proxy_network_has_fixed_nginx_source_address():
 def test_api_receives_complete_asr_production_environment():
     environment = load_production_compose()["services"]["api"]["environment"]
     expected = {
+        "OCR_ENABLED": "${OCR_ENABLED:-false}",
         "ASR_PROVIDER": "${ASR_PROVIDER:-funasr}",
         "ASR_BASE_URL": "${ASR_BASE_URL:-http://funasr:8000}",
         "ASR_MODEL": "${ASR_MODEL:-paraformer-zh}",

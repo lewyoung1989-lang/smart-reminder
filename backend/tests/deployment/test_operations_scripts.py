@@ -392,6 +392,46 @@ def test_deploy_keeps_old_api_and_nginx_during_build_and_asr_smoke():
     assert build < smoke < start_api < recreate_nginx
 
 
+def test_deploy_preflights_candidate_and_restores_old_api_on_health_failure():
+    script = (SCRIPTS / "deploy.sh").read_text()
+    capture = script.index("OLD_API_IMAGE_ID")
+    build = script.index('build api funasr')
+    preflight = script.index("manage.py check_release_dependencies")
+    migrate = script.index("manage.py migrate --noinput")
+    replace = script.index('up -d --no-deps api worker')
+
+    assert capture < build < preflight < migrate < replace
+    assert "rollback_api" in script
+    assert 'docker tag "$OLD_API_IMAGE_ID"' in script
+    assert "--force-recreate api worker" in script
+    assert "API rollback health check failed" in script
+    assert "docker volume rm" not in script
+
+
+def test_deploy_validates_one_off_nginx_before_recreating_live_proxy():
+    script = (SCRIPTS / "deploy.sh").read_text()
+    preflight = script.index("run --rm --no-deps nginx-check nginx -t")
+    recreate = script.index(
+        "--profile production up -d --force-recreate nginx"
+    )
+    post_switch = script.index("exec -T nginx nginx -t")
+
+    assert preflight < recreate < post_switch
+
+
+def test_deploy_checks_marker_and_stops_old_funasr_before_model_init():
+    script = (SCRIPTS / "deploy.sh").read_text()
+    marker_check = script.index("app.download_models --check")
+    stop = script.index("stop funasr", marker_check)
+    initialize = script.index(
+        "run --rm --no-deps funasr-model-init", marker_check + 1
+    )
+    start = script.index("up -d --no-deps funasr")
+
+    assert marker_check < stop < initialize < start
+    assert "FunASR model cache is ready" in script
+
+
 def test_deploy_smoke_never_prints_transcript_or_audio_content():
     smoke = (
         REPO_ROOT / "services/funasr/smoke/smoke_transcription.py"

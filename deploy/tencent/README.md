@@ -170,9 +170,9 @@ cd /opt/smart-reminder/app
 
 该脚本为两个域名申请同一张证书。HTTP 服务只响应 ACME 验证，其余路径返回 `503`，不会通过明文 HTTP 暴露 API 或对象上传。
 
-发布脚本会强制重建 Nginx 容器，因为 Git 更新配置文件时可能替换单文件 bind mount 的宿主 inode；只执行 reload 不能保证容器读到新文件。重建后脚本仍会执行 `nginx -t`，成功才 reload。
+发布脚本会强制重建 Nginx 容器，因为 Git 更新配置文件时可能替换单文件 bind mount 的宿主 inode；只执行 reload 不能保证容器读到新文件。切换前先用无宿主端口的 `nginx-check` 一次性容器读取生产配置和证书执行 `nginx -t`，成功后才强制重建正式 Nginx；重建后再次检查并 reload。
 
-发布先构建新 API 和 FunASR 镜像，期间旧 API 与 Nginx 继续提供服务。随后脚本初始化持久化模型卷、等待真实 `/health`、用仓库内系统合成普通话 WAV 调用 `/v1/audio/transcriptions`，通过后才迁移并替换 API。smoke 只输出固定成功/失败标记，不输出 transcript。首次模型下载可能持续较长时间并占用较多磁盘；不要因终端暂时无新输出而中断。
+发布先捕获现有 API 容器的镜像 ID，再构建新 API 和 FunASR 镜像，期间旧 API 与 Nginx 继续提供服务。模型卷中匹配固定 ASR/VAD/标点 revision 的 readiness marker 存在时跳过下载；marker 缺失、损坏或 revision 过期时先停止旧 FunASR，再用与推理容器相同的 CPU、内存、PID 和数值库线程上限初始化模型。随后等待真实 `/health`，用仓库内系统合成普通话 WAV 调用 `/v1/audio/transcriptions`，并让候选 API 检查 PostgreSQL、Redis 和 FunASR，全部通过后才迁移并替换 API/Worker。smoke 和预检只输出固定成功/失败标记，不输出 transcript、连接信息或秘密。首次模型下载可能持续较长时间并占用较多磁盘；不要因终端暂时无新输出而中断。
 
 证书签发成功后部署审核过的提交：
 
@@ -291,6 +291,8 @@ DEPLOY_SHA=$(git rev-parse HEAD)
 4. 检查容器状态和公网健康检查。
 
 不要自动回滚数据库卷。数据库迁移必须采用可向后兼容的扩展/切换/清理顺序；需要恢复数据库时先停止发布并使用明确的备份恢复方案。
+
+发布脚本替换 API/Worker 后若新 API 在健康检查窗口内未就绪，会把发布开始时捕获的旧 API 镜像重新标记为当前发布标签，强制重建 API/Worker，并验证回滚后的 API 健康状态。该自动回滚不回退数据库迁移、不重建 Nginx、不删除任何卷；因此迁移仍必须向后兼容。若旧 API 容器不存在或回滚后的健康检查也失败，脚本明确报错并退出，需要按上述完整 SHA 流程人工恢复。
 
 如果新 FunASR 在 4 GB 主机触发 OOM 或持续 swap 压力，而旧 API/Nginx 仍健康：
 

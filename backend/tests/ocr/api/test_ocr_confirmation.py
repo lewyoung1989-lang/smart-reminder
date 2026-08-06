@@ -1,6 +1,7 @@
 from datetime import date
 
 import pytest
+from django.test import override_settings
 
 from apps.medicines.models import InventoryBatch, MedicineItem
 from apps.ocr.models import OCRCandidate, OCRJob
@@ -116,3 +117,29 @@ def test_confirm_is_scoped_to_owner(
 
     assert response.status_code == 404
     assert InventoryBatch.objects.count() == 0
+
+
+@pytest.mark.django_db
+@override_settings(OCR_ENABLED=False)
+def test_disabled_ocr_rejects_confirm_without_inventory_or_cleanup(
+    api_client, user, mocker
+):
+    delay = mocker.patch("apps.ocr.api.views.delete_ocr_job_images.delay")
+    job = OCRJob.objects.create(
+        user=user,
+        status=OCRJob.Status.SUCCEEDED,
+        image_keys={"front": "front"},
+    )
+    OCRCandidate.objects.create(job=job, medicine_name="识别名称")
+    api_client.force_authenticate(user)
+
+    response = api_client.post(
+        f"/api/v1/ocr/jobs/{job.id}/confirm",
+        confirm_payload(),
+        format="json",
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {"code": "ocr_disabled"}
+    assert InventoryBatch.objects.count() == 0
+    delay.assert_not_called()

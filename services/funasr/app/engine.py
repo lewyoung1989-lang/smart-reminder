@@ -1,3 +1,15 @@
+MODEL_CONFIG = {
+    "model": "paraformer-zh",
+    "model_revision": "v2.0.4",
+    "vad_model": "fsmn-vad",
+    "vad_model_revision": "v2.0.4",
+    "punc_model": "ct-punc",
+    "punc_model_revision": "v2.0.4",
+    "device": "cpu",
+    "disable_update": True,
+}
+
+
 class FunAsrEngine:
     def __init__(self, model_factory=None):
         self._model_factory = model_factory
@@ -11,16 +23,7 @@ class FunAsrEngine:
             from funasr import AutoModel
 
             self._model_factory = AutoModel
-        self._model = self._model_factory(
-            model="paraformer-zh",
-            model_revision="v2.0.4",
-            vad_model="fsmn-vad",
-            vad_model_revision="v2.0.4",
-            punc_model="ct-punc",
-            punc_model_revision="v2.0.4",
-            device="cpu",
-            disable_update=True,
-        )
+        self._model = self._model_factory(**MODEL_CONFIG)
         self.ready = True
 
     def transcribe(self, tensor):

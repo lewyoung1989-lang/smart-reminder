@@ -269,3 +269,22 @@ def test_validator_requires_ocr_secrets_when_enabled(tmp_path):
     assert result.returncode == 1
     assert "S3_ACCESS_KEY_ID" in result.stderr
     assert "MINIO_ROOT_PASSWORD" in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("timeout", "expected_code"),
+    (("25", 0), ("25.1", 1)),
+)
+def test_validator_caps_asr_timeout_below_outer_proxy_timeouts(
+    tmp_path, timeout, expected_code
+):
+    values = valid_example_values()
+    values["ASR_TIMEOUT_SECONDS"] = timeout
+    if float(timeout) >= int(values["ASR_LEASE_TTL_SECONDS"]):
+        values["ASR_LEASE_TTL_SECONDS"] = "26"
+
+    result = run_validator(tmp_path, values)
+
+    assert result.returncode == expected_code
+    if expected_code:
+        assert "ASR_TIMEOUT_SECONDS" in result.stderr
