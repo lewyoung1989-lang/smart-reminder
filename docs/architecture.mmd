@@ -1,7 +1,7 @@
 flowchart TB
   subgraph Client["Flutter App"]
     UI["首页 / 提醒 / 药箱 / 家庭"]
-    Voice["麦克风 / 增量转写 / 草稿确认"]
+    Voice["麦克风 / 短音频转写 / 草稿确认"]
     Local["Drift / 离线队列 / 本地规则"]
     Bridge["原生能力适配器"]
     UI --> Voice
@@ -20,7 +20,7 @@ flowchart TB
     Reminder["提醒规则 / 条件引擎"]
     Medicine["药品 / 批次 / 服药"]
     OCR["OCR 编排"]
-    VoiceToken["语音短时令牌 / 会话"]
+    VoiceAPI["语音上传 / 转写"]
     Draft["提醒草稿 / 确认"]
     Parser["确定性时间解析 / 实体解析"]
     Validator["Pydantic + JSON Schema"]
@@ -36,10 +36,10 @@ flowchart TB
     Compute["Lighthouse / CVM"]
     Observe["CLS / 腾讯云监控"]
     Secret["CAM / KMS"]
+    ASR["自建 FunASR 服务"]
   end
 
   subgraph Provider["外部 Provider 适配层"]
-    ASR["阿里云智能语音交互"]
     LLM["DeepSeek 官方 API / 百炼"]
     OCRProvider["RapidOCR / 可选阿里云 OCR"]
     Weather["和风天气"]
@@ -54,9 +54,9 @@ flowchart TB
   UI --> Reminder
   UI --> Medicine
   UI --> OCR
-  Voice --> ASR
-  Voice --> VoiceToken
-  VoiceToken --> Draft
+  Voice --> VoiceAPI
+  VoiceAPI --> ASR
+  VoiceAPI --> Draft
   Draft --> Parser
   Parser --> LLM
   Parser --> Validator

@@ -35,7 +35,7 @@
 | 数据库 | PostgreSQL | 适合家庭关系、库存批次和审计数据 |
 | 药箱设计 | 药品档案与库存批次分离 | 同一种药可能有多盒、不同有效期和存放位置 |
 | 中药能力 | 首版保留方剂和处方结构 | 先拍照并手动确认，不自动识别每味饮片和剂量 |
-| 语音识别 | 阿里云智能语音交互 | 中文识别成熟，通过 Provider Adapter 与腾讯云部署解耦 |
+| 语音识别 | 自建 FunASR 服务端 | 中文短语音识别、VAD 和标点能力匹配提醒场景，通过 Provider Adapter 保持可替换性 |
 | 语义解析 | 本地规则优先，DeepSeek 兜底 | 简单时间本地解析，复杂条件用大模型转为受控 JSON |
 | 语音安全边界 | 只创建草稿，必须确认 | 首版不允许语音直接删除、停用或执行提醒 |
 | 开发与部署 | 本地先行，再上腾讯云 | Docker Compose 完成本地闭环，核心流程稳定后部署到 `aipupu.cloud` 对应的腾讯云预发布环境 |
@@ -48,7 +48,7 @@
 - 个人提醒与家庭共享提醒。
 - 工作日闹钟、重复日、法定节假日跳过。
 - 闹钟前天气查询和带伞、添衣提示。
-- 按住或点击麦克风说出提醒，实时展示转写文本。
+- 按住或点击麦克风说出提醒，识别完成后展示可编辑的转写文本。
 - 语音内容解析为结构化草稿，标出歧义并要求用户确认。
 - 普通提醒、重要通知、闹钟三种等级。
 - 用药计划、已服用、稍后提醒和漏服记录。
@@ -61,6 +61,8 @@
 - iPhone 真机通过局域网访问本地 Django，验证通知、闹钟和语音权限。
 
 ### 3.2 公开版前补齐
+
+公开测试与 V2 提升统一跟踪于 `2026-08-05-smart-reminder-v2-enhancements.md`；本节保留产品范围摘要。
 
 - 手机号登录、Apple 登录和账号注销。
 - 隐私政策、敏感个人信息单独同意、第三方 SDK 清单。
@@ -218,7 +220,7 @@ OCR 结果永远是候选值，不直接触发服药或丢弃药品等高风险�
 
 解析与确认规则：
 
-1. App 获取短时语音令牌，直接或经服务端适配器连接阿里云语音识别。
+1. App 录制最长 20 秒的短音频并上传 Django，由服务端适配器调用私有网络中的 FunASR；首版使用非流式识别。
 2. 简单日期、时间和重复表达优先由确定性解析器处理。
 3. 含天气条件、多步骤或模糊表达时，通过 Provider Adapter 调用 DeepSeek。
 4. Django 使用 Pydantic 和 JSON Schema 校验字段、枚举、时间范围及允许的动作。
@@ -250,7 +252,7 @@ flowchart TB
     Rule["提醒规则引擎"]
     Med["药箱与服药"]
     OCR["OCR 编排"]
-    VoiceAPI["语音令牌与草稿"]
+    VoiceAPI["语音转写与草稿"]
     Parser["确定性解析 / 实体解析"]
     Validator["Pydantic / JSON Schema"]
     Admin["管理后台"]
@@ -262,12 +264,12 @@ flowchart TB
     Redis[("Redis / TencentDB for Redis")]
     Object[("MinIO / COS")]
     Observe["CLS / 腾讯云监控"]
+    ASR["自建 FunASR 服务"]
   end
 
   subgraph External["外部服务"]
     Weather["和风天气"]
     Push["APNs / 移动推送"]
-    ASR["阿里云语音识别"]
     LLM["DeepSeek API / 百炼"]
     OCRProvider["RapidOCR / 可选阿里云 OCR"]
     Holiday["法定节假日数据"]
@@ -277,13 +279,13 @@ flowchart TB
   Native --> LocalNotice["旧版 iOS 本地通知"]
   Native --> AndroidAlarm["Android AlarmManager"]
   UI --> API
-  Voice --> ASR
   Voice --> VoiceAPI
   API --> Auth
   API --> Rule
   API --> Med
   API --> OCR
   API --> VoiceAPI
+  VoiceAPI --> ASR
   VoiceAPI --> Parser
   Parser --> LLM
   Parser --> Validator
@@ -380,7 +382,7 @@ Django 应用边界：
 | medicines | 药品档案、批次、位置、中药方剂和库存 |
 | medication | 用药计划、服药事件和漏服状态 |
 | ocr | 上传、任务、候选字段、人工确认和删除策略 |
-| voice | 短时语音令牌、转写会话、语音草稿、确认和临时数据清理 |
+| voice | 短音频校验、FunASR 转写、语音草稿、确认和临时数据清理 |
 | intent_parser | 本地时间解析、DeepSeek 适配、实体解析和结构化校验 |
 | notifications | 推送模板、设备通道、发送记录和回执 |
 | calendars | 节假日、工作日调整和版本发布 |
@@ -534,16 +536,17 @@ sequenceDiagram
   participant U as 用户
   participant A as iPhone App
   participant S as Django API
-  participant R as 阿里云语音识别
+  participant R as FunASR 服务
   participant P as 提醒意图解析器
   participant D as DeepSeek / 百炼
 
   U->>A: 点击麦克风并说出提醒
-  A->>S: 请求短时语音令牌
-  S-->>A: 返回受限令牌和会话 ID
-  A->>R: 发送音频流
-  R-->>A: 返回增量与最终转写
-  A->>S: 提交最终转写创建草稿
+  A->>S: 上传最长 20 秒的 WAV 音频
+  S->>S: 鉴权并校验大小、时长和格式
+  S->>R: 通过私有网络提交音频
+  R-->>S: 返回最终转写
+  S-->>A: 返回可编辑的转写文本
+  A->>S: 提交用户确认或修改后的转写创建草稿
   S->>P: 本地解析日期、时间和已知模板
   alt 复杂条件或本地解析不完整
     P->>D: 发送最小必要文本与 JSON Schema
@@ -584,7 +587,7 @@ API 统一使用 `/api/v1`，返回稳定错误码和 `request_id`。
 | GET `/ocr/jobs/{id}` | 查询候选结果 |
 | POST `/ocr/jobs/{id}/confirm` | 人工确认并写入药箱 |
 | GET `/calendars/workdays` | 获取带版本号的工作日数据 |
-| POST `/voice/token` | 获取阿里云语音识别短时令牌和会话 ID |
+| POST `/voice/transcriptions` | 上传短音频并通过自建 FunASR 返回最终转写 |
 | POST `/voice/reminder-drafts` | 提交最终转写并生成结构化提醒草稿 |
 | GET `/voice/reminder-drafts/{id}` | 获取草稿、歧义和校验状态 |
 | PATCH `/voice/reminder-drafts/{id}` | 用户修改草稿字段或补充歧义信息 |
@@ -593,7 +596,7 @@ API 统一使用 `/api/v1`，返回稳定错误码和 `request_id`。
 
 写操作支持 `Idempotency-Key`。列表接口统一游标分页，药箱默认每页 50 条。
 
-语音令牌必须限制有效期和用途。创建与确认接口分别使用幂等键；确认操作对草稿加行锁，同一草稿最多生成一个正式提醒。服务端从登录用户、时区和会话上下文推导身份信息，不接受模型伪造的 `owner_id`、`family_id` 或权限字段。
+草稿创建与确认接口分别使用幂等键；确认操作对草稿加行锁，同一草稿最多生成一个正式提醒。语音转写没有持久化副作用，不缓存包含 transcript 的响应，网络失败后可以重新推理。服务端从登录用户、时区和会话上下文推导身份信息，不接受模型伪造的 `owner_id`、`family_id` 或权限字段。原始音频只进入进程临时目录，并在成功、失败、超时或客户端断开时删除。
 
 ## 13. 外部服务适配
 
@@ -602,7 +605,7 @@ API 统一使用 `/api/v1`，返回稳定错误码和 `request_id`。
 - 天气：内测默认和风天气，缓存相同地点和时间窗的查询。
 - 推送：iPhone 使用 APNs，Android 第二阶段接入阿里云移动推送或厂商通道。
 - OCR：亲友内测默认使用自建 RapidOCR；业务层通过 Provider Adapter 隔离实现，阿里云 OCR 仅作为可配置的未来兜底。
-- 语音识别：阿里云智能语音交互；App 只获取短时令牌，不内置长期 AccessKey。
+- 语音识别：自建 FunASR 服务端；App 只向 Django 上传短音频，FunASR 不暴露公网端口。
 - 结构化解析：统一 `ReminderIntentProvider` 接口。本地、腾讯云预发布和生产默认调用 DeepSeek 官方 API；百炼中的 DeepSeek 保留为可配置备选。
 - 短信：公开版接入国内云短信；亲友内测可使用邀请账号减少费用。
 - 节假日：每年依据官方公告导入版本化日历，由管理员复核调休日期。
@@ -637,7 +640,7 @@ API 统一使用 `/api/v1`，返回稳定错误码和 `request_id`。
 - 图片上传使用短时签名 URL、私有存储桶和最小保留期限。
 - 日志禁止记录完整处方、服药备注、验证码和访问令牌。
 - 日志禁止记录原始音频和完整语音转写；只记录会话 ID、耗时、Provider、错误码和字段级校验结果。
-- 音频默认仅流式传输，不在业务服务端保存；转写和草稿采用短保留期，用户取消时立即安排删除。
+- 音频仅随当前转写请求传输，不进入数据库或对象存储，并在请求结束时删除；草稿采用短保留期，用户取消时立即安排删除。
 - 发送给 DeepSeek 的内容遵循最小必要原则，不包含完整药箱、家庭成员清单、处方原图或无关健康信息。
 - 腾讯云 CAM 使用最小权限角色；生产 COS 凭据、DeepSeek Key 和 APNs 密钥使用 KMS 或等价密钥管理，不进入镜像和源码。
 - 管理员查看敏感数据需要明确权限并写入审计日志。
@@ -667,7 +670,7 @@ API 统一使用 `/api/v1`，返回稳定错误码和 `request_id`。
 - OCR 解析测试：中文日期、英文 EXP、模糊照片、多日期和低置信度。
 - Flutter Widget 测试：首页、药箱筛选、新建提醒和确认流程。
 - 语音解析契约测试：简单时间、本地优先、多条件、歧义、非法 JSON、Prompt Injection 和越权实体。
-- Provider 适配器测试：阿里云语音断流、令牌过期、DeepSeek 超时、百炼与官方 API 切换。
+- Provider 适配器测试：FunASR 超时、服务不可用、空转写、非法响应、DeepSeek 超时及百炼与官方 API 切换。
 - Flutter Widget 测试补充：麦克风权限、识别中、转写失败、草稿修改、确认与取消。
 - 离线同步测试：重复重放、冲突解决和恢复网络。
 
@@ -716,7 +719,7 @@ Mac 使用 Docker Compose 启动 Django、PostgreSQL、Redis、Celery Worker、C
 | 缓存与队列 | Docker Redis，后续 TencentDB for Redis | Celery broker、短期草稿和分布式锁 |
 | 图片与临时文件 | COS | 私有 Bucket、签名 URL、生命周期自动删除 |
 | OCR | Lighthouse/CVM 上独立 RapidOCR Worker；阿里云 OCR 可选 | CPU 推理药名、批号和有效期候选，队列并发 1，无需 GPU |
-| 语音 | 智能语音交互 | 流式中文 ASR 与短时令牌 |
+| 语音 | Lighthouse/CVM 上独立 FunASR 服务 | 私有网络内的短音频非流式中文 ASR，首版并发 1 |
 | 大模型 | DeepSeek 官方 API；百炼可选 | 通过 Provider Adapter 切换，不绑定业务代码 |
 | 推送 | APNs；后续移动推送 | iPhone 首发，Android 第二阶段 |
 | 日志与监控 | CLS + 腾讯云监控 | 脱敏日志、任务延迟、错误率与预算告警 |
@@ -724,9 +727,9 @@ Mac 使用 Docker Compose 启动 Django、PostgreSQL、Redis、Celery Worker、C
 
 #### 18.2.1 首期低成本配置
 
-亲友内测使用腾讯云轻量应用服务器承载同一套 Docker Compose，不改变应用架构。2026-08-04 核对的活动档位中，`4 核 4 GB / 3 Mbps / 上海 / 1 年` 适合作为短期内测首选；OCR Worker 仍限制并发为 1，图片存入私有 COS。活动配置和续费价格可能变化，部署前必须重新确认系统盘、月流量、Linux 镜像和续费成本。
+亲友内测使用腾讯云轻量应用服务器承载同一套 Docker Compose，不改变应用架构。2026-08-04 核对的 `4 核 4 GB / 3 Mbps / 上海 / 1 年` 活动档位只适合作为不启动 FunASR 的应用与 OCR 基线，不能直接视为语音内测配置。完成 FunASR CPU 与常驻内存验证后，优先选择至少 8 GB 内存的同机方案，或把 FunASR 放到独立内网实例；OCR Worker 和 FunASR 首版并发均限制为 1。活动配置和续费价格可能变化，部署前必须重新确认系统盘、月流量、Linux 镜像和续费成本。
 
-首批少量用户可将 PostgreSQL 和 Redis 同机运行在 4 GB 实例，启用每日加密备份；公开测试前再迁移到 TencentDB 托管服务。公网只开放 SSH、HTTP 和 HTTPS，数据库、Redis 与管理端口不得直接暴露。
+首批少量用户可将 PostgreSQL 和 Redis 与应用同机运行，启用每日加密备份；如果 FunASR 也同机部署，则整机内存不得低于技术验证确认的容量。公开测试前再迁移到 TencentDB 托管服务。公网只开放 SSH、HTTP 和 HTTPS，数据库、Redis、FunASR 与管理端口不得直接暴露。
 
 ### 18.3 公开版本
 
@@ -742,10 +745,10 @@ Mac 使用 Docker Compose 启动 Django、PostgreSQL、Redis、Celery Worker、C
 
 | 阶段 | 时间 | 交付物 |
 |---|---:|---|
-| 0. 准备 | 1-2 周 | 产品名称、原型确认、Apple 开发者账号、天气/语音/DeepSeek 测试账号、RapidOCR 技术验证 |
+| 0. 准备 | 1-2 周 | 产品名称、原型确认、Apple 开发者账号、天气/DeepSeek 测试账号、FunASR 与 RapidOCR 技术验证 |
 | 1. 工程基础 | 3-4 周 | Flutter/Django 项目、认证、家庭、CI、开发环境 |
 | 2. iPhone 提醒闭环 | 4-5 周 | 本地通知/AlarmKit 适配、通知等级、规则、天气预检查、离线兜底 |
-| 3. 语音草稿 | 3-4 周 | 阿里云 ASR、确定性解析、DeepSeek 适配、Schema 校验和确认页 |
+| 3. 语音草稿 | 3-4 周 | FunASR 服务端、短音频上传、确定性解析、DeepSeek 适配、Schema 校验和确认页 |
 | 4. 用药与药箱 | 5-6 周 | 用药计划、服药动作、药品档案、库存批次、搜索筛选 |
 | 5. OCR 与模板 | 3-4 周 | 药盒识别、有效期确认、洗车和买票模板、中药占位 |
 | 6. 家庭与可靠性 | 3-4 周 | 共享权限、升级提醒、审计、备份、监控和异常恢复 |
@@ -765,7 +768,7 @@ Mac 使用 Docker Compose 启动 Django、PostgreSQL、Redis、Celery Worker、C
 ### 账号与供应商
 
 - 注册 Apple Developer、Android 分发渠道、域名和云账号。
-- 申请天气、阿里云语音、DeepSeek、短信、对象存储和推送服务；阿里云 OCR 账号只在启用云端兜底时申请。
+- 申请天气、DeepSeek、短信、对象存储和推送服务；完成 FunASR 服务器资源评估；阿里云 OCR 账号只在启用云端兜底时申请。
 - 建立密钥轮换、费用上限和服务到期提醒。
 
 ### 内容与数据
@@ -789,11 +792,11 @@ Mac 使用 Docker Compose 启动 Django、PostgreSQL、Redis、Celery Worker、C
 
 | 阶段 | 每月基础成本 | 主要项目 |
 |---|---:|---|
-| 本地开发/演示 | 50-300 元 | DeepSeek、语音测试调用、少量对象存储；OCR 在本机 CPU 运行 |
-| 推荐亲友内测 | 700-1500 元 | Lighthouse/CVM（含 OCR Worker）、TencentDB、COS、CLS、天气、语音和模型调用 |
-| 早期公开版 | 1500-5000 元 | 独立生产资源、OCR 计算资源、监控、短信、语音、模型与公网流量 |
+| 本地开发/演示 | 50-300 元 | DeepSeek、少量对象存储；FunASR 与 OCR 在本机 CPU 运行 |
+| 推荐亲友内测 | 700-1800 元 | Lighthouse/CVM（含 FunASR 与 OCR Worker）、TencentDB、COS、CLS、天气和模型调用 |
+| 早期公开版 | 1500-5000 元 | 独立生产资源、FunASR/OCR 计算资源、监控、短信、模型与公网流量 |
 
-另有 Apple Developer 年费、国内应用市场可能要求的材料、域名和备案相关成本。自建 OCR 的主要变量是 Lighthouse/CVM CPU 和内存；短信、语音和推送费用随调用量增长，必须设置预算告警。
+另有 Apple Developer 年费、国内应用市场可能要求的材料、域名和备案相关成本。FunASR 与自建 OCR 的主要变量是 Lighthouse/CVM CPU 和内存；短信、推送和模型费用随调用量增长，必须设置预算告警。
 
 ## 22. 主要风险
 
@@ -817,7 +820,7 @@ Mac 使用 Docker Compose 启动 Django、PostgreSQL、Redis、Celery Worker、C
 - 本文档通过最终评审。
 - iPhone 首发和内测范围不再增加新模块。
 - UI 原型中的五条核心流程获得确认：工作日闹钟、语音草稿、服药、药箱、OCR。
-- 阿里云语音、DeepSeek、天气、RapidOCR 和 APNs 各完成一次最小技术验证；启用阿里云 OCR 兜底前再单独验证其适配器。
+- FunASR、DeepSeek、天气、RapidOCR 和 APNs 各完成一次最小技术验证；启用阿里云 OCR 兜底前再单独验证其适配器。
 - 确认现有 iPhone 的 iOS 版本；若低于 iOS 26，落实一台 AlarmKit 验收设备。
 - 本地 Docker Compose 可一条命令启动，iPhone 能通过局域网完成登录和创建提醒。
 - 语音表达不会未经确认创建正式提醒，也不能删除、停用或执行提醒。
@@ -830,6 +833,6 @@ Mac 使用 Docker Compose 启动 Django、PostgreSQL、Redis、Celery Worker、C
 - Android 精确闹钟：<https://developer.android.com/develop/background-work/services/alarms/schedule>
 - Flutter：<https://docs.flutter.dev/>
 - Django：<https://docs.djangoproject.com/>
-- 阿里云智能语音交互：<https://help.aliyun.com/product/30413.html>
+- FunASR：<https://github.com/modelscope/FunASR>
 - 阿里云百炼：<https://help.aliyun.com/product/2400256.html>
 - DeepSeek API：<https://api-docs.deepseek.com/>

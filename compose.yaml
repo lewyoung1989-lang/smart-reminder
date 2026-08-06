@@ -55,6 +55,9 @@ services:
       POSTGRES_PORT: "5432"
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
+      ASR_BASE_URL: http://funasr:8000
+      ASR_REDIS_URL: redis://redis:6379/0
+      ASR_THROTTLE_REDIS_URL: redis://redis:6379/2
     command: sh -c "python manage.py migrate && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2"
     ports:
       - "8000:8000"
@@ -63,6 +66,43 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      funasr:
+        condition: service_healthy
+
+  funasr-model-init:
+    build:
+      context: .
+      dockerfile: services/funasr/Dockerfile
+    command: python -m app.download_models
+    environment:
+      MODELSCOPE_CACHE: /models
+      HF_HOME: /models/huggingface
+    volumes:
+      - funasr_models:/models
+    restart: "no"
+
+  funasr:
+    build:
+      context: .
+      dockerfile: services/funasr/Dockerfile
+    environment:
+      MODELSCOPE_CACHE: /models
+      HF_HOME: /models/huggingface
+    volumes:
+      - type: volume
+        source: funasr_models
+        target: /models
+        read_only: true
+    restart: unless-stopped
+    depends_on:
+      funasr-model-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 30
+      start_period: 120s
 
   worker:
     build:
@@ -89,5 +129,6 @@ services:
         condition: service_healthy
 
 volumes:
+  funasr_models:
   postgres_data:
   minio_data:

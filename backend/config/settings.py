@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 
@@ -47,6 +48,7 @@ INSTALLED_APPS = [
     "rest_framework.authtoken",
     "apps.core",
     "apps.reminders",
+    "apps.voice",
 ]
 
 MIDDLEWARE = [
@@ -106,3 +108,40 @@ DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
 DEEPSEEK_BASE_URL = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
 DEEPSEEK_TIMEOUT_SECONDS = float(os.environ.get("DEEPSEEK_TIMEOUT_SECONDS", "8"))
+
+ASR_PROVIDER = os.environ.get("ASR_PROVIDER", "funasr")
+ASR_BASE_URL = os.environ.get("ASR_BASE_URL", "http://localhost:18001")
+ASR_MODEL = os.environ.get("ASR_MODEL", "paraformer-zh")
+ASR_TIMEOUT_SECONDS = float(os.environ.get("ASR_TIMEOUT_SECONDS", "20"))
+ASR_MAX_AUDIO_BYTES = int(os.environ.get("ASR_MAX_AUDIO_BYTES", str(4 * 1024 * 1024)))
+ASR_MAX_REQUEST_BYTES = int(os.environ.get("ASR_MAX_REQUEST_BYTES", str(5 * 1024 * 1024)))
+ASR_MIN_DURATION_SECONDS = float(os.environ.get("ASR_MIN_DURATION_SECONDS", "0.3"))
+ASR_MAX_DURATION_SECONDS = float(os.environ.get("ASR_MAX_DURATION_SECONDS", "20"))
+ASR_GLOBAL_CONCURRENCY = int(os.environ.get("ASR_GLOBAL_CONCURRENCY", "1"))
+ASR_CONCURRENCY_PER_USER = int(os.environ.get("ASR_CONCURRENCY_PER_USER", "1"))
+if ASR_GLOBAL_CONCURRENCY != 1 or ASR_CONCURRENCY_PER_USER != 1:
+    raise ImproperlyConfigured("V1 only supports ASR concurrency of 1")
+ASR_LEASE_TTL_SECONDS = int(os.environ.get("ASR_LEASE_TTL_SECONDS", "25"))
+ASR_USER_RATE = os.environ.get("ASR_USER_RATE", "10/min")
+ASR_IP_RATE = os.environ.get("ASR_IP_RATE", "30/min")
+ASR_REDIS_URL = os.environ.get("ASR_REDIS_URL", CELERY_BROKER_URL)
+ASR_THROTTLE_REDIS_URL = os.environ.get("ASR_THROTTLE_REDIS_URL", "")
+ASR_TRUSTED_PROXY_IPS = [
+    address.strip()
+    for address in os.environ.get("ASR_TRUSTED_PROXY_IPS", "").split(",")
+    if address.strip()
+]
+
+if ASR_THROTTLE_REDIS_URL:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": ASR_THROTTLE_REDIS_URL,
+            "KEY_PREFIX": "smart-reminder-asr-throttle",
+        }
+    }
+
+REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"] = {
+    "voice_transcription_user": ASR_USER_RATE,
+    "voice_transcription_ip": ASR_IP_RATE,
+}
