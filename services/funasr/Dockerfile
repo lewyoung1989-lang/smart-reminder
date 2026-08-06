@@ -1,5 +1,7 @@
 FROM python:3.11.13-slim-bookworm
 
+ARG PIP_INDEX_URL=https://pypi.org/simple
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     MODELSCOPE_CACHE=/models \
@@ -8,7 +10,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /srv/funasr
 
 COPY services/funasr/requirements.txt ./requirements.txt
-RUN python -m pip install --no-cache-dir -r requirements.txt
+RUN python -m pip install --no-cache-dir --index-url "$PIP_INDEX_URL" \
+    -r requirements.txt
 
 COPY services/funasr/app ./app
 COPY services/funasr/smoke ./smoke

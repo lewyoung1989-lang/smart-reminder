@@ -25,12 +25,23 @@ def load_local_compose():
 
 def test_python_images_accept_a_configurable_package_index():
     services = load_local_compose()["services"]
-    for name in ("api", "worker", "ocr-worker", "beat"):
+    for name in (
+        "api",
+        "worker",
+        "ocr-worker",
+        "beat",
+        "funasr-model-init",
+        "funasr",
+    ):
         assert services[name]["build"]["args"]["PIP_INDEX_URL"] == (
             "${PIP_INDEX_URL:-https://pypi.org/simple}"
         )
 
-    for dockerfile in ("backend/Dockerfile", "backend/Dockerfile.ocr"):
+    for dockerfile in (
+        "backend/Dockerfile",
+        "backend/Dockerfile.ocr",
+        "services/funasr/Dockerfile",
+    ):
         content = (REPO_ROOT / dockerfile).read_text()
         assert "ARG PIP_INDEX_URL=https://pypi.org/simple" in content
         assert '--index-url "$PIP_INDEX_URL"' in content

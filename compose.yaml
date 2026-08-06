@@ -84,6 +84,8 @@ services:
     build:
       context: .
       dockerfile: services/funasr/Dockerfile
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
     command: python -m app.download_models
     environment:
       MODELSCOPE_CACHE: /models
@@ -96,6 +98,8 @@ services:
     build:
       context: .
       dockerfile: services/funasr/Dockerfile
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
     environment:
       MODELSCOPE_CACHE: /models
       HF_HOME: /models/huggingface
