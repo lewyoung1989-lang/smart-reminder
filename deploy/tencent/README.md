@@ -1,6 +1,6 @@
 # 腾讯云单机部署手册
 
-本手册用于把智能生活提醒后端部署到腾讯云 Ubuntu 服务器。`https://aipupu.cloud` 提供 API，`https://files.aipupu.cloud` 提供药盒图片的短期签名上传。当前 4 核 4 GB 亲友内测配置运行 Django API、单进程 Celery Worker、单进程 FunASR、PostgreSQL、Redis 和 Nginx。RapidOCR、Celery Beat 与私有 MinIO 的代码、Compose 服务和数据卷继续保留，但生产默认 `OCR_ENABLED=false`，`ocr` profile 不自动启动这些服务。
+本手册用于把智能生活提醒后端部署到腾讯云 Ubuntu 服务器。`https://aipupu.cloud` 提供 API，`https://files.aipupu.cloud` 提供药盒图片的短期签名上传。当前 4 核 4 GB 亲友内测配置运行 Django API、单进程 Celery Worker、单进程 FunASR、PostgreSQL、Redis 和 Nginx。RapidOCR、Celery Beat 与私有 MinIO 的代码、Compose 服务和数据卷继续保留，但生产默认 `OCR_ENABLED=false`，`ocr` profile 不自动启动这些服务。关闭 OCR 时，已认证用户访问所有 `/api/v1/ocr/*` 入口统一收到 `503 {"code":"ocr_disabled"}`，未认证请求仍先由 DRF 返回 `401`。
 
 生产环境中禁止提交或打印服务器密码、SSH 私钥、Bearer Token、Django Secret、数据库密码和 DeepSeek Key。
 
@@ -128,6 +128,8 @@ install -m 0600 deploy/tencent/env.production.example \
 脚本不会 `source` 环境文件，也不会把密钥放入命令参数。生产配置必须同时包含 `S3_INTERNAL_ENDPOINT=http://minio:9000` 和 `S3_PUBLIC_ENDPOINT=https://files.aipupu.cloud`；前者供 API/OCR Worker 内部读删，后者只用于生成 iPhone 上传签名。
 
 `configure_secrets.sh` 会为旧环境文件补齐非秘密 ASR 设置和 `OCR_ENABLED=false`。默认发布不要求 MinIO/S3 凭据；需要恢复 OCR 时，先把 `OCR_ENABLED` 改为 `true`，再运行该脚本生成或补齐 MinIO/S3 密钥并重新校验。`ASR_TRUSTED_PROXY_IPS` 必须只有 `172.29.0.10`，对应 `asr_proxy` 网段内 Nginx 的固定地址；不要加入宿主机、公网或整个网段。
+
+`ASR_TIMEOUT_SECONDS` 最大为 `25` 秒，Gunicorn worker timeout 固定为 `30` 秒，API 域名的 Nginx `proxy_read_timeout` 为 `35` 秒。必须保持 `ASR <= 25 < Gunicorn 30 < Nginx 35`，使 Django 能先把模型超时映射为稳定的 `504 asr_timeout`，避免外层代理提前终止连接。
 
 检查权限和配置，不显示文件内容：
 

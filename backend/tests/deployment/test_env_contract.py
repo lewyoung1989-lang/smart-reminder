@@ -1,13 +1,22 @@
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 EXAMPLE = REPO_ROOT / "deploy/tencent/env.production.example"
 VALIDATOR = REPO_ROOT / "deploy/tencent/scripts/check_env.py"
+
+
+class ComposeLoader(yaml.SafeLoader):
+    pass
+
+
+ComposeLoader.add_constructor("!reset", lambda loader, node: [])
 
 
 def parse_example_values():
@@ -271,20 +280,34 @@ def test_validator_requires_ocr_secrets_when_enabled(tmp_path):
     assert "MINIO_ROOT_PASSWORD" in result.stderr
 
 
-@pytest.mark.parametrize(
-    ("timeout", "expected_code"),
-    (("25", 0), ("25.1", 1)),
-)
-def test_validator_caps_asr_timeout_below_outer_proxy_timeouts(
-    tmp_path, timeout, expected_code
-):
-    values = valid_example_values()
-    values["ASR_TIMEOUT_SECONDS"] = timeout
-    if float(timeout) >= int(values["ASR_LEASE_TTL_SECONDS"]):
-        values["ASR_LEASE_TTL_SECONDS"] = "26"
+def test_validator_caps_asr_timeout_below_outer_proxy_timeouts(tmp_path):
+    compose = yaml.load(
+        (REPO_ROOT / "deploy/tencent/compose.production.yaml").read_text(),
+        Loader=ComposeLoader,
+    )
+    gunicorn_command = compose["services"]["api"]["command"]
+    gunicorn_timeout = int(
+        re.search(r"--timeout\s+(\d+)", gunicorn_command).group(1)
+    )
+    nginx_config = (
+        REPO_ROOT / "deploy/tencent/nginx/aipupu.cloud.conf"
+    ).read_text()
+    api_server = nginx_config.split("server_name aipupu.cloud;", 1)[1]
+    nginx_timeout = int(
+        re.search(r"proxy_read_timeout\s+(\d+)s;", api_server).group(1)
+    )
 
-    result = run_validator(tmp_path, values)
+    accepted = valid_example_values()
+    accepted["ASR_TIMEOUT_SECONDS"] = "25"
+    accepted["ASR_LEASE_TTL_SECONDS"] = "26"
+    rejected = dict(accepted)
+    rejected["ASR_TIMEOUT_SECONDS"] = "25.1"
 
-    assert result.returncode == expected_code
-    if expected_code:
-        assert "ASR_TIMEOUT_SECONDS" in result.stderr
+    accepted_result = run_validator(tmp_path, accepted)
+    rejected_result = run_validator(tmp_path, rejected)
+
+    assert accepted_result.returncode == 0, accepted_result.stderr
+    assert rejected_result.returncode == 1
+    assert "ASR_TIMEOUT_SECONDS" in rejected_result.stderr
+    asr_timeout = float(accepted["ASR_TIMEOUT_SECONDS"])
+    assert asr_timeout <= 25 < gunicorn_timeout < nginx_timeout

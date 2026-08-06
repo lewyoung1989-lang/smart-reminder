@@ -38,6 +38,41 @@ def test_upload_requires_authentication(api_client):
 
 
 @pytest.mark.django_db
+@override_settings(OCR_ENABLED=False)
+@pytest.mark.parametrize(
+    ("path", "payload"),
+    (
+        (
+            "/api/v1/ocr/uploads",
+            {
+                "kind": "front",
+                "content_type": "image/jpeg",
+                "byte_length": 100,
+            },
+        ),
+        (
+            "/api/v1/ocr/jobs",
+            {
+                "images": [
+                    {
+                        "kind": "front",
+                        "object_key": "ocr/tmp/anonymous/front.jpg",
+                    }
+                ]
+            },
+        ),
+    ),
+)
+def test_disabled_ocr_authenticates_before_returning_service_state(
+    api_client, path, payload
+):
+    response = api_client.post(path, payload, format="json")
+
+    assert response.status_code == 401
+    assert response.json() != {"code": "ocr_disabled"}
+
+
+@pytest.mark.django_db
 def test_upload_returns_private_signed_grant(api_client, user, mocker):
     create_upload = mocker.patch(
         "apps.ocr.api.views.create_upload",

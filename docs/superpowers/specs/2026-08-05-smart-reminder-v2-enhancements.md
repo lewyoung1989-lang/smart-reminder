@@ -58,6 +58,8 @@ V1 保留以下限制：
 - 只运行一个 FunASR 副本，每个副本并发 1。
 - Django 在调用模型前获取带唯一持有者 token 和自动过期时间的 Redis 全局租约，不等待；租约已占用时返回 `429 asr_busy` 和 `Retry-After`，释放时校验持有者，避免旧请求释放新租约。
 - 连接拒绝或容器未就绪返回 `503 asr_unavailable`；推理超过总超时返回 `504 asr_timeout`。
+- 生产超时层级固定为 `ASR_TIMEOUT_SECONDS <= 25` 秒、Gunicorn `30` 秒、Nginx `35` 秒，保持内层先结束并返回稳定业务错误。
+- 生产默认 `OCR_ENABLED=false`；已认证用户访问所有 `/api/v1/ocr/*` 返回 `503 {"code":"ocr_disabled"}`，未认证请求仍由认证层优先返回 `401`，不得用功能开关泄露不同的认证行为。
 - V1 不引入消息队列、Kubernetes、自动扩容或跨实例负载均衡。
 
 ### 5.1.1 腾讯单机首发容量记录
