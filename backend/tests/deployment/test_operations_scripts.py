@@ -337,11 +337,11 @@ def test_deploy_default_path_preserves_ocr_data_and_starts_funasr_first():
     data = script.index('up -d postgres redis')
     stop_ocr = script.index('stop ocr-worker minio beat')
     model_init = script.index('run --rm --no-deps funasr-model-init')
-    start_funasr = script.index('up -d --no-deps funasr')
-    health = script.index("http://127.0.0.1:8000/health")
+    start_funasr = script.index('up -d --no-deps funasr', model_init)
+    health = script.index("http://127.0.0.1:8000/health", start_funasr)
     asr_smoke = script.index("smoke_transcription.py")
     migrate = script.index('run --rm --no-deps api python manage.py migrate --noinput')
-    start_api = script.index('up -d --no-deps api worker')
+    start_api = script.index('up -d --no-deps api worker', migrate)
 
     assert "OCR_ENABLED" in script
     assert "docker compose rm" not in script
@@ -405,6 +405,46 @@ def test_deploy_preflights_candidate_and_restores_old_api_on_health_failure():
     assert 'docker tag "$OLD_API_IMAGE_ID"' in script
     assert "--force-recreate api worker" in script
     assert "API rollback health check failed" in script
+    assert "docker volume rm" not in script
+
+
+def test_deploy_traps_every_failure_after_api_replacement():
+    script = (SCRIPTS / "deploy.sh").read_text()
+    handler = script.index("handle_deploy_failure()")
+    trap = script.index("ERR", handler)
+    replace_flag = script.index("API_REPLACED=true")
+    replace = script.index("up -d --no-deps api worker", replace_flag)
+    ocr = script.index("manage.py check_ocr", replace)
+    nginx = script.index("run --rm --no-deps nginx-check nginx -t", replace)
+    success_clear = script.rindex("trap - ERR")
+    funasr_health_failure = script.index("FunASR health check failed")
+    funasr_smoke = script.index("smoke_transcription.py")
+
+    assert handler < trap < replace_flag < replace < ocr < nginx < success_clear
+    assert script.index("\n  false", funasr_health_failure) < funasr_smoke
+    assert "DEPLOY_ROLLBACK_ACTIVE" in script
+    assert "failure_status" in script
+    assert 'exit "$failure_status"' in script
+    assert script.index("rollback_funasr", handler) < script.index(
+        "rollback_api", handler
+    )
+    assert "Deployment failed; starting rollback" in script
+    assert "Deployment completed; rollback trap cleared" in script
+
+
+def test_deploy_captures_and_restores_previous_funasr_image():
+    script = (SCRIPTS / "deploy.sh").read_text()
+    capture = script.index("OLD_FUNASR_IMAGE_ID")
+    build = script.index("build api funasr")
+    disrupted = script.index("FUNASR_DISRUPTED=true")
+    stop = script.index("stop funasr", disrupted)
+    initialize = script.index("run --rm --no-deps funasr-model-init", stop)
+
+    assert capture < build < disrupted < stop < initialize
+    assert 'docker tag "$OLD_FUNASR_IMAGE_ID"' in script
+    assert "--force-recreate funasr" in script
+    assert "FunASR rollback health check failed" in script
+    assert "no previous FunASR image is available" in script
     assert "docker volume rm" not in script
 
 

@@ -126,6 +126,68 @@ def test_http_transport_posts_openai_compatible_multipart_request():
     assert response.latency_ms >= 0
 
 
+def test_http_transport_uses_one_budget_across_explicit_timeout_phases():
+    class CapturingClient:
+        def __init__(self):
+            self.timeout = None
+            self.follow_redirects = None
+
+        def post(self, url, **kwargs):
+            self.timeout = kwargs["timeout"]
+            self.follow_redirects = kwargs["follow_redirects"]
+            return httpx.Response(
+                200,
+                json={"text": "test"},
+                request=httpx.Request("POST", url),
+            )
+
+    client = CapturingClient()
+    transport = HttpxAudioTransport(client=client)
+
+    transport.post_audio(
+        "http://funasr:8000/v1/audio/transcriptions",
+        audio=io.BytesIO(b"wav"),
+        model="paraformer-zh",
+        timeout_seconds=20,
+    )
+
+    assert isinstance(client.timeout, httpx.Timeout)
+    assert client.timeout.connect == 2
+    assert client.timeout.pool == 1
+    assert client.timeout.write == 4
+    assert client.timeout.read == 13
+    assert sum(
+        (
+            client.timeout.connect,
+            client.timeout.pool,
+            client.timeout.write,
+            client.timeout.read,
+        )
+    ) <= 20
+    assert client.follow_redirects is False
+
+
+def test_http_transport_rejects_response_completed_after_total_budget(mocker):
+    client = httpx.Client(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, json={"text": "test"})
+        )
+    )
+    transport = HttpxAudioTransport(client=client)
+    mocker.patch(
+        "apps.voice.providers.funasr.monotonic",
+        side_effect=[100.0, 120.001],
+    )
+
+    with pytest.raises(AsrTimeoutError):
+        transport.post_audio(
+            "http://funasr:8000/v1/audio/transcriptions",
+            audio=io.BytesIO(b"wav"),
+            model="paraformer-zh",
+            timeout_seconds=20,
+        )
+
+
 @pytest.mark.parametrize(
     ("transport_error", "expected_error"),
     [

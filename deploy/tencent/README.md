@@ -129,7 +129,7 @@ install -m 0600 deploy/tencent/env.production.example \
 
 `configure_secrets.sh` 会为旧环境文件补齐非秘密 ASR 设置和 `OCR_ENABLED=false`。默认发布不要求 MinIO/S3 凭据；需要恢复 OCR 时，先把 `OCR_ENABLED` 改为 `true`，再运行该脚本生成或补齐 MinIO/S3 密钥并重新校验。`ASR_TRUSTED_PROXY_IPS` 必须只有 `172.29.0.10`，对应 `asr_proxy` 网段内 Nginx 的固定地址；不要加入宿主机、公网或整个网段。
 
-`ASR_TIMEOUT_SECONDS` 最大为 `25` 秒，Gunicorn worker timeout 固定为 `30` 秒，API 域名的 Nginx `proxy_read_timeout` 为 `35` 秒。必须保持 `ASR <= 25 < Gunicorn 30 < Nginx 35`，使 Django 能先把模型超时映射为稳定的 `504 asr_timeout`，避免外层代理提前终止连接。
+生产只接受 `8 <= ASR_TIMEOUT_SECONDS <= 20` 秒，Gunicorn worker timeout 固定为 `30` 秒，API 域名的 Nginx `proxy_read_timeout` 为 `35` 秒。HTTPX 使用连接 2 秒、连接池 1 秒、上传 4 秒、读取 `ASR_TIMEOUT_SECONDS-7` 秒的显式阶段预算，四阶段预算总和不超过 ASR 总预算，并在请求完成后用单调时钟把超预算结果映射为 `504 asr_timeout`。HTTPX 阶段超时无法保证任意分块读取严格服从单一硬截止，因此必须继续保持 `ASR <= 20 < Gunicorn 30 < Nginx 35` 的外层余量。
 
 检查权限和配置，不显示文件内容：
 
@@ -174,7 +174,7 @@ cd /opt/smart-reminder/app
 
 发布脚本会强制重建 Nginx 容器，因为 Git 更新配置文件时可能替换单文件 bind mount 的宿主 inode；只执行 reload 不能保证容器读到新文件。切换前先用无宿主端口的 `nginx-check` 一次性容器读取生产配置和证书执行 `nginx -t`，成功后才强制重建正式 Nginx；重建后再次检查并 reload。
 
-发布先捕获现有 API 容器的镜像 ID，再构建新 API 和 FunASR 镜像，期间旧 API 与 Nginx 继续提供服务。模型卷中匹配固定 ASR/VAD/标点 revision 的 readiness marker 存在时跳过下载；marker 缺失、损坏或 revision 过期时先停止旧 FunASR，再用与推理容器相同的 CPU、内存、PID 和数值库线程上限初始化模型。随后等待真实 `/health`，用仓库内系统合成普通话 WAV 调用 `/v1/audio/transcriptions`，并让候选 API 检查 PostgreSQL、Redis 和 FunASR，全部通过后才迁移并替换 API/Worker。smoke 和预检只输出固定成功/失败标记，不输出 transcript、连接信息或秘密。首次模型下载可能持续较长时间并占用较多磁盘；不要因终端暂时无新输出而中断。
+发布先捕获现有 API 和 FunASR 容器的镜像 ID，再构建新镜像，期间旧 API 与 Nginx 继续提供服务。模型卷中匹配固定 ASR/VAD/标点 revision 的 readiness marker 存在时跳过下载；marker 缺失、损坏或 revision 过期时先标记 FunASR 已受影响并停止旧容器，再用与推理容器相同的 CPU、内存、PID 和数值库线程上限初始化模型。随后等待真实 `/health`，用仓库内系统合成普通话 WAV 调用 `/v1/audio/transcriptions`，并让候选 API 检查 PostgreSQL、Redis 和 FunASR，全部通过后才迁移并替换 API/Worker。smoke 和预检只输出固定成功/失败标记，不输出 transcript、连接信息或秘密。首次模型下载可能持续较长时间并占用较多磁盘；不要因终端暂时无新输出而中断。
 
 证书签发成功后部署审核过的提交：
 
@@ -294,7 +294,7 @@ DEPLOY_SHA=$(git rev-parse HEAD)
 
 不要自动回滚数据库卷。数据库迁移必须采用可向后兼容的扩展/切换/清理顺序；需要恢复数据库时先停止发布并使用明确的备份恢复方案。
 
-发布脚本替换 API/Worker 后若新 API 在健康检查窗口内未就绪，会把发布开始时捕获的旧 API 镜像重新标记为当前发布标签，强制重建 API/Worker，并验证回滚后的 API 健康状态。该自动回滚不回退数据库迁移、不重建 Nginx、不删除任何卷；因此迁移仍必须向后兼容。若旧 API 容器不存在或回滚后的健康检查也失败，脚本明确报错并退出，需要按上述完整 SHA 流程人工恢复。
+发布脚本安装统一 ERR handler。FunASR 被停止或替换后发生的模型初始化、健康、smoke、候选预检或后续发布失败，以及 API/Worker 替换后的 OCR、Nginx 或最终健康失败，都会进入同一处理器。处理器先把旧 FunASR 镜像重新标记为当前标签、强制重建并等待健康，再以同样方式恢复已替换的 API/Worker；回滚命令自身不会递归触发 handler，脚本最终保留最初失败码。首次发布没有旧镜像时会明确报告，旧 API 若尚未替换则保持运行。自动回滚不回退数据库迁移、不恢复模型内容、不重建旧 Nginx，也不删除数据库卷、`funasr_models` 或其他卷，因此迁移仍必须向后兼容；任一恢复健康检查失败时需按上述完整 SHA 流程人工处理。
 
 如果新 FunASR 在 4 GB 主机触发 OOM 或持续 swap 压力，而旧 API/Nginx 仍健康：
 

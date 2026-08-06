@@ -49,16 +49,32 @@ if [[ -n "$OLD_API_CONTAINER_ID" ]]; then
   OLD_API_IMAGE_ID=$(docker inspect --format '{{.Image}}' \
     "$OLD_API_CONTAINER_ID")
 fi
+OLD_FUNASR_IMAGE_ID=""
+OLD_FUNASR_CONTAINER_ID=$("${COMPOSE[@]}" ps -q funasr)
+if [[ -n "$OLD_FUNASR_CONTAINER_ID" ]]; then
+  OLD_FUNASR_IMAGE_ID=$(docker inspect --format '{{.Image}}' \
+    "$OLD_FUNASR_CONTAINER_ID")
+fi
+
+API_REPLACED=false
+FUNASR_DISRUPTED=false
+DEPLOY_ROLLBACK_ACTIVE=false
 
 rollback_api() {
   if [[ -z "$OLD_API_IMAGE_ID" ]]; then
-    echo "API health check failed; no previous API image is available" >&2
+    echo "No previous API image is available for rollback" >&2
     return 1
   fi
 
-  echo "API health check failed; restoring previous API image" >&2
-  docker tag "$OLD_API_IMAGE_ID" "smart-reminder-api:$APP_VERSION"
-  "${COMPOSE[@]}" up -d --no-deps --force-recreate api worker
+  echo "Restoring previous API image" >&2
+  if ! docker tag "$OLD_API_IMAGE_ID" "smart-reminder-api:$APP_VERSION"; then
+    echo "API rollback image retag failed" >&2
+    return 1
+  fi
+  if ! "${COMPOSE[@]}" up -d --no-deps --force-recreate api worker; then
+    echo "API rollback container restore failed" >&2
+    return 1
+  fi
 
   for _attempt in $(seq 1 24); do
     if "${COMPOSE[@]}" exec -T api python -c \
@@ -71,6 +87,55 @@ rollback_api() {
   echo "API rollback health check failed" >&2
   return 1
 }
+
+rollback_funasr() {
+  if [[ -z "$OLD_FUNASR_IMAGE_ID" ]]; then
+    echo "FunASR rollback skipped; no previous FunASR image is available" >&2
+    return 1
+  fi
+
+  echo "Restoring previous FunASR image" >&2
+  if ! docker tag "$OLD_FUNASR_IMAGE_ID" "smart-reminder-funasr:$APP_VERSION"; then
+    echo "FunASR rollback image retag failed" >&2
+    return 1
+  fi
+  if ! "${COMPOSE[@]}" up -d --no-deps --force-recreate funasr; then
+    echo "FunASR rollback container restore failed" >&2
+    return 1
+  fi
+
+  for _attempt in $(seq 1 60); do
+    if "${COMPOSE[@]}" exec -T funasr python -c \
+      "import urllib.request; assert urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).status == 200"; then
+      return 0
+    fi
+    sleep 5
+  done
+
+  echo "FunASR rollback health check failed" >&2
+  return 1
+}
+
+handle_deploy_failure() {
+  local failure_status=${1:-1}
+  trap - ERR
+  if [[ "$DEPLOY_ROLLBACK_ACTIVE" == "true" ]]; then
+    exit "$failure_status"
+  fi
+
+  DEPLOY_ROLLBACK_ACTIVE=true
+  set +e
+  echo "Deployment failed; starting rollback" >&2
+  if [[ "$FUNASR_DISRUPTED" == "true" ]]; then
+    rollback_funasr || true
+  fi
+  if [[ "$API_REPLACED" == "true" ]]; then
+    rollback_api || true
+  fi
+  exit "$failure_status"
+}
+
+trap 'handle_deploy_failure $?' ERR
 
 "${COMPOSE[@]}" build api funasr
 if [[ "$OCR_ENABLED" == "true" ]]; then
@@ -86,9 +151,11 @@ if "${COMPOSE[@]}" run --rm --no-deps funasr-model-init \
   python -m app.download_models --check; then
   echo "FunASR model cache is ready"
 else
+  FUNASR_DISRUPTED=true
   "${COMPOSE[@]}" stop funasr
   "${COMPOSE[@]}" run --rm --no-deps funasr-model-init
 fi
+FUNASR_DISRUPTED=true
 "${COMPOSE[@]}" up -d --no-deps funasr
 
 funasr_ready=false
@@ -102,7 +169,7 @@ for _attempt in $(seq 1 60); do
 done
 if [[ "$funasr_ready" != "true" ]]; then
   echo "FunASR health check failed" >&2
-  exit 1
+  false
 fi
 
 "${COMPOSE[@]}" exec -T funasr \
@@ -113,6 +180,7 @@ fi
 "${COMPOSE[@]}" run --rm --no-deps api \
   python manage.py check_release_dependencies
 "${COMPOSE[@]}" run --rm --no-deps api python manage.py migrate --noinput
+API_REPLACED=true
 "${COMPOSE[@]}" up -d --no-deps api worker
 
 if [[ "$OCR_ENABLED" == "true" ]]; then
@@ -131,10 +199,12 @@ for _attempt in $(seq 1 24); do
     "${COMPOSE[@]}" --profile production up -d --force-recreate nginx
     "${COMPOSE[@]}" --profile production exec -T nginx nginx -t
     "${COMPOSE[@]}" --profile production exec -T nginx nginx -s reload
+    trap - ERR
+    echo "Deployment completed; rollback trap cleared"
     exit 0
   fi
   sleep 5
 done
 
-rollback_api || true
-exit 1
+echo "API health check failed" >&2
+false

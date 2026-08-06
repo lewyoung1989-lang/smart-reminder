@@ -298,18 +298,22 @@ def test_validator_caps_asr_timeout_below_outer_proxy_timeouts(tmp_path):
     )
 
     accepted = valid_example_values()
-    accepted["ASR_TIMEOUT_SECONDS"] = "25"
-    accepted["ASR_LEASE_TTL_SECONDS"] = "26"
+    accepted["ASR_TIMEOUT_SECONDS"] = "20"
     rejected = dict(accepted)
-    rejected["ASR_TIMEOUT_SECONDS"] = "25.1"
+    rejected["ASR_TIMEOUT_SECONDS"] = "20.1"
+    below_minimum = dict(accepted)
+    below_minimum["ASR_TIMEOUT_SECONDS"] = "7.9"
 
     accepted_result = run_validator(tmp_path, accepted)
     rejected_result = run_validator(tmp_path, rejected)
+    below_minimum_result = run_validator(tmp_path, below_minimum)
 
     assert accepted_result.returncode == 0, accepted_result.stderr
     assert rejected_result.returncode == 1
     assert "ASR_TIMEOUT_SECONDS" in rejected_result.stderr
+    assert below_minimum_result.returncode == 1
+    assert "ASR_TIMEOUT_SECONDS" in below_minimum_result.stderr
     asr_timeout = float(accepted["ASR_TIMEOUT_SECONDS"])
     assert gunicorn_timeout == 30
     assert nginx_timeout == 35
-    assert asr_timeout <= 25 < gunicorn_timeout < nginx_timeout
+    assert asr_timeout <= 20 < gunicorn_timeout < nginx_timeout

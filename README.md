@@ -85,7 +85,7 @@ docker compose exec funasr python -c \
 
 FunASR 不映射宿主机端口，只能由 Compose 私有网络中的 Django API 调用。音频、转写文本和上游原始响应不会写入数据库或日志；上传对象和 iPhone 临时 WAV 在请求结束后清理。上线前需另外确认目标模型权重许可证、普通话样本准确率和目标 CPU 的 p95 延迟。
 
-腾讯云亲友内测以 4 vCPU / 4 GB、单进程和单并发为首发候选，生产默认 `OCR_ENABLED=false`。关闭时，已认证用户访问所有 `/api/v1/ocr/*` 入口统一返回 `503 {"code":"ocr_disabled"}`，未认证请求仍先执行认证并返回 `401`。语音请求的超时层级固定为 `ASR_TIMEOUT_SECONDS <= 25` 秒、Gunicorn `30` 秒、Nginx `35` 秒，内层必须先于外层结束。发布脚本复用匹配固定模型 revision 的缓存 marker；marker 缺失或过期时先停止旧 FunASR，再用同等 CPU、内存和线程上限初始化模型。候选 API 必须先通过 PostgreSQL、Redis 和 FunASR 依赖预检，Nginx 配置也会在切换前用一次性容器验证；新 API 健康检查失败时自动恢复旧 API 镜像。4 GB 是否有足够余量仍以服务器真实模型的 RSS、峰值内存、swap 和 OOM 记录为准，详见 `deploy/tencent/README.md`。
+腾讯云亲友内测以 4 vCPU / 4 GB、单进程和单并发为首发候选，生产默认 `OCR_ENABLED=false`。关闭时，已认证用户访问所有 `/api/v1/ocr/*` 入口统一返回 `503 {"code":"ocr_disabled"}`，未认证请求仍先执行认证并返回 `401`。语音请求的生产总预算只允许 `8 <= ASR_TIMEOUT_SECONDS <= 20` 秒，Gunicorn 为 `30` 秒、Nginx 为 `35` 秒。HTTPX 把总预算分成连接 2 秒、连接池 1 秒、上传 4 秒和读取 `总预算-7` 秒，响应完成后还会用单调时钟拒绝已超总预算的结果；分阶段超时不是任意分块读取的数学硬截止，因此仍保留外层余量。发布脚本复用匹配固定模型 revision 的缓存 marker；marker 缺失或过期时先停止旧 FunASR，再用同等 CPU、内存和线程上限初始化模型。部署开始会保存旧 API 与 FunASR 镜像，候选 API 必须先通过 PostgreSQL、Redis 和 FunASR 依赖预检，Nginx 配置也会在切换前用一次性容器验证；发生失败时统一先恢复 FunASR，再恢复已替换的 API/Worker。4 GB 是否有足够余量仍以服务器真实模型的 RSS、峰值内存、swap 和 OOM 记录为准，详见 `deploy/tencent/README.md`。
 
 当前 Compose 的 API 端口用于本地直连，IP 限流只使用连接来源 `REMOTE_ADDR`，不会信任客户端伪造的转发头。生产环境接入 Nginx 时，必须由 Nginx 覆盖 `X-Forwarded-For` 为单一客户端 IP，并把 Nginx 到 Django 的固定来源 IP 写入 `ASR_TRUSTED_PROXY_IPS`；未在白名单中的来源仍忽略转发头。
 

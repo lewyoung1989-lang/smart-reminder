@@ -26,13 +26,18 @@ class HttpxAudioTransport:
 
     def post_audio(self, url, *, audio, model, timeout_seconds):
         started_at = monotonic()
+        timeout = self._build_timeout(timeout_seconds)
         try:
             response = self.client.post(
                 url,
                 files={"file": ("audio.wav", audio, "audio/wav")},
                 data={"model": model, "response_format": "json"},
-                timeout=timeout_seconds,
+                timeout=timeout,
+                follow_redirects=False,
             )
+            elapsed_seconds = monotonic() - started_at
+            if elapsed_seconds > timeout_seconds:
+                raise AsrTimeoutError
             self._raise_stable_provider_error(response)
             response.raise_for_status()
             payload = response.json()
@@ -45,7 +50,18 @@ class HttpxAudioTransport:
 
         return TransportResponse(
             payload=payload,
-            latency_ms=round((monotonic() - started_at) * 1000),
+            latency_ms=round(elapsed_seconds * 1000),
+        )
+
+    @staticmethod
+    def _build_timeout(timeout_seconds):
+        if timeout_seconds < 8:
+            raise ValueError("timeout_seconds must be at least 8")
+        return httpx.Timeout(
+            connect=2,
+            pool=1,
+            write=4,
+            read=timeout_seconds - 7,
         )
 
     def _raise_stable_provider_error(self, response):

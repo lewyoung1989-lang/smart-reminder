@@ -145,11 +145,11 @@ def validate(values: dict[str, str]) -> list[str]:
         errors.append("ASR_TRUSTED_PROXY_IPS must be only 172.29.0.10")
     try:
         timeout = float(values.get("ASR_TIMEOUT_SECONDS") or "0")
-        if not 0 < timeout <= 25:
+        if not 8 <= timeout <= 20:
             raise ValueError
     except ValueError:
         timeout = 0
-        errors.append("ASR_TIMEOUT_SECONDS must be between 0 and 25")
+        errors.append("ASR_TIMEOUT_SECONDS must be between 8 and 20")
     try:
         max_audio = int(values.get("ASR_MAX_AUDIO_BYTES") or "0")
         if not 0 < max_audio <= 4 * 1024 * 1024:
