@@ -5,7 +5,7 @@ usage() {
   cat >&2 <<'EOF'
 用法：logs.sh SERVICE [--since TIME] [--level LEVEL] [--follow]
 
-SERVICE 可选：api、worker、ocr-worker、beat、nginx、postgres、redis、minio、all
+SERVICE 可选：api、worker、funasr、funasr-model-init、ocr-worker、beat、nginx、postgres、redis、minio、all
 EOF
 }
 
@@ -18,13 +18,15 @@ SERVICE=$1
 shift
 
 case "$SERVICE" in
-  api|worker|ocr-worker|beat|nginx|postgres|redis|minio)
+  api|worker|funasr|funasr-model-init|ocr-worker|beat|nginx|postgres|redis|minio)
     TAGS=("CONTAINER_TAG=smart-reminder/$SERVICE")
     ;;
   all)
     TAGS=(
       "CONTAINER_TAG=smart-reminder/api"
       "CONTAINER_TAG=smart-reminder/worker"
+      "CONTAINER_TAG=smart-reminder/funasr"
+      "CONTAINER_TAG=smart-reminder/funasr-model-init"
       "CONTAINER_TAG=smart-reminder/ocr-worker"
       "CONTAINER_TAG=smart-reminder/beat"
       "CONTAINER_TAG=smart-reminder/nginx"

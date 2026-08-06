@@ -1,6 +1,6 @@
 # 腾讯云单机部署手册
 
-本手册用于把智能生活提醒后端部署到腾讯云 Ubuntu 服务器。`https://aipupu.cloud` 提供 API，`https://files.aipupu.cloud` 提供药盒图片的短期签名上传。服务器运行 Django API、普通 Celery Worker、Celery Beat、独立 RapidOCR Worker、PostgreSQL、Redis、私有 MinIO 和 Nginx。
+本手册用于把智能生活提醒后端部署到腾讯云 Ubuntu 服务器。`https://aipupu.cloud` 提供 API，`https://files.aipupu.cloud` 提供药盒图片的短期签名上传。当前 4 核 4 GB 亲友内测配置运行 Django API、单进程 Celery Worker、单进程 FunASR、PostgreSQL、Redis 和 Nginx。RapidOCR、Celery Beat 与私有 MinIO 的代码、Compose 服务和数据卷继续保留，但生产默认 `OCR_ENABLED=false`，`ocr` profile 不自动启动这些服务。
 
 生产环境中禁止提交或打印服务器密码、SSH 私钥、Bearer Token、Django Secret、数据库密码和 DeepSeek Key。
 
@@ -127,6 +127,8 @@ install -m 0600 deploy/tencent/env.production.example \
 
 脚本不会 `source` 环境文件，也不会把密钥放入命令参数。生产配置必须同时包含 `S3_INTERNAL_ENDPOINT=http://minio:9000` 和 `S3_PUBLIC_ENDPOINT=https://files.aipupu.cloud`；前者供 API/OCR Worker 内部读删，后者只用于生成 iPhone 上传签名。
 
+`configure_secrets.sh` 会为旧环境文件补齐非秘密 ASR 设置和 `OCR_ENABLED=false`。默认发布不要求 MinIO/S3 凭据；需要恢复 OCR 时，先把 `OCR_ENABLED` 改为 `true`，再运行该脚本生成或补齐 MinIO/S3 密钥并重新校验。`ASR_TRUSTED_PROXY_IPS` 必须只有 `172.29.0.10`，对应 `asr_proxy` 网段内 Nginx 的固定地址；不要加入宿主机、公网或整个网段。
+
 检查权限和配置，不显示文件内容：
 
 ```bash
@@ -170,6 +172,8 @@ cd /opt/smart-reminder/app
 
 发布脚本会强制重建 Nginx 容器，因为 Git 更新配置文件时可能替换单文件 bind mount 的宿主 inode；只执行 reload 不能保证容器读到新文件。重建后脚本仍会执行 `nginx -t`，成功才 reload。
 
+发布先构建新 API 和 FunASR 镜像，期间旧 API 与 Nginx 继续提供服务。随后脚本初始化持久化模型卷、等待真实 `/health`、用仓库内系统合成普通话 WAV 调用 `/v1/audio/transcriptions`，通过后才迁移并替换 API。smoke 只输出固定成功/失败标记，不输出 transcript。首次模型下载可能持续较长时间并占用较多磁盘；不要因终端暂时无新输出而中断。
+
 证书签发成功后部署审核过的提交：
 
 ```bash
@@ -204,13 +208,14 @@ curl --head https://files.aipupu.cloud/
 {"status":"ok","service":"smart-reminder-api"}
 ```
 
-文件域名的匿名 `HEAD/GET` 必须被拒绝。MinIO Console 不配置公网域名，`9000/9001` 不得出现在宿主端口列表中。部署脚本会运行：
+文件域名的匿名 `HEAD/GET` 必须被拒绝。MinIO Console 不配置公网域名，`9000/9001` 不得出现在宿主端口列表中。OCR 只在 `OCR_ENABLED=true` 时由部署脚本运行以下检查：
 
 ```bash
 docker compose \
   --env-file /opt/smart-reminder/shared/.env.production \
   -f compose.yaml -f deploy/tencent/compose.production.yaml \
-  run --rm ocr-worker python manage.py check_ocr \
+  --profile ocr run --rm --no-deps ocr-worker \
+  python manage.py check_ocr \
   tests/ocr/fixtures/medicine_front.jpg
 ```
 
@@ -218,7 +223,7 @@ docker compose \
 
 ## 8. MinIO 与临时图片
 
-`minio-init` 创建私有 `smart-reminder-private` 桶、独立应用用户和最小权限策略。Django/RapidOCR 不使用 MinIO root 凭据。药盒图片确认后立即异步删除；未确认或失败任务按 24 小时策略清理，bucket 的 1 天生命周期规则处理孤儿上传。
+`OCR_ENABLED=false` 时，部署脚本只 `stop` 已有 `ocr-worker`、`minio` 和 `beat`，不执行 `rm`，不删除 `minio_data` 卷，因此已有临时图片和服务定义可恢复。`OCR_ENABLED=true` 时，`minio-init` 创建私有 `smart-reminder-private` 桶、独立应用用户和最小权限策略。Django/RapidOCR 不使用 MinIO root 凭据。药盒图片确认后立即异步删除；未确认或失败任务按 24 小时策略清理，bucket 的 1 天生命周期规则处理孤儿上传。
 
 MinIO 数据不进入 PostgreSQL 备份，也不复制到 COS。服务中断期间无法精确计时删除，恢复后由 Celery 和 MinIO 生命周期继续执行。磁盘损坏导致临时图片丢失时，用户重拍或手动录入即可。
 
@@ -287,6 +292,13 @@ DEPLOY_SHA=$(git rev-parse HEAD)
 
 不要自动回滚数据库卷。数据库迁移必须采用可向后兼容的扩展/切换/清理顺序；需要恢复数据库时先停止发布并使用明确的备份恢复方案。
 
+如果新 FunASR 在 4 GB 主机触发 OOM 或持续 swap 压力，而旧 API/Nginx 仍健康：
+
+1. 记录 `docker stats --no-stream`、`free -h`、`df -h`、容器状态、重启次数和 OOM 标记。
+2. 只执行 `docker compose ... stop funasr`，不要停止 PostgreSQL、Redis、旧 API 或 Nginx。
+3. checkout 上一个成功的完整提交并按其发布手册恢复应用；不得删除数据库卷、`funasr_models` 模型卷或 `minio_data` 卷。
+4. 在 V2 路线图回填证据，评估增加内存或拆分 FunASR 主机，不通过提高并发或移除宿主预留来掩盖容量不足。
+
 ## 12. 日志路径与查询
 
 生产日志保留 7 天。运行日志和运维任务日志的存储方式不同：
@@ -308,7 +320,7 @@ cd /opt/smart-reminder/app
 ./deploy/tencent/scripts/logs.sh all --since "30 minutes ago"
 ```
 
-脚本支持的服务名为 `api`、`worker`、`ocr-worker`、`beat`、`nginx`、`postgres`、`redis`、`minio` 和 `all`。服务器账户没有 journal 读取权限时，在命令前加 `sudo`。
+脚本支持的服务名为 `api`、`worker`、`funasr`、`funasr-model-init`、`ocr-worker`、`beat`、`nginx`、`postgres`、`redis`、`minio` 和 `all`。服务器账户没有 journal 读取权限时，在命令前加 `sudo`。
 
 `--level` 根据日志正文中的 `level=ERROR`、Celery `ERROR`、Nginx `[error]` 等标准级别标记过滤，不使用 Docker 按 stdout/stderr 推断的 journal priority。未包含常见级别标记的第三方服务行不会出现在级别过滤结果中；排查完整上下文时省略 `--level`。
 
@@ -368,11 +380,20 @@ curl --fail --show-error --silent \
 ./deploy/tencent/scripts/logs.sh all --since "30 minutes ago"
 df -h
 free -h
+docker stats --no-stream
+docker compose \
+  --env-file /opt/smart-reminder/shared/.env.production \
+  -f compose.yaml -f deploy/tencent/compose.production.yaml \
+  ps
+docker inspect --format '{{.State.OOMKilled}} {{.RestartCount}}' \
+  smart-reminder-funasr-1
 ```
 
 日志不得包含环境文件内容、Token、完整用户输入或模型响应。构建失败时保持现有容器运行；迁移失败时不要启动新 API；磁盘不足时先列出镜像和备份，禁止删除 PostgreSQL 卷。
 
 OCR Worker 内存不足时先停止 `ocr-worker`，核心提醒 API 可继续运行；不要临时提高并发或移除 `1.2 GB` 内存上限。
+
+FunASR 在 4 核 4 GB 主机上固定单进程、全局并发 1、每用户并发 1，数值库线程限制为 2；不要临时增加 Uvicorn workers、Celery concurrency 或模型副本。发布后记录模型冷启动时间、稳定 RSS、一次请求峰值内存、转写耗时、swap 与 OOM 情况。可用 `/usr/bin/time` 包裹仓库 smoke 命令测量总耗时，输出仍不得包含 transcript 或音频内容。
 
 ## 14. iPhone 验收
 
@@ -385,8 +406,9 @@ OCR Worker 内存不足时先停止 `ocr-worker`，核心提醒 API 可继续运
 在 iPhone 上完成以下流程：
 
 1. 创建一条文字提醒草稿、确认并验证本地通知。
-2. 拍摄药盒正面和有效期区域，确认上传地址 host 为 `files.aipupu.cloud`。
-3. 等待 OCR 候选，修改错误字段后人工确认。
-4. 确认前药箱不得新增库存；确认后新增库存，并验证两张临时图片已删除。
+2. 录制短普通话提醒，确认转写可编辑且必须经过现有人工确认页。
+3. 保持 `OCR_ENABLED=false` 时确认 API/语音流程不依赖 MinIO 或 OCR Worker。
+4. 只有显式恢复 OCR 后，才拍摄药盒正面和有效期区域，确认上传地址 host 为 `files.aipupu.cloud`，等待 OCR 候选并人工确认。
+5. OCR 确认前药箱不得新增库存；确认后新增库存，并验证两张临时图片已删除。
 
 生产环境不再使用 Mac 局域网 HTTP 地址。

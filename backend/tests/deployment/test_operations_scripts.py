@@ -116,6 +116,13 @@ def test_log_query_rejects_unknown_service_and_uses_stable_tag(tmp_path):
     assert "--output=short-iso-precise" in arguments
 
 
+def test_log_query_includes_funasr_services():
+    script = (SCRIPTS / "logs.sh").read_text()
+    assert "funasr|funasr-model-init" in script
+    assert '"CONTAINER_TAG=smart-reminder/funasr"' in script
+    assert '"CONTAINER_TAG=smart-reminder/funasr-model-init"' in script
+
+
 def test_logging_verifier_rejects_same_file_and_later_journald_overrides(tmp_path):
     assert "export LC_ALL=C" in (SCRIPTS / "verify_logging.sh").read_text()
 
@@ -321,18 +328,46 @@ def test_deploy_requires_clean_expected_revision_and_health_check():
     assert "/api/v1/health" in script
     assert "'Host':'aipupu.cloud'" in script
     assert "--profile production" in script
-    assert script.index("verify_logging.sh") < script.index('build api ocr-worker')
+    assert script.index("verify_logging.sh") < script.index('build api funasr')
 
 
-def test_deploy_initializes_minio_and_smoke_checks_ocr_before_start():
+def test_deploy_default_path_preserves_ocr_data_and_starts_funasr_first():
     script = (SCRIPTS / "deploy.sh").read_text()
-    build = script.index('build api ocr-worker')
-    minio = script.index('up -d postgres redis minio')
-    initialize = script.index('run --rm minio-init')
-    migrate = script.index('manage.py migrate --noinput')
-    smoke = script.index('manage.py check_ocr')
-    start = script.index('up -d api worker ocr-worker beat')
-    assert build < minio < initialize < migrate < smoke < start
+    build = script.index('build api funasr')
+    data = script.index('up -d postgres redis')
+    stop_ocr = script.index('stop ocr-worker minio beat')
+    model_init = script.index('run --rm --no-deps funasr-model-init')
+    start_funasr = script.index('up -d --no-deps funasr')
+    health = script.index("http://127.0.0.1:8000/health")
+    asr_smoke = script.index("smoke_transcription.py")
+    migrate = script.index('run --rm --no-deps api python manage.py migrate --noinput')
+    start_api = script.index('up -d --no-deps api worker')
+
+    assert "OCR_ENABLED" in script
+    assert "docker compose rm" not in script
+    assert "docker volume rm" not in script
+    assert (
+        build
+        < data
+        < stop_ocr
+        < model_init
+        < start_funasr
+        < health
+        < asr_smoke
+        < migrate
+        < start_api
+    )
+
+
+def test_deploy_ocr_enabled_path_builds_initializes_and_smoke_checks_ocr():
+    script = (SCRIPTS / "deploy.sh").read_text()
+
+    assert 'if [[ "$OCR_ENABLED" == "true" ]]' in script
+    assert "build ocr-worker" in script
+    assert "--profile ocr up -d minio" in script
+    assert "--profile ocr run --rm minio-init" in script
+    assert "manage.py check_ocr" in script
+    assert "--profile ocr up -d --no-deps ocr-worker beat" in script
 
 
 def test_deploy_validates_and_reloads_nginx_after_api_replacement():
@@ -343,6 +378,30 @@ def test_deploy_validates_and_reloads_nginx_after_api_replacement():
     validate_nginx = script.index("exec -T nginx nginx -t")
     reload_nginx = script.index("exec -T nginx nginx -s reload")
     assert start_nginx < validate_nginx < reload_nginx
+
+
+def test_deploy_keeps_old_api_and_nginx_during_build_and_asr_smoke():
+    script = (SCRIPTS / "deploy.sh").read_text()
+    build = script.index('build api funasr')
+    smoke = script.index("smoke_transcription.py")
+    start_api = script.index('up -d --no-deps api worker')
+    recreate_nginx = script.index(
+        "--profile production up -d --force-recreate nginx"
+    )
+
+    assert build < smoke < start_api < recreate_nginx
+
+
+def test_deploy_smoke_never_prints_transcript_or_audio_content():
+    smoke = (
+        REPO_ROOT / "services/funasr/smoke/smoke_transcription.py"
+    ).read_text()
+    assert "FUNASR_SMOKE_OK" in smoke
+    assert "print(transcript" not in smoke
+    assert "print(response" not in smoke
+    assert "明天" in smoke
+    assert "提醒" in smoke
+    assert "吃药" in smoke
 
 
 def test_tls_bootstrap_uses_webroot_and_never_starts_plain_http_api():

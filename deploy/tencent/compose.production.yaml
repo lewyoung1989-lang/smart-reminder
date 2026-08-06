@@ -22,6 +22,22 @@ x-backend-environment: &production_backend_environment
   DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-flash}
   DEEPSEEK_TIMEOUT_SECONDS: ${DEEPSEEK_TIMEOUT_SECONDS:-8}
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  ASR_PROVIDER: ${ASR_PROVIDER:-funasr}
+  ASR_BASE_URL: ${ASR_BASE_URL:-http://funasr:8000}
+  ASR_MODEL: ${ASR_MODEL:-paraformer-zh}
+  ASR_TIMEOUT_SECONDS: ${ASR_TIMEOUT_SECONDS:-20}
+  ASR_MAX_AUDIO_BYTES: ${ASR_MAX_AUDIO_BYTES:-4194304}
+  ASR_MAX_REQUEST_BYTES: ${ASR_MAX_REQUEST_BYTES:-5242880}
+  ASR_MIN_DURATION_SECONDS: ${ASR_MIN_DURATION_SECONDS:-0.3}
+  ASR_MAX_DURATION_SECONDS: ${ASR_MAX_DURATION_SECONDS:-20}
+  ASR_GLOBAL_CONCURRENCY: ${ASR_GLOBAL_CONCURRENCY:-1}
+  ASR_CONCURRENCY_PER_USER: ${ASR_CONCURRENCY_PER_USER:-1}
+  ASR_LEASE_TTL_SECONDS: ${ASR_LEASE_TTL_SECONDS:-25}
+  ASR_USER_RATE: ${ASR_USER_RATE:-10/min}
+  ASR_IP_RATE: ${ASR_IP_RATE:-30/min}
+  ASR_REDIS_URL: ${ASR_REDIS_URL:-redis://redis:6379/0}
+  ASR_THROTTLE_REDIS_URL: ${ASR_THROTTLE_REDIS_URL:-redis://redis:6379/2}
+  ASR_TRUSTED_PROXY_IPS: ${ASR_TRUSTED_PROXY_IPS:-172.29.0.10}
 
 x-ocr-environment: &production_ocr_environment
   <<: *production_backend_environment
@@ -37,8 +53,8 @@ x-ocr-environment: &production_ocr_environment
   S3_BUCKET: ${S3_BUCKET:-smart-reminder-private}
   S3_REGION: ${S3_REGION:-us-east-1}
   S3_ADDRESSING_STYLE: ${S3_ADDRESSING_STYLE:-path}
-  S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?S3_ACCESS_KEY_ID is required}
-  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?S3_SECRET_ACCESS_KEY is required}
+  S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
 
 services:
   postgres:
@@ -59,10 +75,10 @@ services:
 
   minio:
     ports: !reset []
-    profiles: !reset []
+    profiles: [ocr]
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-}
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://127.0.0.1:9000/minio/health/live"]
       interval: 5s
@@ -73,6 +89,9 @@ services:
       <<: *production_logging
       options:
         tag: smart-reminder/minio
+    networks:
+      default: {}
+      asr_proxy: {}
 
   minio-init:
     image: minio/mc:RELEASE.2025-04-16T18-13-26Z
@@ -80,10 +99,10 @@ services:
     environment:
       S3_INTERNAL_ENDPOINT: ${S3_INTERNAL_ENDPOINT:-http://minio:9000}
       S3_BUCKET: ${S3_BUCKET:-smart-reminder-private}
-      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?S3_ACCESS_KEY_ID is required}
-      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?S3_SECRET_ACCESS_KEY is required}
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-}
     volumes:
       - ./deploy/tencent/scripts/init_minio.sh:/config/init_minio.sh:ro
       - ./deploy/tencent/minio/app-policy.json:/config/app-policy.json:ro
@@ -91,6 +110,7 @@ services:
       minio:
         condition: service_healthy
     restart: "no"
+    profiles: [ocr]
     logging:
       <<: *production_logging
       options:
@@ -110,6 +130,9 @@ services:
       <<: *production_logging
       options:
         tag: smart-reminder/api
+    networks:
+      default: {}
+      asr_proxy: {}
     healthcheck:
       test:
         - CMD
@@ -120,14 +143,53 @@ services:
       timeout: 5s
       retries: 12
       start_period: 20s
-    depends_on:
-      minio-init:
-        condition: service_completed_successfully
+    depends_on: !reset []
+
+  funasr-model-init:
+    image: smart-reminder-funasr:${APP_VERSION:?APP_VERSION is required}
+    restart: "no"
+    logging:
+      <<: *production_logging
+      options:
+        tag: smart-reminder/funasr-model-init
+
+  funasr:
+    image: smart-reminder-funasr:${APP_VERSION:?APP_VERSION is required}
+    ports: !reset []
+    environment:
+      MODELSCOPE_CACHE: /models
+      HF_HOME: /models/huggingface
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "2"
+      NUMEXPR_NUM_THREADS: "2"
+    command: >-
+      python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+      --workers 1 --no-access-log
+    volumes:
+      - type: volume
+        source: funasr_models
+        target: /models
+        read_only: true
+    cpus: 1.5
+    mem_reservation: 1400m
+    mem_limit: 2600m
+    pids_limit: 256
+    depends_on: !reset []
+    restart: unless-stopped
+    logging:
+      <<: *production_logging
+      options:
+        tag: smart-reminder/funasr
+    networks:
+      asr_proxy: {}
 
   worker:
     image: smart-reminder-api:${APP_VERSION:?APP_VERSION is required}
     environment: *production_backend_environment
-    command: celery -A config worker -Q celery --loglevel=INFO
+    command: >-
+      celery -A config worker -Q celery --concurrency=1
+      --prefetch-multiplier=1 --loglevel=INFO
     restart: unless-stopped
     logging:
       <<: *production_logging
@@ -137,6 +199,7 @@ services:
   ocr-worker:
     image: smart-reminder-ocr:${APP_VERSION:?APP_VERSION is required}
     ports: !reset []
+    profiles: [ocr]
     environment: *production_ocr_environment
     command: celery -A config worker -Q ocr --concurrency=1 --prefetch-multiplier=1 --loglevel=INFO
     cpus: 1.0
@@ -154,6 +217,7 @@ services:
   beat:
     image: smart-reminder-api:${APP_VERSION:?APP_VERSION is required}
     environment: *production_backend_environment
+    profiles: [ocr]
     restart: unless-stopped
     logging:
       <<: *production_logging
@@ -192,6 +256,9 @@ services:
       <<: *production_logging
       options:
         tag: smart-reminder/nginx
+    networks:
+      asr_proxy:
+        ipv4_address: 172.29.0.10
 
   certbot:
     image: certbot/certbot:v4.1.1
@@ -207,3 +274,10 @@ services:
 volumes:
   certbot_www:
   certbot_etc:
+
+networks:
+  asr_proxy:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.29.0.0/24
