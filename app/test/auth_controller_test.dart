@@ -6,15 +6,19 @@ import 'package:smart_reminder_app/features/auth/data/token_store.dart';
 import 'package:smart_reminder_app/features/auth/domain/auth_models.dart';
 
 class MemoryTokenStore implements TokenStore {
-  MemoryTokenStore(this.tokens);
+  MemoryTokenStore(this.tokens, {this.readError});
 
   AuthTokens? tokens;
+  Object? readError;
 
   @override
   Future<void> clear() async => tokens = null;
 
   @override
-  Future<AuthTokens?> read() async => tokens;
+  Future<AuthTokens?> read() async {
+    if (readError != null) throw readError!;
+    return tokens;
+  }
 
   @override
   Future<void> write(AuthTokens value) async => tokens = value;
@@ -121,6 +125,22 @@ void main() {
 
     expect(controller.status, AuthStatus.connectionError);
     expect(await store.read(), tokens);
+  });
+
+  test('secure storage read failure leaves retryable connection error state',
+      () async {
+    final store = MemoryTokenStore(
+      tokens,
+      readError: StateError('keychain unavailable'),
+    );
+    final controller = AuthController(
+      tokenStore: store,
+      gateway: FakeAuthGateway(),
+    );
+
+    await expectLater(controller.restore(), completes);
+
+    expect(controller.status, AuthStatus.connectionError);
   });
 
   test('successful login stores tokens and user', () async {

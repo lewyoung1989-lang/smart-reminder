@@ -11,7 +11,7 @@ void main() {
         home: ChangePasswordScreen(
           onSubmit: (_, __, ___) async => throw const AuthApiException(
             400,
-            code: 'invalid_current_password',
+            code: 'current_password_invalid',
           ),
         ),
       ),

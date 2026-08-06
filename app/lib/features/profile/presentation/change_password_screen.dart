@@ -151,6 +151,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       if (mounted) {
         setState(() {
           _error = switch (error.code) {
+            'current_password_invalid' => '当前密码错误',
             'invalid_current_password' => '当前密码错误',
             'weak_password' => '新密码强度不足，请更换后重试',
             'password_mismatch' => '两次输入的密码不一致',

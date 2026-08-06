@@ -1,8 +1,10 @@
 import logging
 
 from django.contrib.auth import authenticate, get_user_model
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from rest_framework import status
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -13,7 +15,7 @@ from rest_framework_simplejwt.token_blacklist.models import (
     BlacklistedToken,
     OutstandingToken,
 )
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.tokens import RefreshToken, Token
 
 from apps.accounts.models import PhoneIdentity
 from apps.accounts.services.revocation import revoke_all_refresh_tokens
@@ -47,16 +49,28 @@ def _limited_retry_after(*limits):
     return max(retry_after for limited, retry_after in limits if limited)
 
 
+class _RefreshTokenWithoutBlacklist(RefreshToken):
+    def verify(self):
+        # Verify signature, expiry and token type before touching database locks.
+        Token.verify(self)
+
+
 def _lock_refresh_user(raw_token):
     try:
-        token = RefreshToken(raw_token, verify=False)
-        user_id = token[api_settings.USER_ID_CLAIM]
+        token = _RefreshTokenWithoutBlacklist(raw_token)
+        raw_user_id = token[api_settings.USER_ID_CLAIM]
     except (KeyError, TokenError):
+        return None
+    user_model = get_user_model()
+    user_id_field = user_model._meta.get_field(api_settings.USER_ID_FIELD)
+    try:
+        user_id = user_id_field.to_python(raw_user_id)
+    except (TypeError, ValueError, ValidationError):
         return None
     lookup = {api_settings.USER_ID_FIELD: user_id}
     try:
-        return get_user_model().objects.select_for_update().get(**lookup)
-    except get_user_model().DoesNotExist:
+        return user_model.objects.select_for_update().get(**lookup)
+    except user_model.DoesNotExist:
         return None
 
 
@@ -172,7 +186,7 @@ class RefreshView(APIView):
                 )
                 refresh_serializer.is_valid(raise_exception=True)
                 result = dict(refresh_serializer.validated_data)
-        except TokenError:
+        except (AuthenticationFailed, TokenError):
             return Response(
                 {"code": "invalid_refresh_token"},
                 status=status.HTTP_401_UNAUTHORIZED,

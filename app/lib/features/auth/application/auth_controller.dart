@@ -29,13 +29,13 @@ class AuthController extends ChangeNotifier {
 
   Future<void> restore() async {
     _setStatus(AuthStatus.booting);
-    final tokens = await _tokenStore.read();
-    if (tokens == null) {
-      _user = null;
-      _setStatus(AuthStatus.unauthenticated);
-      return;
-    }
     try {
+      final tokens = await _tokenStore.read();
+      if (tokens == null) {
+        _user = null;
+        _setStatus(AuthStatus.unauthenticated);
+        return;
+      }
       _user = await _gateway.me();
       _setStatus(AuthStatus.authenticated);
     } on SessionExpiredException {
