@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+from rest_framework_simplejwt.settings import api_settings
 from rest_framework_simplejwt.token_blacklist.models import (
     BlacklistedToken,
     OutstandingToken,
@@ -42,6 +43,23 @@ def _rate_limited(retry_after):
     )
 
 
+def _limited_retry_after(*limits):
+    return max(retry_after for limited, retry_after in limits if limited)
+
+
+def _lock_refresh_user(raw_token):
+    try:
+        token = RefreshToken(raw_token, verify=False)
+        user_id = token[api_settings.USER_ID_CLAIM]
+    except (KeyError, TokenError):
+        return None
+    lookup = {api_settings.USER_ID_FIELD: user_id}
+    try:
+        return get_user_model().objects.select_for_update().get(**lookup)
+    except get_user_model().DoesNotExist:
+        return None
+
+
 class RegisterView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
@@ -60,7 +78,12 @@ class RegisterView(APIView):
             data["phone_e164"],
         )
         if limited_ip or limited_phone:
-            return _rate_limited(max(retry_ip, retry_phone))
+            return _rate_limited(
+                _limited_retry_after(
+                    (limited_ip, retry_ip),
+                    (limited_phone, retry_phone),
+                )
+            )
         try:
             with transaction.atomic():
                 user = get_user_model().objects.create_user(
@@ -99,7 +122,12 @@ class LoginView(APIView):
         )
         ip_limited, ip_retry, _ = limiter.is_limited("login_ip", ip)
         if combo_limited or ip_limited:
-            return _rate_limited(max(combo_retry, ip_retry))
+            return _rate_limited(
+                _limited_retry_after(
+                    (combo_limited, combo_retry),
+                    (ip_limited, ip_retry),
+                )
+            )
         user = authenticate(
             request=request,
             username=data["phone"],
@@ -134,17 +162,21 @@ class RefreshView(APIView):
         )
         if limited:
             return _rate_limited(retry_after)
-        refresh_serializer = TokenRefreshSerializer(
-            data={"refresh": serializer.validated_data["refresh_token"]}
-        )
+        raw_token = serializer.validated_data["refresh_token"]
         try:
-            refresh_serializer.is_valid(raise_exception=True)
+            with transaction.atomic():
+                if _lock_refresh_user(raw_token) is None:
+                    raise TokenError("Token user does not exist")
+                refresh_serializer = TokenRefreshSerializer(
+                    data={"refresh": raw_token}
+                )
+                refresh_serializer.is_valid(raise_exception=True)
+                result = dict(refresh_serializer.validated_data)
         except TokenError:
             return Response(
                 {"code": "invalid_refresh_token"},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
-        result = refresh_serializer.validated_data
         return Response(
             {
                 "access_token": result["access"],
@@ -214,17 +246,22 @@ class PasswordChangeView(APIView):
         )
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        if not request.user.check_password(data["current_password"]):
-            return Response(
-                {
-                    "code": "invalid_current_password",
-                    "field": "current_password",
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
         with transaction.atomic():
-            request.user.set_password(data["new_password"])
-            request.user.save(update_fields=["password"])
-            revoke_all_refresh_tokens(request.user)
-            payload = authentication_payload(request.user)
+            user = (
+                get_user_model()
+                .objects.select_for_update()
+                .get(pk=request.user.pk)
+            )
+            if not user.check_password(data["current_password"]):
+                return Response(
+                    {
+                        "code": "current_password_invalid",
+                        "field": "current_password",
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            user.set_password(data["new_password"])
+            user.save(update_fields=["password"])
+            revoke_all_refresh_tokens(user)
+            payload = authentication_payload(user)
         return Response(payload, status=status.HTTP_200_OK)

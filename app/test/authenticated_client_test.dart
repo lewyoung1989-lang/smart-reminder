@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:smart_reminder_app/core/network/authenticated_client.dart';
+import 'package:smart_reminder_app/features/auth/data/auth_api.dart';
 import 'package:smart_reminder_app/features/auth/data/token_store.dart';
 import 'package:smart_reminder_app/features/auth/domain/auth_models.dart';
 
@@ -77,14 +78,18 @@ void main() {
     expect(inner.requests, hasLength(4));
   });
 
-  test('refresh failure clears tokens and reports session expiry', () async {
+  test('invalid refresh token clears tokens and reports session expiry',
+      () async {
     final store = MemoryTokenStore(oldTokens);
     var expiryNotifications = 0;
     final client = AuthenticatedClient(
       apiBaseUri: Uri.parse('https://api.invalid'),
       inner: AuthRecordingClient(),
       tokenStore: store,
-      refreshTokens: (_) async => throw StateError('refresh rejected'),
+      refreshTokens: (_) async => throw const AuthApiException(
+        401,
+        code: 'invalid_refresh_token',
+      ),
       onSessionExpired: () => expiryNotifications += 1,
     );
 
@@ -94,6 +99,27 @@ void main() {
     );
     expect(await store.read(), isNull);
     expect(expiryNotifications, 1);
+  });
+
+  test('temporary refresh failure preserves tokens and can be retried',
+      () async {
+    final store = MemoryTokenStore(oldTokens);
+    var expiryNotifications = 0;
+    final temporaryFailure = http.ClientException('offline');
+    final client = AuthenticatedClient(
+      apiBaseUri: Uri.parse('https://api.invalid'),
+      inner: AuthRecordingClient(),
+      tokenStore: store,
+      refreshTokens: (_) async => throw temporaryFailure,
+      onSessionExpired: () => expiryNotifications += 1,
+    );
+
+    await expectLater(
+      client.get(Uri.parse('https://api.invalid/protected')),
+      throwsA(same(temporaryFailure)),
+    );
+    expect(await store.read(), oldTokens);
+    expect(expiryNotifications, 0);
   });
 
   test('external signed upload never receives the API token', () async {

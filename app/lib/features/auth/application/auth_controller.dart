@@ -44,6 +44,8 @@ class AuthController extends ChangeNotifier {
       _setStatus(AuthStatus.unauthenticated);
     } on http.ClientException {
       _setStatus(AuthStatus.connectionError);
+    } catch (_) {
+      _setStatus(AuthStatus.connectionError);
     }
   }
 

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../domain/auth_models.dart';
@@ -29,6 +31,7 @@ class FlutterSecureKeyValueStore implements SecureKeyValueStore {
 class SecureTokenStore implements TokenStore {
   SecureTokenStore(this._storage);
 
+  static const _bundleKey = 'auth_token_bundle';
   static const _accessKey = 'auth_access_token';
   static const _refreshKey = 'auth_refresh_token';
   static const _expiresKey = 'auth_access_expires_in';
@@ -37,6 +40,17 @@ class SecureTokenStore implements TokenStore {
 
   @override
   Future<AuthTokens?> read() async {
+    final bundle = await _storage.read(_bundleKey);
+    if (bundle != null) {
+      try {
+        final json = jsonDecode(bundle) as Map<String, dynamic>;
+        return AuthTokens.fromJson(json);
+      } on Object {
+        await clear();
+        return null;
+      }
+    }
+
     final values = await Future.wait([
       _storage.read(_accessKey),
       _storage.read(_refreshKey),
@@ -49,22 +63,37 @@ class SecureTokenStore implements TokenStore {
       }
       return null;
     }
-    return AuthTokens(
+    final tokens = AuthTokens(
       accessToken: values[0]!,
       refreshToken: values[1]!,
       accessExpiresIn: expiresIn,
     );
+    await write(tokens);
+    return tokens;
   }
 
   @override
   Future<void> write(AuthTokens tokens) async {
-    await _storage.write(_accessKey, tokens.accessToken);
-    await _storage.write(_refreshKey, tokens.refreshToken);
-    await _storage.write(_expiresKey, tokens.accessExpiresIn.toString());
+    await _storage.write(
+      _bundleKey,
+      jsonEncode({
+        'access_token': tokens.accessToken,
+        'refresh_token': tokens.refreshToken,
+        'access_expires_in': tokens.accessExpiresIn,
+      }),
+    );
+    await _clearLegacyKeys();
   }
 
   @override
   Future<void> clear() => Future.wait([
+        _storage.delete(_bundleKey),
+        _storage.delete(_accessKey),
+        _storage.delete(_refreshKey),
+        _storage.delete(_expiresKey),
+      ]);
+
+  Future<void> _clearLegacyKeys() => Future.wait([
         _storage.delete(_accessKey),
         _storage.delete(_refreshKey),
         _storage.delete(_expiresKey),

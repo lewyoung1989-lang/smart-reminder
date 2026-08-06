@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:http/http.dart' as http;
 
+import '../../features/auth/data/auth_api.dart';
 import '../../features/auth/data/token_store.dart';
 import '../../features/auth/domain/auth_models.dart';
 
@@ -82,7 +83,10 @@ class AuthenticatedClient extends http.BaseClient {
       final tokens = await _refreshTokens(failedTokens.refreshToken);
       await _tokenStore.write(tokens);
       return tokens;
-    } catch (_) {
+    } on AuthApiException catch (error) {
+      if (error.statusCode != 401 || error.code != 'invalid_refresh_token') {
+        rethrow;
+      }
       await _tokenStore.clear();
       onSessionExpired?.call();
       throw const SessionExpiredException();

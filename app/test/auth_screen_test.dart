@@ -72,4 +72,74 @@ void main() {
     expect(find.text('请输入正确的 11 位手机号'), findsOneWidget);
     expect(calls, 0);
   });
+
+  testWidgets('backend field error is shown on the matching input',
+      (tester) async {
+    await tester.pumpWidget(
+      buildScreen(
+        login: (_, __) async => throw const AuthApiException(
+          400,
+          code: 'invalid_phone',
+          field: 'phone',
+        ),
+      ),
+    );
+    await tester.enterText(
+      find.byKey(const Key('phone-field')),
+      '13800138000',
+    );
+    await tester.enterText(
+      find.byKey(const Key('password-field')),
+      'Good-pass-2026',
+    );
+
+    await tester.tap(find.byKey(const Key('auth-submit')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('请输入正确的 11 位手机号'), findsOneWidget);
+    expect(find.byKey(const Key('auth-error')), findsNothing);
+  });
+
+  testWidgets('rate limit disables submission for retry-after duration',
+      (tester) async {
+    await tester.pumpWidget(
+      buildScreen(
+        login: (_, __) async => throw const AuthApiException(
+          429,
+          code: 'rate_limited',
+          retryAfter: 2,
+        ),
+      ),
+    );
+    await tester.enterText(
+      find.byKey(const Key('phone-field')),
+      '13800138000',
+    );
+    await tester.enterText(
+      find.byKey(const Key('password-field')),
+      'Good-pass-2026',
+    );
+
+    await tester.tap(find.byKey(const Key('auth-submit')));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('操作过于频繁，请 2 秒后重试'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const Key('auth-submit')))
+          .onPressed,
+      isNull,
+    );
+
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('操作过于频繁，请 1 秒后重试'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 1));
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const Key('auth-submit')))
+          .onPressed,
+      isNotNull,
+    );
+  });
 }

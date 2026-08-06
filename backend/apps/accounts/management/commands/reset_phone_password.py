@@ -1,5 +1,6 @@
 import getpass
 
+from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand, CommandError
@@ -42,6 +43,11 @@ class Command(BaseCommand):
             ) from exc
 
         with transaction.atomic():
+            user = (
+                get_user_model()
+                .objects.select_for_update()
+                .get(pk=user.pk)
+            )
             user.set_password(password)
             user.save(update_fields=["password"])
             revoke_all_refresh_tokens(user)

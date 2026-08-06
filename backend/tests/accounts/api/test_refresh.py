@@ -1,4 +1,5 @@
 import pytest
+from django.contrib.auth import get_user_model
 
 
 REGISTER_URL = "/api/v1/auth/register"
@@ -39,6 +40,28 @@ def test_refresh_rotates_token_and_rejects_replay(api_client, registered_tokens)
     )
     assert replay.status_code == 401
     assert replay.data == {"code": "invalid_refresh_token"}
+
+
+def test_refresh_serializes_rotation_with_user_row_lock(
+    api_client,
+    registered_tokens,
+    mocker,
+):
+    manager = get_user_model().objects
+    lock_spy = mocker.patch.object(
+        manager,
+        "select_for_update",
+        wraps=manager.select_for_update,
+    )
+
+    response = api_client.post(
+        REFRESH_URL,
+        {"refresh_token": registered_tokens["refresh_token"]},
+        format="json",
+    )
+
+    assert response.status_code == 200
+    lock_spy.assert_called_once_with()
 
 
 @pytest.mark.django_db

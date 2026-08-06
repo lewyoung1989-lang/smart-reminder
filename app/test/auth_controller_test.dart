@@ -111,6 +111,18 @@ void main() {
     expect(controller.status, AuthStatus.authenticated);
   });
 
+  test('unexpected restore failure leaves retryable connection error state',
+      () async {
+    final store = MemoryTokenStore(tokens);
+    final gateway = FakeAuthGateway()..meError = const FormatException('bad');
+    final controller = AuthController(tokenStore: store, gateway: gateway);
+
+    await controller.restore();
+
+    expect(controller.status, AuthStatus.connectionError);
+    expect(await store.read(), tokens);
+  });
+
   test('successful login stores tokens and user', () async {
     final store = MemoryTokenStore(null);
     final gateway = FakeAuthGateway()

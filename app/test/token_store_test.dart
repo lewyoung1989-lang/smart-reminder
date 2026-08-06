@@ -27,6 +27,7 @@ void main() {
 
     await store.write(tokens);
     expect(await store.read(), tokens);
+    expect(secureValues.values.keys, {'auth_token_bundle'});
 
     await store.clear();
     expect(await store.read(), isNull);
@@ -36,6 +37,33 @@ void main() {
   test('partial secure state is treated as signed out and removed', () async {
     final secureValues = FakeSecureKeyValueStore()
       ..values['auth_access_token'] = 'orphan';
+    final store = SecureTokenStore(secureValues);
+
+    expect(await store.read(), isNull);
+    expect(secureValues.values, isEmpty);
+  });
+
+  test('complete legacy token state is migrated to one bundle', () async {
+    final secureValues = FakeSecureKeyValueStore()
+      ..values['auth_access_token'] = 'legacy-access'
+      ..values['auth_refresh_token'] = 'legacy-refresh'
+      ..values['auth_access_expires_in'] = '900';
+    final store = SecureTokenStore(secureValues);
+
+    expect(
+      await store.read(),
+      const AuthTokens(
+        accessToken: 'legacy-access',
+        refreshToken: 'legacy-refresh',
+        accessExpiresIn: 900,
+      ),
+    );
+    expect(secureValues.values.keys, {'auth_token_bundle'});
+  });
+
+  test('malformed token bundle is treated as signed out and removed', () async {
+    final secureValues = FakeSecureKeyValueStore()
+      ..values['auth_token_bundle'] = '{broken-json';
     final store = SecureTokenStore(secureValues);
 
     expect(await store.read(), isNull);

@@ -21,6 +21,12 @@ def test_reset_phone_password_is_interactive_and_revokes_refresh(mocker):
         "getpass.getpass",
         side_effect=["Admin-reset-2026", "Admin-reset-2026"],
     )
+    manager = get_user_model().objects
+    lock_spy = mocker.patch.object(
+        manager,
+        "select_for_update",
+        wraps=manager.select_for_update,
+    )
     output = StringIO()
 
     call_command("reset_phone_password", "13800138000", stdout=output)
@@ -29,6 +35,7 @@ def test_reset_phone_password_is_interactive_and_revokes_refresh(mocker):
     assert user.check_password("Admin-reset-2026")
     assert getpass_mock.call_count == 2
     assert "Admin-reset-2026" not in output.getvalue()
+    lock_spy.assert_called_once_with()
     response = APIClient().post(
         "/api/v1/auth/refresh",
         {"refresh_token": old_refresh},

@@ -46,6 +46,33 @@ def test_registration_is_limited_by_ip(api_client, settings):
 
 
 @pytest.mark.django_db
+def test_rate_limit_retry_uses_only_the_limited_dimension(
+    api_client,
+    settings,
+    mocker,
+):
+    mocker.patch("apps.accounts.throttling.time.time", return_value=100)
+    settings.AUTH_RATE_LIMITS = {
+        **settings.AUTH_RATE_LIMITS,
+        "register_ip": (0, 60),
+        "register_phone": (10, 3600),
+    }
+
+    response = api_client.post(
+        "/api/v1/auth/register",
+        {
+            "phone": "13800138000",
+            "password": VALID_PASSWORD,
+            "password_confirm": VALID_PASSWORD,
+        },
+        format="json",
+    )
+
+    assert response.status_code == 429
+    assert response.data["retry_after"] == 20
+
+
+@pytest.mark.django_db
 def test_login_failures_are_limited_and_success_clears_combo(
     api_client,
     settings,

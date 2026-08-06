@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -33,10 +35,14 @@ class _AuthScreenState extends State<AuthScreen> {
   bool _passwordVisible = false;
   bool _confirmVisible = false;
   bool _submitting = false;
+  int _retrySeconds = 0;
+  Timer? _retryTimer;
   String? _pageError;
+  final _fieldErrors = <String, String>{};
 
   @override
   void dispose() {
+    _retryTimer?.cancel();
     _phoneController.dispose();
     _passwordController.dispose();
     _confirmController.dispose();
@@ -81,6 +87,7 @@ class _AuthScreenState extends State<AuthScreen> {
                             : (selection) => setState(() {
                                   _mode = selection.single;
                                   _pageError = null;
+                                  _fieldErrors.clear();
                                   _formKey.currentState?.reset();
                                 }),
                       ),
@@ -98,10 +105,12 @@ class _AuthScreenState extends State<AuthScreen> {
                           labelText: '手机号',
                           prefixIcon: Icon(Icons.phone_outlined),
                         ),
+                        onChanged: (_) => _clearFieldError('phone'),
                         validator: (value) =>
-                            RegExp(r'^1[3-9]\d{9}$').hasMatch(value ?? '')
+                            _fieldErrors['phone'] ??
+                            (RegExp(r'^1[3-9]\d{9}$').hasMatch(value ?? '')
                                 ? null
-                                : '请输入正确的 11 位手机号',
+                                : '请输入正确的 11 位手机号'),
                       ),
                       const SizedBox(height: 16),
                       TextFormField(
@@ -124,11 +133,14 @@ class _AuthScreenState extends State<AuthScreen> {
                             ),
                           ),
                         ),
-                        validator: (value) => value != null &&
-                                value.length >= 8 &&
-                                value.length <= 64
-                            ? null
-                            : '密码长度需为 8 至 64 位',
+                        onChanged: (_) => _clearFieldError('password'),
+                        validator: (value) =>
+                            _fieldErrors['password'] ??
+                            (value != null &&
+                                    value.length >= 8 &&
+                                    value.length <= 64
+                                ? null
+                                : '密码长度需为 8 至 64 位'),
                       ),
                       if (_mode == _AuthMode.register) ...[
                         const SizedBox(height: 16),
@@ -151,16 +163,21 @@ class _AuthScreenState extends State<AuthScreen> {
                               ),
                             ),
                           ),
+                          onChanged: (_) =>
+                              _clearFieldError('password_confirm'),
                           validator: (value) =>
-                              value == _passwordController.text
+                              _fieldErrors['password_confirm'] ??
+                              (value == _passwordController.text
                                   ? null
-                                  : '两次输入的密码不一致',
+                                  : '两次输入的密码不一致'),
                         ),
                       ],
-                      if (_pageError != null) ...[
+                      if (_pageError != null || _retrySeconds > 0) ...[
                         const SizedBox(height: 16),
                         Text(
-                          _pageError!,
+                          _retrySeconds > 0
+                              ? '操作过于频繁，请 $_retrySeconds 秒后重试'
+                              : _pageError!,
                           key: const Key('auth-error'),
                           style: TextStyle(
                             color: Theme.of(context).colorScheme.error,
@@ -170,7 +187,8 @@ class _AuthScreenState extends State<AuthScreen> {
                       const SizedBox(height: 24),
                       FilledButton(
                         key: const Key('auth-submit'),
-                        onPressed: _submitting ? null : _submit,
+                        onPressed:
+                            _submitting || _retrySeconds > 0 ? null : _submit,
                         child: _submitting
                             ? const SizedBox.square(
                                 dimension: 20,
@@ -189,7 +207,10 @@ class _AuthScreenState extends State<AuthScreen> {
       );
 
   Future<void> _submit() async {
-    setState(() => _pageError = null);
+    setState(() {
+      _pageError = null;
+      _fieldErrors.clear();
+    });
     if (!(_formKey.currentState?.validate() ?? false)) {
       return;
     }
@@ -208,12 +229,50 @@ class _AuthScreenState extends State<AuthScreen> {
         );
       }
     } on AuthApiException catch (error) {
-      if (mounted) setState(() => _pageError = _messageFor(error));
+      if (mounted) _handleApiError(error);
     } on http.ClientException {
       if (mounted) setState(() => _pageError = '无法连接服务器，请稍后重试');
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  void _handleApiError(AuthApiException error) {
+    if (error.code == 'rate_limited') {
+      _startRetryCountdown(error.retryAfter ?? 1);
+      return;
+    }
+    final message = _messageFor(error);
+    if (const {'phone', 'password', 'password_confirm'}.contains(error.field)) {
+      setState(() => _fieldErrors[error.field!] = message);
+      _formKey.currentState?.validate();
+      return;
+    }
+    setState(() => _pageError = message);
+  }
+
+  void _clearFieldError(String field) {
+    if (!_fieldErrors.containsKey(field)) return;
+    setState(() => _fieldErrors.remove(field));
+  }
+
+  void _startRetryCountdown(int retryAfter) {
+    _retryTimer?.cancel();
+    setState(() => _retrySeconds = retryAfter < 1 ? 1 : retryAfter);
+    _retryTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      setState(() {
+        _retrySeconds -= 1;
+        if (_retrySeconds <= 0) {
+          _retrySeconds = 0;
+          timer.cancel();
+          _retryTimer = null;
+        }
+      });
+    });
   }
 
   static String _messageFor(AuthApiException error) => switch (error.code) {
