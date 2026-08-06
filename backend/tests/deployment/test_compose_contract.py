@@ -61,6 +61,32 @@ def test_python_images_accept_a_configurable_package_index():
     )
 
 
+def test_funasr_isolates_the_pytorch_index_from_general_dependencies():
+    services = load_local_compose()["services"]
+    expected_index = (
+        "${PYTORCH_INDEX_URL:-https://download.pytorch.org/whl/cpu}"
+    )
+    for name in ("funasr-model-init", "funasr"):
+        assert services[name]["build"]["args"]["PYTORCH_INDEX_URL"] == (
+            expected_index
+        )
+
+    requirements = (
+        REPO_ROOT / "services/funasr/requirements.txt"
+    ).read_text()
+    assert "--extra-index-url" not in requirements
+    dockerfile = (REPO_ROOT / "services/funasr/Dockerfile").read_text()
+    assert (
+        "ARG PYTORCH_INDEX_URL=https://download.pytorch.org/whl/cpu"
+        in dockerfile
+    )
+    torch_install = dockerfile.index(
+        '--no-deps --index-url "$PYTORCH_INDEX_URL"'
+    )
+    general_install = dockerfile.index('--index-url "$PIP_INDEX_URL"')
+    assert torch_install < general_install
+
+
 def test_internal_services_publish_no_host_ports():
     services = load_production_compose()["services"]
     for name in ("postgres", "redis", "minio", "api", "funasr"):

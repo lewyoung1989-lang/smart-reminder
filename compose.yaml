@@ -86,6 +86,7 @@ services:
       dockerfile: services/funasr/Dockerfile
       args:
         PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+        PYTORCH_INDEX_URL: ${PYTORCH_INDEX_URL:-https://download.pytorch.org/whl/cpu}
     command: python -m app.download_models
     environment:
       MODELSCOPE_CACHE: /models
@@ -100,6 +101,7 @@ services:
       dockerfile: services/funasr/Dockerfile
       args:
         PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+        PYTORCH_INDEX_URL: ${PYTORCH_INDEX_URL:-https://download.pytorch.org/whl/cpu}
     environment:
       MODELSCOPE_CACHE: /models
       HF_HOME: /models/huggingface
