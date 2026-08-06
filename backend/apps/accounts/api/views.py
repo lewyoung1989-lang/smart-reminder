@@ -6,11 +6,22 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+from rest_framework_simplejwt.token_blacklist.models import (
+    BlacklistedToken,
+    OutstandingToken,
+)
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.accounts.models import PhoneIdentity
+from apps.accounts.services.revocation import revoke_all_refresh_tokens
 from apps.accounts.services.tokens import authentication_payload, user_summary
 
-from .serializers import LoginSerializer, RefreshSerializer, RegisterSerializer
+from .serializers import (
+    LoginSerializer,
+    PasswordChangeSerializer,
+    RefreshSerializer,
+    RegisterSerializer,
+)
 
 
 class RegisterView(APIView):
@@ -101,3 +112,66 @@ class MeView(APIView):
                 status=status.HTTP_409_CONFLICT,
             )
         return Response(user_summary(request.user), status=status.HTTP_200_OK)
+
+
+def _blacklist_users_refresh(raw_token, user):
+    try:
+        token = RefreshToken(raw_token)
+    except TokenError:
+        try:
+            unverified = RefreshToken(raw_token, verify=False)
+            outstanding = OutstandingToken.objects.get(
+                jti=unverified["jti"],
+                user=user,
+            )
+        except (TokenError, KeyError, OutstandingToken.DoesNotExist):
+            return False
+        return BlacklistedToken.objects.filter(token=outstanding).exists()
+
+    if str(token.get("user_id")) != str(user.pk):
+        return False
+    token.blacklist()
+    return True
+
+
+class LogoutView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = RefreshSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        if not _blacklist_users_refresh(
+            serializer.validated_data["refresh_token"],
+            request.user,
+        ):
+            return Response(
+                {"code": "invalid_refresh_token"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class PasswordChangeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = PasswordChangeSerializer(
+            data=request.data,
+            context={"user": request.user},
+        )
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        if not request.user.check_password(data["current_password"]):
+            return Response(
+                {
+                    "code": "invalid_current_password",
+                    "field": "current_password",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        with transaction.atomic():
+            request.user.set_password(data["new_password"])
+            request.user.save(update_fields=["password"])
+            revoke_all_refresh_tokens(request.user)
+            payload = authentication_payload(request.user)
+        return Response(payload, status=status.HTTP_200_OK)

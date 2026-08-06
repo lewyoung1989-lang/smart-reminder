@@ -54,3 +54,32 @@ class LoginSerializer(serializers.Serializer):
 
 class RefreshSerializer(serializers.Serializer):
     refresh_token = serializers.CharField(trim_whitespace=False)
+
+
+class PasswordChangeSerializer(serializers.Serializer):
+    current_password = serializers.CharField(
+        trim_whitespace=False,
+        write_only=True,
+    )
+    new_password = serializers.CharField(
+        trim_whitespace=False,
+        write_only=True,
+    )
+    new_password_confirm = serializers.CharField(
+        trim_whitespace=False,
+        write_only=True,
+    )
+
+    def validate(self, attrs):
+        if attrs["new_password"] != attrs["new_password_confirm"]:
+            raise AuthInputError("password_mismatch", "new_password_confirm")
+        if len(attrs["new_password"]) > 64:
+            raise AuthInputError("weak_password", "new_password")
+        try:
+            validate_password(
+                attrs["new_password"],
+                user=self.context["user"],
+            )
+        except DjangoValidationError as exc:
+            raise AuthInputError("weak_password", "new_password") from exc
+        return attrs
