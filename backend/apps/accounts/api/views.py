@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib.auth import authenticate, get_user_model
 from django.db import IntegrityError, transaction
 from rest_framework import status
@@ -15,6 +17,11 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from apps.accounts.models import PhoneIdentity
 from apps.accounts.services.revocation import revoke_all_refresh_tokens
 from apps.accounts.services.tokens import authentication_payload, user_summary
+from apps.accounts.throttling import (
+    FixedWindowRateLimiter,
+    client_ip,
+    private_value_key,
+)
 
 from .serializers import (
     LoginSerializer,
@@ -22,6 +29,17 @@ from .serializers import (
     RefreshSerializer,
     RegisterSerializer,
 )
+
+
+logger = logging.getLogger(__name__)
+
+
+def _rate_limited(retry_after):
+    return Response(
+        {"code": "rate_limited", "retry_after": retry_after},
+        status=status.HTTP_429_TOO_MANY_REQUESTS,
+        headers={"Retry-After": str(retry_after)},
+    )
 
 
 class RegisterView(APIView):
@@ -32,6 +50,17 @@ class RegisterView(APIView):
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
+        limiter = FixedWindowRateLimiter()
+        limited_ip, retry_ip, _ = limiter.consume(
+            "register_ip",
+            client_ip(request),
+        )
+        limited_phone, retry_phone, _ = limiter.consume(
+            "register_phone",
+            data["phone_e164"],
+        )
+        if limited_ip or limited_phone:
+            return _rate_limited(max(retry_ip, retry_phone))
         try:
             with transaction.atomic():
                 user = get_user_model().objects.create_user(
@@ -61,16 +90,34 @@ class LoginView(APIView):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
+        limiter = FixedWindowRateLimiter()
+        ip = client_ip(request)
+        combo = f"{ip}:{data['phone']}"
+        combo_limited, combo_retry, _ = limiter.is_limited(
+            "login_combo",
+            combo,
+        )
+        ip_limited, ip_retry, _ = limiter.is_limited("login_ip", ip)
+        if combo_limited or ip_limited:
+            return _rate_limited(max(combo_retry, ip_retry))
         user = authenticate(
             request=request,
             username=data["phone"],
             password=data["password"],
         )
         if user is None or not hasattr(user, "phone_identity"):
+            limiter.consume("login_combo", combo)
+            limiter.consume("login_ip", ip)
+            logger.info(
+                "auth_login_failed phone_key=%s",
+                private_value_key(data["phone"])[:12],
+            )
             return Response(
                 {"code": "invalid_credentials"},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
+        limiter.clear("login_combo", combo)
+        logger.info("auth_login_succeeded user_id=%s", user.pk)
         return Response(authentication_payload(user), status=status.HTTP_200_OK)
 
 
@@ -81,6 +128,12 @@ class RefreshView(APIView):
     def post(self, request):
         serializer = RefreshSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        limited, retry_after, _ = FixedWindowRateLimiter().consume(
+            "refresh_ip",
+            client_ip(request),
+        )
+        if limited:
+            return _rate_limited(retry_after)
         refresh_serializer = TokenRefreshSerializer(
             data={"refresh": serializer.validated_data["refresh_token"]}
         )

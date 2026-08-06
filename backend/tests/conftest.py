@@ -1,10 +1,18 @@
 import pytest
+from django.core.cache import caches
 from rest_framework.test import APIClient
 
 
 @pytest.fixture
 def api_client():
     return APIClient()
+
+
+@pytest.fixture(autouse=True)
+def isolate_auth_rate_limit_cache():
+    caches["auth"].clear()
+    yield
+    caches["auth"].clear()
 
 
 @pytest.fixture

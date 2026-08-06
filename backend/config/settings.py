@@ -142,12 +142,39 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "apps.core.authentication.BearerTokenAuthentication",
+        "apps.core.authentication.CompositeBearerAuthentication",
         "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+}
+
+AUTH_CACHE_URL = os.environ.get("AUTH_CACHE_URL", "")
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "smart-reminder-default",
+    },
+    "auth": (
+        {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": AUTH_CACHE_URL,
+            "TIMEOUT": None,
+        }
+        if AUTH_CACHE_URL
+        else {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "smart-reminder-auth",
+        }
+    ),
+}
+AUTH_RATE_LIMITS = {
+    "register_ip": (5, 60 * 60),
+    "register_phone": (3, 24 * 60 * 60),
+    "login_combo": (5, 15 * 60),
+    "login_ip": (30, 60 * 60),
+    "refresh_ip": (30, 5 * 60),
 }
 
 SIMPLE_JWT = {
