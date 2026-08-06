@@ -310,4 +310,6 @@ def test_validator_caps_asr_timeout_below_outer_proxy_timeouts(tmp_path):
     assert rejected_result.returncode == 1
     assert "ASR_TIMEOUT_SECONDS" in rejected_result.stderr
     asr_timeout = float(accepted["ASR_TIMEOUT_SECONDS"])
+    assert gunicorn_timeout == 30
+    assert nginx_timeout == 35
     assert asr_timeout <= 25 < gunicorn_timeout < nginx_timeout
