@@ -11,6 +11,7 @@ from apps.reminders.api.views import (
 
 urlpatterns = [
     path("api/v1/health", health, name="health"),
+    path("api/v1/auth/", include("apps.accounts.api.urls")),
     path(
         "api/v1/reminder-drafts",
         ReminderDraftListCreateView.as_view(),
