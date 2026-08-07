@@ -613,8 +613,8 @@ void main() {
 
     final title = tester.widget<Text>(find.text('今天'));
     expect(title.style?.fontSize, 28);
-    expect(tester.getSemantics(find.text('今天')).flagsCollection.isHeader,
-        isTrue);
+    expect(
+        tester.getSemantics(find.text('今天')).flagsCollection.isHeader, isTrue);
   });
 
   testWidgets('pumpApp MediaQuery reaches dialog overlays', (tester) async {
