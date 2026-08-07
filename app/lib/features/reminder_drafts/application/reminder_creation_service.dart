@@ -7,6 +7,16 @@ enum CreationOutcome {
   notificationNotScheduled,
 }
 
+class ReminderCreationServiceResult {
+  const ReminderCreationServiceResult({
+    required this.reminderId,
+    required this.outcome,
+  });
+
+  final String reminderId;
+  final CreationOutcome outcome;
+}
+
 class ReminderNotificationSchedulingException implements Exception {
   const ReminderNotificationSchedulingException({
     required this.cause,
@@ -27,7 +37,12 @@ class ReminderCreationService {
   final ReminderNotificationScheduler? notificationScheduler;
   final _statesByDraftId = <String, _DraftCreationState>{};
 
-  Future<CreationOutcome> confirm(ReminderDraft draft) {
+  Future<CreationOutcome> confirm(ReminderDraft draft) =>
+      confirmWithResult(draft).then((result) => result.outcome);
+
+  Future<ReminderCreationServiceResult> confirmWithResult(
+    ReminderDraft draft,
+  ) {
     final state = _statesByDraftId.putIfAbsent(
       draft.id,
       _DraftCreationState.new,
@@ -35,14 +50,14 @@ class ReminderCreationService {
     final inFlight = state.inFlight;
     if (inFlight != null) return inFlight;
 
-    final operation = Future<CreationOutcome>.microtask(
+    final operation = Future<ReminderCreationServiceResult>.microtask(
       () => _confirmAndSchedule(draft, state),
     );
     state.inFlight = operation;
     return operation;
   }
 
-  Future<CreationOutcome> _confirmAndSchedule(
+  Future<ReminderCreationServiceResult> _confirmAndSchedule(
     ReminderDraft draft,
     _DraftCreationState state,
   ) async {
@@ -54,13 +69,19 @@ class ReminderCreationService {
       final scheduler = notificationScheduler;
       if (scheduler == null) {
         _removeState(draft.id, state);
-        return CreationOutcome.created;
+        return ReminderCreationServiceResult(
+          reminderId: reminderId,
+          outcome: CreationOutcome.created,
+        );
       }
 
       try {
         await scheduler.schedule(reminderId: reminderId, draft: draft);
       } on ReminderNotificationException {
-        return CreationOutcome.notificationNotScheduled;
+        return ReminderCreationServiceResult(
+          reminderId: reminderId,
+          outcome: CreationOutcome.notificationNotScheduled,
+        );
       } catch (error, stackTrace) {
         throw ReminderNotificationSchedulingException(
           cause: error,
@@ -69,7 +90,10 @@ class ReminderCreationService {
       }
 
       _removeState(draft.id, state);
-      return CreationOutcome.notificationScheduled;
+      return ReminderCreationServiceResult(
+        reminderId: reminderId,
+        outcome: CreationOutcome.notificationScheduled,
+      );
     } finally {
       state.inFlight = null;
     }
@@ -98,5 +122,5 @@ class ReminderCreationService {
 
 class _DraftCreationState {
   String? reminderId;
-  Future<CreationOutcome>? inFlight;
+  Future<ReminderCreationServiceResult>? inFlight;
 }

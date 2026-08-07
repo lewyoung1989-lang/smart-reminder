@@ -30,6 +30,7 @@ class _ReminderDraftScreenState extends State<ReminderDraftScreen> {
   bool _isConfirming = false;
 
   Future<void> _confirm() async {
+    if (_isConfirming) return;
     setState(() => _isConfirming = true);
     try {
       await widget.onConfirm();

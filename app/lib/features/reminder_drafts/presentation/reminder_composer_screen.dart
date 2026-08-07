@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../application/reminder_creation_service.dart';
 import '../../../platform/notifications/reminder_notification_scheduler.dart';
 import '../domain/reminder_draft.dart';
+import '../../reminders/domain/reminder.dart' show ReminderCreationResult;
 import 'reminder_draft_screen.dart';
 import '../../quick_create/domain/quick_create_result.dart';
 import '../../quick_create/presentation/quick_create_sheet.dart';
@@ -41,17 +42,28 @@ class _ReminderComposerScreenState extends State<ReminderComposerScreen> {
     final draft = _draft;
     if (draft == null) return;
     try {
-      final outcome = await _creationService.confirm(draft);
+      final result = await _creationService.confirmWithResult(draft);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(switch (outcome) {
-            CreationOutcome.created => '提醒已创建',
-            CreationOutcome.notificationScheduled => '提醒已创建，通知已安排',
-            CreationOutcome.notificationNotScheduled => '提醒已创建，但手机通知未安排',
-          }),
-        ),
-      );
+      switch (result.outcome) {
+        case CreationOutcome.created:
+          Navigator.of(context).pop(
+            ReminderCreationResult(
+              reminderId: result.reminderId,
+              notificationScheduled: false,
+            ),
+          );
+        case CreationOutcome.notificationScheduled:
+          Navigator.of(context).pop(
+            ReminderCreationResult(
+              reminderId: result.reminderId,
+              notificationScheduled: true,
+            ),
+          );
+        case CreationOutcome.notificationNotScheduled:
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('提醒已创建，但手机通知未安排')),
+          );
+      }
     } on ReminderNotificationSchedulingException {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
