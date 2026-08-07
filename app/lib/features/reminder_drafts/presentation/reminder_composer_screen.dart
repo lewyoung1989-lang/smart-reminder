@@ -52,6 +52,7 @@ class _ReminderComposerScreenState extends State<ReminderComposerScreen> {
               notificationScheduled: false,
             ),
           );
+          return;
         case CreationOutcome.notificationScheduled:
           Navigator.of(context).pop(
             ReminderCreationResult(
@@ -59,6 +60,7 @@ class _ReminderComposerScreenState extends State<ReminderComposerScreen> {
               notificationScheduled: true,
             ),
           );
+          return;
         case CreationOutcome.notificationNotScheduled:
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('提醒已创建，但手机通知未安排')),

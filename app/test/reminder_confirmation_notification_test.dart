@@ -117,6 +117,52 @@ void main() {
     expect(scheduler.requests, hasLength(1));
   });
 
+  testWidgets('creation without a scheduler returns an unscheduled result',
+      (tester) async {
+    ReminderCreationResult? returnedResult;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => FilledButton(
+            onPressed: () async {
+              returnedResult = await Navigator.of(context).push(
+                MaterialPageRoute<ReminderCreationResult>(
+                  builder: (_) => ReminderComposerScreen(
+                    createDraft: (_) async => draft,
+                    confirmDraft: (_) async => 'reminder-1',
+                    now: DateTime(2026, 8, 4, 10),
+                  ),
+                ),
+              );
+            },
+            child: const Text('打开无通知创建'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('打开无通知创建'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '1分钟后提醒我喝水');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, '继续'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '确认'));
+    await tester.pumpAndSettle();
+
+    expect(
+      returnedResult,
+      isA<ReminderCreationResult>()
+          .having((result) => result.reminderId, 'reminderId', 'reminder-1')
+          .having(
+            (result) => result.notificationScheduled,
+            'notificationScheduled',
+            isFalse,
+          ),
+    );
+  });
+
   testWidgets('permission denial reports a warning without reconfirming',
       (tester) async {
     final scheduler = RecordingNotificationScheduler()
