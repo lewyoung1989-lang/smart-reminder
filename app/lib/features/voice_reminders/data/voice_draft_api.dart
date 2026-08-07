@@ -2,8 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
-import '../domain/reminder_draft.dart';
-
+import '../../reminder_drafts/domain/reminder_draft.dart';
 
 class VoiceDraftApi {
   VoiceDraftApi({
@@ -49,7 +48,6 @@ class VoiceDraftApi {
 
   void close() => _client.close();
 }
-
 
 class VoiceDraftApiException implements Exception {
   const VoiceDraftApiException(this.statusCode, this.body);

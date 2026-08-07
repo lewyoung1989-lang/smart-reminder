@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../domain/reminder_draft.dart';
-
+import '../../../ui/components/app_page_header.dart';
+import '../../../ui/components/app_property_row.dart';
+import '../../../ui/components/app_status_banner.dart';
 
 class ReminderDraftScreen extends StatefulWidget {
   const ReminderDraftScreen({
@@ -23,7 +26,6 @@ class ReminderDraftScreen extends StatefulWidget {
   State<ReminderDraftScreen> createState() => _ReminderDraftScreenState();
 }
 
-
 class _ReminderDraftScreenState extends State<ReminderDraftScreen> {
   bool _isConfirming = false;
 
@@ -39,47 +41,53 @@ class _ReminderDraftScreenState extends State<ReminderDraftScreen> {
   @override
   Widget build(BuildContext context) {
     final draft = widget.draft;
-    final theme = Theme.of(context);
     final now = widget.now ?? DateTime.now();
     return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          tooltip: '返回修改',
-          onPressed: _isConfirming ? null : widget.onEdit,
-          icon: const Icon(Icons.arrow_back),
-        ),
-        title: const Text('提醒草稿'),
-      ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          Text('原始内容', style: theme.textTheme.labelLarge),
-          const SizedBox(height: 6),
-          Text(widget.sourceText),
-          const Divider(height: 32),
-          _DraftRow(label: '提醒', value: draft.title),
-          _DraftRow(label: '时间', value: draft.displayTime(now)),
-          _DraftRow(
-            label: '强度',
-            value: draft.severity == ReminderSeverity.alarm ? '闹钟' : '通知',
+          AppPageHeader(
+            eyebrow: '提醒草稿',
+            title: '确认计划',
+            actions: [
+              IconButton(
+                tooltip: '返回修改',
+                onPressed: _isConfirming ? null : widget.onEdit,
+                icon: const Icon(LucideIcons.arrowLeft),
+              ),
+            ],
           ),
-          _DraftRow(label: '解析方式', value: draft.parserSourceLabel),
-          if (draft.weatherMessage != null)
-            _DraftRow(label: '天气条件', value: draft.weatherMessage!),
+          const SizedBox(height: 20),
+          AppStatusBanner(
+            severity: draft.canConfirm
+                ? AppStatusSeverity.info
+                : AppStatusSeverity.warning,
+            title: draft.canConfirm ? '请确认提醒内容' : '请补充提醒信息',
+            message: draft.canConfirm ? '请检查时间和提醒内容后确认创建' : '补充信息后再确认创建',
+          ),
+          const SizedBox(height: 20),
+          AppPropertyRow(label: '原始表达', value: Text(widget.sourceText)),
+          const SizedBox(height: 16),
+          AppPropertyRow(label: '提醒', value: Text(draft.title)),
+          const SizedBox(height: 16),
+          AppPropertyRow(label: '时间', value: Text(draft.displayTime(now))),
+          const SizedBox(height: 16),
+          AppPropertyRow(
+            label: '强度',
+            value: Text(draft.severity == ReminderSeverity.alarm ? '闹钟' : '通知'),
+          ),
+          const SizedBox(height: 16),
+          AppPropertyRow(label: '解析方式', value: Text(draft.parserSourceLabel)),
+          if (draft.weatherMessage != null) ...[
+            const SizedBox(height: 16),
+            AppPropertyRow(label: '天气条件', value: Text(draft.weatherMessage!)),
+          ],
           if (draft.ambiguities.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.error_outline, color: theme.colorScheme.error),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    draft.ambiguities.join('，'),
-                    style: TextStyle(color: theme.colorScheme.error),
-                  ),
-                ),
-              ],
+            const SizedBox(height: 16),
+            AppStatusBanner(
+              severity: AppStatusSeverity.warning,
+              title: '需要补充信息',
+              message: draft.ambiguities.join('，'),
             ),
           ],
           const SizedBox(height: 28),
@@ -88,53 +96,26 @@ class _ReminderDraftScreenState extends State<ReminderDraftScreen> {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: _isConfirming ? null : widget.onEdit,
-                  icon: const Icon(Icons.edit_outlined),
+                  icon: const Icon(LucideIcons.pencil),
                   label: const Text('修改'),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: FilledButton.icon(
-                  onPressed: draft.canConfirm && !_isConfirming ? _confirm : null,
+                  onPressed:
+                      draft.canConfirm && !_isConfirming ? _confirm : null,
                   icon: _isConfirming
                       ? const SizedBox.square(
                           dimension: 18,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Icon(Icons.check),
-                  label: const Text('确认创建'),
+                      : const Icon(LucideIcons.check),
+                  label: const Text('确认'),
                 ),
               ),
             ],
           ),
-        ],
-      ),
-    );
-  }
-}
-
-
-class _DraftRow extends StatelessWidget {
-  const _DraftRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 88,
-            child: Text(
-              label,
-              style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
-            ),
-          ),
-          Expanded(child: Text(value)),
         ],
       ),
     );

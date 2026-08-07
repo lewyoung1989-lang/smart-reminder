@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:smart_reminder_app/features/voice_reminders/domain/reminder_draft.dart';
+import 'package:smart_reminder_app/features/reminder_drafts/domain/reminder_draft.dart';
 import 'package:smart_reminder_app/features/voice_reminders/presentation/voice_draft_screen.dart';
 
 void main() {
@@ -13,6 +13,7 @@ void main() {
       severity: ReminderSeverity.alarm,
       weatherMessage: '未来两小时可能有雨，建议带伞',
       ambiguities: const [],
+      parserSource: 'local',
     );
 
     await tester.pumpWidget(
@@ -26,8 +27,9 @@ void main() {
       ),
     );
 
-    expect(find.text('结构化提醒草稿'), findsOneWidget);
+    expect(find.text('确认计划'), findsOneWidget);
+    expect(find.text('明天早上七点半叫我起床，先查未来两小时天气，如果下雨提醒我带伞。'), findsOneWidget);
     expect(find.text('明天 07:30'), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, '确认创建'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '确认'), findsOneWidget);
   });
 }
