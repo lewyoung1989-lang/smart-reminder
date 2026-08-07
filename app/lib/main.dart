@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
+import 'app/shell/app_shell.dart';
+import 'app/theme/app_theme.dart';
 import 'config/app_config.dart';
 import 'core/network/authenticated_client.dart';
 import 'features/auth/application/auth_controller.dart';
@@ -10,18 +12,14 @@ import 'features/auth/data/secure_token_store.dart';
 import 'features/auth/data/token_store.dart';
 import 'features/auth/presentation/auth_screen.dart';
 import 'features/auth/presentation/startup_screen.dart';
-import 'features/home/presentation/app_shell.dart';
 import 'features/medicine_cabinet/data/api_medicine_repository.dart';
 import 'features/medicine_cabinet/data/medicine_cabinet_api.dart';
-import 'features/medicine_cabinet/domain/medicine_models.dart';
-import 'features/medicine_cabinet/presentation/medicine_cabinet_screen.dart';
 import 'features/medicine_ocr/data/medicine_ocr_api.dart';
 import 'features/medicine_ocr/presentation/medicine_ocr_screen.dart';
+import 'features/plans/data/plan_repository.dart';
+import 'features/reminder_drafts/application/reminder_creation_service.dart';
 import 'features/reminder_drafts/data/reminder_draft_api.dart';
-import 'features/reminder_drafts/presentation/reminder_composer_screen.dart';
-import 'features/reminders/data/reminder_api.dart';
-import 'features/reminders/presentation/reminder_home_screen.dart';
-import 'features/profile/presentation/profile_screen.dart';
+import 'features/today/data/today_repository.dart';
 import 'platform/notifications/local_notification_scheduler.dart';
 import 'platform/notifications/reminder_notification_scheduler.dart';
 
@@ -58,7 +56,7 @@ class SmartReminderApp extends StatefulWidget {
 class _SmartReminderAppState extends State<SmartReminderApp> {
   final _navigatorKey = GlobalKey<NavigatorState>();
   late final ReminderDraftApi _reminderDraftApi;
-  late final ReminderApi _reminderApi;
+  late final ReminderCreationService _reminderCreationService;
   late final MedicineCabinetApi _medicineCabinetApi;
   late final ApiMedicineRepository _medicineRepository;
   late final MedicineOcrApi _medicineOcrApi;
@@ -67,6 +65,7 @@ class _SmartReminderAppState extends State<SmartReminderApp> {
   late final AuthenticatedClient _authenticatedClient;
   late final AuthApi _authApi;
   late final AuthController _authController;
+  var _themeMode = ThemeMode.system;
 
   @override
   void initState() {
@@ -96,9 +95,9 @@ class _SmartReminderAppState extends State<SmartReminderApp> {
       baseUrl: widget.config.apiBaseUrl,
       client: _authenticatedClient,
     );
-    _reminderApi = ReminderApi(
-      baseUrl: widget.config.apiBaseUrl,
-      client: _authenticatedClient,
+    _reminderCreationService = ReminderCreationService(
+      confirmDraft: _reminderDraftApi.confirmDraft,
+      notificationScheduler: widget.notificationScheduler,
     );
     _medicineCabinetApi = MedicineCabinetApi(
       baseUrl: widget.config.apiBaseUrl,
@@ -119,7 +118,6 @@ class _SmartReminderAppState extends State<SmartReminderApp> {
   @override
   void dispose() {
     _reminderDraftApi.close();
-    _reminderApi.close();
     _medicineCabinetApi.close();
     _medicineOcrApi.close();
     _authController
@@ -162,18 +160,9 @@ class _SmartReminderAppState extends State<SmartReminderApp> {
       navigatorKey: _navigatorKey,
       title: '智能提醒',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF166B5A),
-          surface: const Color(0xFFF7F9F8),
-        ),
-        scaffoldBackgroundColor: const Color(0xFFF7F9F8),
-        inputDecorationTheme: const InputDecorationTheme(
-          filled: true,
-          fillColor: Colors.white,
-        ),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
+      themeMode: _themeMode,
       home: _home(),
     );
   }
@@ -196,34 +185,25 @@ class _SmartReminderAppState extends State<SmartReminderApp> {
             ),
           ),
         AuthStatus.authenticated => AppShell(
-            reminders: ReminderHomeScreen(
-              listReminders: ({required status, pageUrl}) =>
-                  _reminderApi.list(status: status, pageUrl: pageUrl),
-              cancelReminder: _reminderApi.cancel,
-              notificationScheduler: widget.notificationScheduler,
-              createReminder: (_) => ReminderComposerScreen(
-                createDraft: _reminderDraftApi.createDraft,
-                confirmDraft: _reminderDraftApi.confirmDraft,
-                notificationScheduler: widget.notificationScheduler,
-              ),
+            todayRepository: const UnavailableTodayRepository(),
+            planRepository: const UnavailablePlanRepository(),
+            medicineRepository: _medicineRepository,
+            user: _authController.user!,
+            themeMode: _themeMode,
+            onThemeModeChanged: (themeMode) {
+              setState(() => _themeMode = themeMode);
+            },
+            onChangePassword: (current, password, confirm) =>
+                _authController.changePassword(
+              currentPassword: current,
+              newPassword: password,
+              newPasswordConfirm: confirm,
             ),
-            medicineCabinet: MedicineCabinetScreen(
-              repository: _medicineRepository,
-              onDeleteBatch: (batch) =>
-                  _medicineCabinetApi.deleteBatch(batch.id),
-              captureAvailability: MedicineCaptureAvailability.ready,
-              onCapture: _openMedicineOcr,
-            ),
-            profile: ProfileScreen(
-              user: _authController.user!,
-              onChangePassword: (current, password, confirm) =>
-                  _authController.changePassword(
-                currentPassword: current,
-                newPassword: password,
-                newPasswordConfirm: confirm,
-              ),
-              onLogout: _authController.logout,
-            ),
+            onLogout: _authController.logout,
+            createDraft: _reminderDraftApi.createDraft,
+            reminderCreationService: _reminderCreationService,
+            onDeleteBatch: (batch) => _medicineCabinetApi.deleteBatch(batch.id),
+            onCaptureMedicine: _openMedicineOcr,
           ),
       };
 }
