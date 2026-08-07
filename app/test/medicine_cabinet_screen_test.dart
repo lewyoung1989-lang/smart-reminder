@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:smart_reminder_app/features/medicine_cabinet/data/medicine_repository.dart';
 import 'package:smart_reminder_app/features/medicine_cabinet/domain/medicine_models.dart';
 import 'package:smart_reminder_app/features/medicine_cabinet/presentation/medicine_cabinet_screen.dart';
+import 'package:smart_reminder_app/ui/components/app_list_row.dart';
 
 void main() {
   testWidgets('deletes a batch and reloads the cabinet only after success',
@@ -54,10 +55,66 @@ void main() {
     expect(find.text('操作失败，请稍后重试'), findsOneWidget);
     expect(find.text('布洛芬胶囊'), findsOneWidget);
   });
+
+  testWidgets('discloses truncated batches and labels unknown expiry neutrally',
+      (tester) async {
+    final repository = _Repository(
+      status: MedicineStatus.unknown,
+      nearestExpiry: null,
+      isTruncated: true,
+    );
+    await tester.pumpWidget(
+      MaterialApp(home: MedicineCabinetScreen(repository: repository)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('仅显示已加载的 1 个库存批次'), findsOneWidget);
+    expect(find.text('数量和有效期状态仅基于这些批次'), findsOneWidget);
+    final row = tester.widget<AppListRow>(
+      find.byWidgetPredicate(
+        (widget) => widget is AppListRow && widget.title == '布洛芬胶囊',
+      ),
+    );
+    expect(row.statusText, '有效期未知');
+    expect(row.statusColor, isNot(Colors.green));
+  });
+
+  testWidgets('reloads the cabinet only after confirmed capture',
+      (tester) async {
+    final repository = _Repository();
+    var results = [false, true].iterator;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MedicineCabinetScreen(
+          repository: repository,
+          captureAvailability: MedicineCaptureAvailability.ready,
+          onCapture: () async => results.moveNext() && results.current,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('拍照录入'));
+    await tester.pumpAndSettle();
+    expect(repository.loadCalls, 1);
+
+    await tester.tap(find.text('拍照录入'));
+    await tester.pumpAndSettle();
+    expect(repository.loadCalls, 2);
+  });
 }
 
 class _Repository implements MedicineRepository {
+  _Repository({
+    this.status = MedicineStatus.active,
+    this.nearestExpiry,
+    this.isTruncated = false,
+  });
+
   var loadCalls = 0;
+  final MedicineStatus status;
+  final DateTime? nearestExpiry;
+  final bool isTruncated;
 
   late final detail = MedicineDetail(
     summary: MedicineSummary(
@@ -65,8 +122,9 @@ class _Repository implements MedicineRepository {
       name: '布洛芬胶囊',
       specification: '0.3g*20粒',
       totalQuantity: 2,
-      nearestExpiry: DateTime(2027, 1, 1),
-      status: MedicineStatus.active,
+      nearestExpiry: nearestExpiry ??
+          (status == MedicineStatus.unknown ? null : DateTime(2027, 1, 1)),
+      status: status,
     ),
     batches: [
       MedicineBatch(
@@ -87,6 +145,10 @@ class _Repository implements MedicineRepository {
   @override
   Future<MedicineCollection> load() async {
     loadCalls += 1;
-    return MedicineCollection(items: [detail.summary]);
+    return MedicineCollection(
+      items: [detail.summary],
+      isTruncated: isTruncated,
+      loadedBatchCount: 1,
+    );
   }
 }

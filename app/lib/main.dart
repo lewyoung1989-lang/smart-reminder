@@ -11,7 +11,9 @@ import 'features/auth/data/token_store.dart';
 import 'features/auth/presentation/auth_screen.dart';
 import 'features/auth/presentation/startup_screen.dart';
 import 'features/home/presentation/app_shell.dart';
+import 'features/medicine_cabinet/data/api_medicine_repository.dart';
 import 'features/medicine_cabinet/data/medicine_cabinet_api.dart';
+import 'features/medicine_cabinet/domain/medicine_models.dart';
 import 'features/medicine_cabinet/presentation/medicine_cabinet_screen.dart';
 import 'features/medicine_ocr/data/medicine_ocr_api.dart';
 import 'features/medicine_ocr/presentation/medicine_ocr_screen.dart';
@@ -54,9 +56,11 @@ class SmartReminderApp extends StatefulWidget {
 }
 
 class _SmartReminderAppState extends State<SmartReminderApp> {
+  final _navigatorKey = GlobalKey<NavigatorState>();
   late final ReminderDraftApi _reminderDraftApi;
   late final ReminderApi _reminderApi;
   late final MedicineCabinetApi _medicineCabinetApi;
+  late final ApiMedicineRepository _medicineRepository;
   late final MedicineOcrApi _medicineOcrApi;
   late final TokenStore _tokenStore;
   late final AuthApi _refreshApi;
@@ -100,6 +104,7 @@ class _SmartReminderAppState extends State<SmartReminderApp> {
       baseUrl: widget.config.apiBaseUrl,
       client: _authenticatedClient,
     );
+    _medicineRepository = ApiMedicineRepository(_medicineCabinetApi);
     _medicineOcrApi = MedicineOcrApi(
       baseUrl: widget.config.apiBaseUrl,
       client: _authenticatedClient,
@@ -135,9 +140,26 @@ class _SmartReminderAppState extends State<SmartReminderApp> {
     return image?.readAsBytes();
   }
 
+  Future<bool> _openMedicineOcr() async {
+    final navigator = _navigatorKey.currentState;
+    if (navigator == null) return false;
+    return (await navigator.push<bool>(
+          MaterialPageRoute(
+            builder: (_) => MedicineOcrScreen(
+              capture: _captureMedicineImage,
+              createJob: _medicineOcrApi.createJob,
+              getJob: _medicineOcrApi.getJob,
+              confirmJob: _medicineOcrApi.confirmJob,
+            ),
+          ),
+        )) ??
+        false;
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       title: '智能提醒',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
@@ -186,14 +208,11 @@ class _SmartReminderAppState extends State<SmartReminderApp> {
               ),
             ),
             medicineCabinet: MedicineCabinetScreen(
-              listBatches: _medicineCabinetApi.listBatches,
-              deleteBatch: _medicineCabinetApi.deleteBatch,
-            ),
-            medicineOcr: MedicineOcrScreen(
-              capture: _captureMedicineImage,
-              createJob: _medicineOcrApi.createJob,
-              getJob: _medicineOcrApi.getJob,
-              confirmJob: _medicineOcrApi.confirmJob,
+              repository: _medicineRepository,
+              onDeleteBatch: (batch) =>
+                  _medicineCabinetApi.deleteBatch(batch.id),
+              captureAvailability: MedicineCaptureAvailability.ready,
+              onCapture: _openMedicineOcr,
             ),
             profile: ProfileScreen(
               user: _authController.user!,

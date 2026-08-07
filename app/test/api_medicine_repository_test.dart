@@ -50,6 +50,8 @@ void main() {
     expect(source.calls, 1);
     expect(source.lastQuery, '');
     expect(source.lastPageUrl, isNull);
+    expect(collection.isTruncated, isTrue);
+    expect(collection.loadedBatchCount, 3);
     expect(collection.items, hasLength(2));
     final ibuprofen = collection.items.singleWhere(
       (item) => item.specification == '0.3g*20粒',
@@ -117,6 +119,30 @@ void main() {
     final repository = ApiMedicineRepository(_InventorySource.error(failure));
 
     await expectLater(repository.load(), throwsA(same(failure)));
+  });
+
+  test('maps batches without a known expiry to a neutral unknown status',
+      () async {
+    final collection = await ApiMedicineRepository(
+      _InventorySource(
+        InventoryBatchPage(
+          batches: [
+            batch(
+              id: 'batch-unknown',
+              medicineId: 'medicine-unknown',
+              name: '有效期未录入药品',
+              specification: '10mg',
+              quantity: 1,
+              expiryStatus: InventoryExpiryStatus.unknown,
+            ),
+          ],
+          nextPage: null,
+        ),
+      ),
+    ).load();
+
+    expect(collection.items.single.nearestExpiry, isNull);
+    expect(collection.items.single.status, MedicineStatus.unknown);
   });
 }
 

@@ -36,7 +36,7 @@ class MedicineCabinetScreen extends StatefulWidget {
   final InventoryBatchLoader? listBatches;
   final Future<void> Function(String batchId)? deleteBatch;
   final Future<void> Function(MedicineBatch batch)? onDeleteBatch;
-  final Future<void> Function()? onCapture;
+  final Future<bool> Function()? onCapture;
   final MedicineCaptureAvailability captureAvailability;
   final VoidCallback? onOpenSystemSettings;
   final ValueChanged<MedicineSummary>? onOpenMedicine;
@@ -276,7 +276,8 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
     }
     setState(() => _isCapturing = true);
     try {
-      await capture();
+      final confirmed = await capture();
+      if (confirmed && mounted) await _load(clearCollection: true);
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -437,6 +438,21 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
         ),
       ));
     }
+    if (collection.isTruncated) {
+      slivers.add(
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.lg),
+          sliver: SliverToBoxAdapter(
+            child: AppStatusBanner(
+              severity: AppStatusSeverity.info,
+              title: '仅显示已加载的 ${collection.loadedBatchCount} 个库存批次',
+              message: '数量和有效期状态仅基于这些批次',
+            ),
+          ),
+        ),
+      );
+    }
     if (visible.isEmpty) {
       slivers.addAll(_stateSlivers(const AppContentState.empty(
         title: '没有符合条件的药品',
@@ -581,6 +597,7 @@ class _MedicineRow extends StatelessWidget {
       MedicineStatus.active => semantic.success,
       MedicineStatus.expiring => semantic.warning,
       MedicineStatus.expired => Theme.of(context).colorScheme.error,
+      MedicineStatus.unknown => Theme.of(context).colorScheme.onSurfaceVariant,
     };
     return AppListRow(
       icon: LucideIcons.pill,

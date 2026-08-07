@@ -1,4 +1,4 @@
-enum MedicineStatus { active, expiring, expired }
+enum MedicineStatus { active, expiring, expired, unknown }
 
 enum MedicineCaptureAvailability {
   ready,
@@ -59,8 +59,12 @@ class MedicineCollection {
   MedicineCollection({
     required List<MedicineSummary> items,
     this.isOffline = false,
+    this.isTruncated = false,
+    this.loadedBatchCount = 0,
   }) : items = List.unmodifiable(items);
 
   final List<MedicineSummary> items;
   final bool isOffline;
+  final bool isTruncated;
+  final int loadedBatchCount;
 }

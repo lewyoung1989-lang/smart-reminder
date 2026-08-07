@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:smart_reminder_app/features/home/presentation/app_shell.dart';
@@ -18,14 +20,13 @@ void main() {
         ),
       );
 
-  testWidgets('switches among reminders, cabinet, and medicine entry',
+  testWidgets('switches among reminders, cabinet, and profile without OCR tab',
       (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: AppShell(
           reminders: Text('提醒页面'),
           medicineCabinet: Text('药箱页面'),
-          medicineOcr: Text('拍照页面'),
           profile: Text('我的页面'),
         ),
       ),
@@ -33,15 +34,64 @@ void main() {
 
     expect(find.text('提醒页面'), findsOneWidget);
     expect(find.text('药箱'), findsOneWidget);
-    expect(find.text('拍照录入'), findsOneWidget);
+    expect(find.text('拍照录入'), findsNothing);
 
     await tester.tap(find.text('药箱'));
     await tester.pump();
     expect(find.text('药箱页面'), findsOneWidget);
 
-    await tester.tap(find.text('拍照录入'));
+    await tester.tap(find.text('我的'));
     await tester.pump();
-    expect(find.text('拍照页面'), findsOneWidget);
+    expect(find.text('我的页面'), findsOneWidget);
+  });
+
+  testWidgets('returns true to the cabinet route after confirmed inventory',
+      (tester) async {
+    final result = Completer<bool?>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => FilledButton(
+            onPressed: () async {
+              result.complete(
+                await Navigator.of(context).push<bool>(
+                  MaterialPageRoute(
+                    builder: (_) => MedicineOcrScreen(
+                      capture: (kind) async => kind == 'front' ? [1] : null,
+                      createJob: ({required frontBytes, expiryBytes}) async =>
+                          const OcrJob(id: 'job-1', status: 'queued'),
+                      getJob: (_) async => const OcrJob(
+                        id: 'job-1',
+                        status: 'succeeded',
+                        candidate: OcrCandidate(
+                          medicineName: '布洛芬胶囊',
+                          specification: '0.3g*20粒',
+                          batchNumber: 'LOT-1',
+                        ),
+                      ),
+                      confirmJob: (_, __) async {},
+                      pollInterval: Duration.zero,
+                    ),
+                  ),
+                ),
+              );
+            },
+            child: const Text('打开录入'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('打开录入'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('拍摄药盒正面'));
+    await tester.pump();
+    await tester.tap(find.text('开始识别'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确认入库'));
+    await tester.pumpAndSettle();
+
+    expect(await result.future, isTrue);
   });
 
   testWidgets(

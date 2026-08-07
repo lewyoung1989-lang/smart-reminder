@@ -277,6 +277,7 @@ class _StatusSummary extends StatelessWidget {
       MedicineStatus.active => semantic.success,
       MedicineStatus.expiring => semantic.warning,
       MedicineStatus.expired => Theme.of(context).colorScheme.error,
+      MedicineStatus.unknown => Theme.of(context).colorScheme.onSurfaceVariant,
     };
     return Semantics(
       label: '状态：$status',
@@ -356,6 +357,7 @@ String _statusLabel(MedicineStatus status) => switch (status) {
       MedicineStatus.active => '在用',
       MedicineStatus.expiring => '临期',
       MedicineStatus.expired => '已过期',
+      MedicineStatus.unknown => '有效期未知',
     };
 
 String _formatDate(DateTime? value) =>

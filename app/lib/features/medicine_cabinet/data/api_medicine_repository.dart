@@ -58,6 +58,8 @@ class ApiMedicineRepository implements MedicineRepository {
       items: immutableDetails.values
           .map((detail) => detail.summary)
           .toList(growable: false),
+      isTruncated: page.nextPage != null,
+      loadedBatchCount: page.batches.length,
     );
   }
 
@@ -97,6 +99,11 @@ class ApiMedicineRepository implements MedicineRepository {
       (batch) => batch.expiryStatus == InventoryExpiryStatus.expiringSoon,
     )) {
       return MedicineStatus.expiring;
+    }
+    if (batches.any(
+      (batch) => batch.expiryStatus == InventoryExpiryStatus.unknown,
+    )) {
+      return MedicineStatus.unknown;
     }
     return MedicineStatus.active;
   }

@@ -192,6 +192,10 @@ class _MedicineOcrScreenState extends State<MedicineOcrScreen> {
     if (!mounted) {
       return;
     }
+    if (Navigator.canPop(context)) {
+      Navigator.of(context).pop(true);
+      return;
+    }
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('已加入药箱')),
     );
