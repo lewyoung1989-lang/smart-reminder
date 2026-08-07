@@ -53,7 +53,7 @@ void main() {
     expect(scheduler.requests, hasLength(1));
     expect(scheduler.requests.single.reminderId, 'reminder-1');
     expect(scheduler.requests.single.draft.title, '喝水');
-    expect(find.text('提醒已创建，通知已安排'), findsNothing);
+    expect(find.text('提醒已创建，通知已安排'), findsOneWidget);
   });
 
   testWidgets('successful confirmation returns one terminal creation result',

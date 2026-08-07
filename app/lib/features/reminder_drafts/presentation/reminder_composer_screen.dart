@@ -46,20 +46,10 @@ class _ReminderComposerScreenState extends State<ReminderComposerScreen> {
       if (!mounted) return;
       switch (result.outcome) {
         case CreationOutcome.created:
-          Navigator.of(context).pop(
-            ReminderCreationResult(
-              reminderId: result.reminderId,
-              notificationScheduled: false,
-            ),
-          );
+          _complete(result, notificationScheduled: false);
           return;
         case CreationOutcome.notificationScheduled:
-          Navigator.of(context).pop(
-            ReminderCreationResult(
-              reminderId: result.reminderId,
-              notificationScheduled: true,
-            ),
-          );
+          _complete(result, notificationScheduled: true);
           return;
         case CreationOutcome.notificationNotScheduled:
           ScaffoldMessenger.of(context).showSnackBar(
@@ -77,6 +67,28 @@ class _ReminderComposerScreenState extends State<ReminderComposerScreen> {
         const SnackBar(content: Text('创建失败，请稍后重试')),
       );
     }
+  }
+
+  void _complete(
+    ReminderCreationServiceResult result, {
+    required bool notificationScheduled,
+  }) {
+    final creationResult = ReminderCreationResult(
+      reminderId: result.reminderId,
+      notificationScheduled: notificationScheduled,
+    );
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop(creationResult);
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          notificationScheduled ? '提醒已创建，通知已安排' : '提醒已创建，但手机通知未安排',
+        ),
+      ),
+    );
   }
 
   void _edit() {

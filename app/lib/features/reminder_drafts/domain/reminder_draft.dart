@@ -1,6 +1,5 @@
 enum ReminderSeverity { alarm, notification }
 
-
 class ReminderDraft {
   const ReminderDraft({
     required this.id,
@@ -10,7 +9,7 @@ class ReminderDraft {
     required this.severity,
     required this.weatherMessage,
     required this.ambiguities,
-    required this.parserSource,
+    this.parserSource = 'local',
   });
 
   factory ReminderDraft.fromJson(Map<String, dynamic> json) {
