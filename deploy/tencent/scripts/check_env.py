@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import re
 import sys
 from pathlib import Path
 from urllib.parse import urlparse
@@ -19,6 +20,23 @@ REQUIRED = {
     "CELERY_RESULT_BACKEND",
     "AUTH_CACHE_URL",
     "DEEPSEEK_API_KEY",
+    "ASR_PROVIDER",
+    "ASR_BASE_URL",
+    "ASR_MODEL",
+    "ASR_TIMEOUT_SECONDS",
+    "ASR_MAX_AUDIO_BYTES",
+    "ASR_MAX_REQUEST_BYTES",
+    "ASR_MIN_DURATION_SECONDS",
+    "ASR_MAX_DURATION_SECONDS",
+    "ASR_GLOBAL_CONCURRENCY",
+    "ASR_CONCURRENCY_PER_USER",
+    "ASR_LEASE_TTL_SECONDS",
+    "ASR_USER_RATE",
+    "ASR_IP_RATE",
+    "ASR_REDIS_URL",
+    "ASR_THROTTLE_REDIS_URL",
+    "ASR_TRUSTED_PROXY_IPS",
+    "OCR_ENABLED",
     "OCR_PROVIDER",
     "OCR_STORAGE_PROVIDER",
     "OCR_JOB_RETENTION_HOURS",
@@ -28,14 +46,19 @@ REQUIRED = {
     "S3_BUCKET",
     "S3_REGION",
     "S3_ADDRESSING_STYLE",
-    "S3_ACCESS_KEY_ID",
-    "S3_SECRET_ACCESS_KEY",
-    "MINIO_ROOT_USER",
-    "MINIO_ROOT_PASSWORD",
     "CERTBOT_EMAIL",
     "BACKUP_DIR",
     "BACKUP_RETENTION_DAYS",
 }
+
+OCR_SECRETS = {
+    "S3_ACCESS_KEY_ID",
+    "S3_SECRET_ACCESS_KEY",
+    "MINIO_ROOT_USER",
+    "MINIO_ROOT_PASSWORD",
+}
+
+RATE_PATTERN = re.compile(r"^[1-9][0-9]*/(sec|min|hour|day)$")
 
 
 def parse_env(path: Path) -> dict[str, str]:
@@ -55,6 +78,15 @@ def validate(values: dict[str, str]) -> list[str]:
     errors = [
         f"{key} is required" for key in sorted(REQUIRED) if not values.get(key)
     ]
+    ocr_enabled = values.get("OCR_ENABLED")
+    if ocr_enabled not in {None, "", "true", "false"}:
+        errors.append("OCR_ENABLED must be true or false")
+    if ocr_enabled == "true":
+        errors.extend(
+            f"{key} is required"
+            for key in sorted(OCR_SECRETS)
+            if not values.get(key)
+        )
     if values.get("DOMAIN") not in {None, "", "aipupu.cloud"}:
         errors.append("DOMAIN must be aipupu.cloud")
     files_domain = values.get("FILES_DOMAIN")
@@ -92,6 +124,92 @@ def validate(values: dict[str, str]) -> list[str]:
     jwt_key = values.get("JWT_SIGNING_KEY", "")
     if jwt_key and len(jwt_key) < 32:
         errors.append("JWT_SIGNING_KEY must contain at least 32 characters")
+    if values.get("ASR_PROVIDER") not in {None, "", "funasr"}:
+        errors.append("ASR_PROVIDER must be funasr")
+    if values.get("ASR_MODEL") not in {None, "", "paraformer-zh"}:
+        errors.append("ASR_MODEL must be paraformer-zh")
+    if values.get("ASR_BASE_URL") not in {
+        None,
+        "",
+        "http://funasr:8000",
+    }:
+        errors.append("ASR_BASE_URL must be http://funasr:8000")
+    if values.get("ASR_REDIS_URL") not in {
+        None,
+        "",
+        "redis://redis:6379/0",
+    }:
+        errors.append("ASR_REDIS_URL must be redis://redis:6379/0")
+    if values.get("ASR_THROTTLE_REDIS_URL") not in {
+        None,
+        "",
+        "redis://redis:6379/2",
+    }:
+        errors.append(
+            "ASR_THROTTLE_REDIS_URL must be redis://redis:6379/2"
+        )
+    if values.get("ASR_TRUSTED_PROXY_IPS") not in {
+        None,
+        "",
+        "172.29.0.10",
+    }:
+        errors.append("ASR_TRUSTED_PROXY_IPS must be only 172.29.0.10")
+    try:
+        timeout = float(values.get("ASR_TIMEOUT_SECONDS") or "0")
+        if not 8 <= timeout <= 20:
+            raise ValueError
+    except ValueError:
+        timeout = 0
+        errors.append("ASR_TIMEOUT_SECONDS must be between 8 and 20")
+    try:
+        max_audio = int(values.get("ASR_MAX_AUDIO_BYTES") or "0")
+        if not 0 < max_audio <= 4 * 1024 * 1024:
+            raise ValueError
+    except ValueError:
+        max_audio = 0
+        errors.append("ASR_MAX_AUDIO_BYTES must be at most 4194304")
+    try:
+        max_request = int(values.get("ASR_MAX_REQUEST_BYTES") or "0")
+        if not max_audio < max_request <= 5 * 1024 * 1024:
+            raise ValueError
+    except ValueError:
+        errors.append(
+            "ASR_MAX_REQUEST_BYTES must exceed audio bytes and be at most 5242880"
+        )
+    try:
+        min_duration = float(
+            values.get("ASR_MIN_DURATION_SECONDS") or "0"
+        )
+        if not 0 < min_duration <= 5:
+            raise ValueError
+    except ValueError:
+        min_duration = 0
+        errors.append("ASR_MIN_DURATION_SECONDS must be between 0 and 5")
+    try:
+        max_duration = float(
+            values.get("ASR_MAX_DURATION_SECONDS") or "0"
+        )
+        if not min_duration < max_duration <= 20:
+            raise ValueError
+    except ValueError:
+        errors.append(
+            "ASR_MAX_DURATION_SECONDS must exceed minimum and be at most 20"
+        )
+    for key in ("ASR_GLOBAL_CONCURRENCY", "ASR_CONCURRENCY_PER_USER"):
+        if values.get(key) not in {None, "", "1"}:
+            errors.append(f"{key} must equal 1")
+    try:
+        lease_ttl = int(values.get("ASR_LEASE_TTL_SECONDS") or "0")
+        if not timeout < lease_ttl <= 120:
+            raise ValueError
+    except ValueError:
+        errors.append(
+            "ASR_LEASE_TTL_SECONDS must exceed ASR_TIMEOUT_SECONDS"
+        )
+    for key in ("ASR_USER_RATE", "ASR_IP_RATE"):
+        value = values.get(key)
+        if value not in {None, ""} and not RATE_PATTERN.fullmatch(value):
+            errors.append(f"{key} must be a positive DRF rate")
     if values.get("OCR_DEBUG_TEXT_LOGGING") not in {
         None,
         "",

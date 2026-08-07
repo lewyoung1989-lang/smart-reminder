@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -50,9 +52,21 @@ class _QuickCreateSheetState extends State<QuickCreateSheet> {
 
   @override
   void dispose() {
-    _voice?.removeListener(_onVoiceStateChanged);
+    final voice = _voice;
+    voice?.removeListener(_onVoiceStateChanged);
+    if (voice?.phase == VoiceInputPhase.recording) {
+      unawaited(_cancelVoiceOnDispose(voice!));
+    }
     _textController.dispose();
     super.dispose();
+  }
+
+  Future<void> _cancelVoiceOnDispose(VoiceInputController voice) async {
+    try {
+      await voice.cancel();
+    } catch (_) {
+      // The sheet cannot surface a cleanup error after it has been dismissed.
+    }
   }
 
   void _onVoiceStateChanged() {
@@ -141,7 +155,13 @@ class _QuickCreateSheetState extends State<QuickCreateSheet> {
     }
   }
 
-  void _cancel() {
+  Future<void> _cancel() async {
+    try {
+      await _voice?.cancel();
+    } catch (_) {
+      // The sheet still closes because abandoning input must not retain focus.
+    }
+    if (!mounted) return;
     final onCancel = widget.onCancel;
     if (onCancel != null) {
       onCancel();

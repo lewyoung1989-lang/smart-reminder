@@ -121,16 +121,19 @@ class _RequestSnapshot {
   final int maxRedirects;
   final bool persistentConnection;
 
-  static Future<_RequestSnapshot> capture(http.BaseRequest request) async =>
-      _RequestSnapshot(
-        method: request.method,
-        url: request.url,
-        headers: Map<String, String>.from(request.headers),
-        bodyBytes: await request.finalize().toBytes(),
-        followRedirects: request.followRedirects,
-        maxRedirects: request.maxRedirects,
-        persistentConnection: request.persistentConnection,
-      );
+  static Future<_RequestSnapshot> capture(http.BaseRequest request) async {
+    final bodyBytes = await request.finalize().toBytes();
+    return _RequestSnapshot(
+      method: request.method,
+      url: request.url,
+      // MultipartRequest adds its generated boundary while it is finalized.
+      headers: Map<String, String>.from(request.headers),
+      bodyBytes: bodyBytes,
+      followRedirects: request.followRedirects,
+      maxRedirects: request.maxRedirects,
+      persistentConnection: request.persistentConnection,
+    );
+  }
 
   http.Request create({String? accessToken}) {
     final request = http.Request(method, url)

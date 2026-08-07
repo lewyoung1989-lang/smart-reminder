@@ -8,6 +8,7 @@ import '../../features/medicine_cabinet/presentation/medicine_cabinet_screen.dar
 import '../../features/plans/data/plan_repository.dart';
 import '../../features/plans/presentation/plans_screen.dart';
 import '../../features/quick_create/domain/quick_create_result.dart';
+import '../../features/quick_create/domain/voice_input_controller.dart';
 import '../../features/quick_create/presentation/quick_create_sheet.dart';
 import '../../features/reminder_drafts/application/reminder_creation_service.dart';
 import '../../features/reminder_drafts/domain/reminder_draft.dart';
@@ -30,6 +31,7 @@ class AppShell extends StatefulWidget {
     this.onOpenReminderManager,
     this.createDraft,
     this.reminderCreationService,
+    this.voiceInputController,
     this.onDeleteBatch,
     this.onCaptureMedicine,
     this.captureAvailability = MedicineCaptureAvailability.unavailable,
@@ -52,6 +54,7 @@ class AppShell extends StatefulWidget {
   final VoidCallback? onOpenReminderManager;
   final Future<ReminderDraft> Function(String text)? createDraft;
   final ReminderCreationService? reminderCreationService;
+  final VoiceInputController? voiceInputController;
   final Future<void> Function(MedicineBatch batch)? onDeleteBatch;
   final Future<bool> Function()? onCaptureMedicine;
   final MedicineCaptureAvailability captureAvailability;
@@ -92,6 +95,7 @@ class _AppShellState extends State<AppShell> {
       backgroundColor: Colors.transparent,
       builder: (sheetContext) => QuickCreateSheet(
         createDraft: createDraft,
+        voiceInputController: widget.voiceInputController,
         onParsed: (value) => Navigator.of(sheetContext).pop(value),
         onCancel: () => Navigator.of(sheetContext).pop(),
       ),

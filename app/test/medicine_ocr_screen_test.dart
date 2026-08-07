@@ -2,9 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:smart_reminder_app/app/theme/app_theme.dart';
 import 'package:smart_reminder_app/features/home/presentation/app_shell.dart';
 import 'package:smart_reminder_app/features/medicine_ocr/domain/ocr_job.dart';
 import 'package:smart_reminder_app/features/medicine_ocr/presentation/medicine_ocr_screen.dart';
+import 'package:smart_reminder_app/ui/components/app_page_header.dart';
+import 'package:smart_reminder_app/ui/components/app_status_banner.dart';
 
 void main() {
   Widget buildCaptureScreen({
@@ -19,6 +22,57 @@ void main() {
           confirmJob: (_, __) async {},
         ),
       );
+
+  testWidgets(
+    'uses a safe iPhone task layout with a persistent primary OCR action',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: MedicineOcrScreen(
+            capture: (_) async => null,
+            createJob: ({required frontBytes, expiryBytes}) async =>
+                const OcrJob(id: 'job-1', status: 'queued'),
+            getJob: (_) async => const OcrJob(id: 'job-1', status: 'queued'),
+            confirmJob: (_, __) async {},
+          ),
+        ),
+      );
+
+      expect(find.byType(AppPageHeader), findsOneWidget);
+      final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
+      expect(scaffold.bottomNavigationBar, isNotNull);
+      expect(
+        tester.getSize(find.widgetWithText(FilledButton, '开始识别')).height,
+        greaterThanOrEqualTo(44),
+      );
+    },
+  );
+
+  testWidgets('shows camera failures in an accessible inline status banner',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: MedicineOcrScreen(
+          capture: (_) async => throw Exception('camera denied'),
+          createJob: ({required frontBytes, expiryBytes}) async =>
+              const OcrJob(id: 'job-1', status: 'queued'),
+          getJob: (_) async => const OcrJob(id: 'job-1', status: 'queued'),
+          confirmJob: (_, __) async {},
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('拍摄药盒正面'));
+    await tester.pump();
+
+    expect(find.byType(AppStatusBanner), findsOneWidget);
+    expect(
+      tester.getSemantics(find.byType(AppStatusBanner)).label,
+      contains('无法打开相机'),
+    );
+  });
 
   testWidgets('switches among reminders, cabinet, and profile without OCR tab',
       (tester) async {

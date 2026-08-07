@@ -135,4 +135,30 @@ void main() {
 
     expect(inner.requests.single.headers['Authorization'], isNull);
   });
+
+  test('retries multipart uploads with the boundary generated on finalization',
+      () async {
+    final inner = AuthRecordingClient();
+    final client = AuthenticatedClient(
+      apiBaseUri: Uri.parse('https://api.invalid'),
+      inner: inner,
+      tokenStore: MemoryTokenStore(oldTokens),
+      refreshTokens: (_) async => newTokens,
+    );
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('https://api.invalid/api/v1/voice/transcriptions'),
+    )..files.add(http.MultipartFile.fromString('audio', 'wav-data'));
+
+    final response = await http.Response.fromStream(await client.send(request));
+
+    expect(response.statusCode, 200);
+    expect(inner.requests, hasLength(2));
+    for (final sent in inner.requests) {
+      expect(
+        sent.headers['content-type'],
+        startsWith('multipart/form-data; boundary='),
+      );
+    }
+  });
 }

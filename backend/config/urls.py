@@ -22,6 +22,7 @@ urlpatterns = [
         VoiceReminderDraftConfirmView.as_view(),
         name="reminder-draft-confirm",
     ),
+    path("api/v1/voice/", include("apps.voice.api.urls")),
     path("api/v1/reminders", ReminderListView.as_view(), name="reminder-list"),
     path(
         "api/v1/reminders/<uuid:reminder_id>/cancel",

@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 
-import '../application/reminder_creation_service.dart';
 import '../../../platform/notifications/reminder_notification_scheduler.dart';
-import '../domain/reminder_draft.dart';
-import '../../reminders/domain/reminder.dart' show ReminderCreationResult;
-import 'reminder_draft_screen.dart';
 import '../../quick_create/domain/quick_create_result.dart';
+import '../../quick_create/domain/voice_input_controller.dart';
 import '../../quick_create/presentation/quick_create_sheet.dart';
+import '../../reminders/domain/reminder.dart' show ReminderCreationResult;
+import '../application/reminder_creation_service.dart';
+import '../domain/reminder_draft.dart';
+import 'reminder_draft_screen.dart';
 
 class ReminderComposerScreen extends StatefulWidget {
   const ReminderComposerScreen({
@@ -14,6 +15,7 @@ class ReminderComposerScreen extends StatefulWidget {
     this.confirmDraft,
     this.notificationScheduler,
     this.reminderCreationService,
+    this.voiceInputController,
     this.now,
     super.key,
   }) : assert(confirmDraft != null || reminderCreationService != null);
@@ -22,6 +24,7 @@ class ReminderComposerScreen extends StatefulWidget {
   final Future<String> Function(String)? confirmDraft;
   final ReminderNotificationScheduler? notificationScheduler;
   final ReminderCreationService? reminderCreationService;
+  final VoiceInputController? voiceInputController;
   final DateTime? now;
 
   @override
@@ -122,6 +125,7 @@ class _ReminderComposerScreenState extends State<ReminderComposerScreen> {
       body: QuickCreateSheet(
         createDraft: widget.createDraft,
         onParsed: _showDraft,
+        voiceInputController: widget.voiceInputController,
         initialText: _sourceText,
       ),
     );

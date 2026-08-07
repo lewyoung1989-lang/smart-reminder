@@ -99,6 +99,52 @@ void main() {
     expect(cancellations, 1);
   });
 
+  testWidgets('canceling an active recording releases the voice controller', (
+    tester,
+  ) async {
+    final voice = _FakeVoiceInputController();
+    await tester.pumpWidget(
+      app(
+        QuickCreateSheet(
+          createDraft: (_) async => draft,
+          voiceInputController: voice,
+        ),
+      ),
+    );
+
+    await tester.tap(find.bySemanticsLabel('语音输入'));
+    await tester.pump();
+    expect(voice.phase, VoiceInputPhase.recording);
+
+    await tester.tap(find.widgetWithText(TextButton, '取消'));
+    await tester.pumpAndSettle();
+    expect(voice.cancelCalls, 1);
+    expect(voice.phase, VoiceInputPhase.idle);
+  });
+
+  testWidgets('disposing an active sheet releases the voice controller', (
+    tester,
+  ) async {
+    final voice = _FakeVoiceInputController();
+    await tester.pumpWidget(
+      app(
+        QuickCreateSheet(
+          createDraft: (_) async => draft,
+          voiceInputController: voice,
+        ),
+      ),
+    );
+
+    await tester.tap(find.bySemanticsLabel('语音输入'));
+    await tester.pump();
+    expect(voice.phase, VoiceInputPhase.recording);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpAndSettle();
+    expect(voice.cancelCalls, 1);
+    expect(voice.phase, VoiceInputPhase.idle);
+  });
+
   testWidgets('parse errors retain input and allow retry', (tester) async {
     var attempts = 0;
     await tester.pumpWidget(
@@ -380,6 +426,7 @@ class _FakeVoiceInputController extends VoiceInputController {
   VoiceInputPhase _phase = VoiceInputPhase.idle;
   String? _errorMessage;
   String? transcript;
+  var cancelCalls = 0;
 
   @override
   VoiceInputPhase get phase => _phase;
@@ -414,6 +461,12 @@ class _FakeVoiceInputController extends VoiceInputController {
 
   @override
   Future<void> retry() async => setPhase(VoiceInputPhase.idle);
+
+  @override
+  Future<void> cancel() async {
+    cancelCalls += 1;
+    setPhase(VoiceInputPhase.idle);
+  }
 }
 
 class _DelayedVoiceInputController extends VoiceInputController {

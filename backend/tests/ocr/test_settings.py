@@ -2,6 +2,7 @@ from django.conf import settings
 
 
 def test_ocr_defaults_are_safe_for_cpu_worker():
+    assert settings.OCR_ENABLED is True
     assert settings.OCR_PROVIDER == "rapidocr"
     assert settings.OCR_LANGUAGE == "ch"
     assert settings.OCR_TEXT_SCORE == 0.50

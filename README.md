@@ -7,9 +7,10 @@
 - 复杂单次提醒在配置后交给 DeepSeek JSON 模式解析。
 - 所有解析结果必须由用户确认，确认前不会创建正式提醒。
 - 确认后在 iPhone 安排一次本地通知。
+- 在 iPhone 录制最长 20 秒的语音，通过私有 FunASR 服务转成可编辑文字。
 - 服务端不保存原始输入，只保存 SHA-256 和结构化草稿。
 
-药盒 OCR 当前使用自建 RapidOCR，候选结果必须人工核对后才会写入药箱。AlarmKit 强闹钟、语音识别和天气预检查仍在后续阶段。
+药盒 OCR 当前使用自建 RapidOCR，候选结果必须人工核对后才会写入药箱。AlarmKit 强闹钟和天气预检查仍在后续阶段。
 
 App 底部当前分为“提醒”“药箱”“拍照录入”“我的”四个入口。“药箱”可按药品名、规格或批号搜索，展示每批库存的有效期状态；“拍照录入”保持独立，识别并确认后再将药品加入药箱；“我的”提供账号状态、修改密码和退出登录。
 
@@ -62,6 +63,49 @@ cd app
 
 模拟器可验证 UI 和编译，锁屏、后台和真实通知权限必须使用 iPhone 验证。当前实现是普通本地通知，不等同于 iOS 26 AlarmKit 强闹钟。
 
+## FunASR 语音输入
+
+语音入口位于现有提醒输入框下方。点击麦克风开始录音，再点击停止后，识别文字会填入同一个输入框；用户可以编辑文字，并且仍需主动点击“解析提醒”和“确认创建”。识别本身不会创建草稿或正式提醒。
+
+真实 FunASR 通过 Docker Compose 启动：
+
+```bash
+cp .env.example .env
+docker compose build funasr-model-init funasr api
+docker compose up funasr api
+```
+
+首次启动会下载数 GB 的 PyTorch、FunASR 运行时和模型权重，模型缓存初始化可能持续较长时间。`funasr-model-init` 完成后，正式 `funasr` 服务以只读方式挂载持久化模型缓存。可从容器内部检查 readiness：
+
+```bash
+docker compose exec funasr python -c \
+  "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/health').read().decode())"
+```
+
+FunASR 不映射宿主机端口，只能由 Compose 私有网络中的 Django API 调用。音频、转写文本和上游原始响应不会写入数据库或日志；上传对象和 iPhone 临时 WAV 在请求结束后清理。上线前需另外确认目标模型权重许可证、普通话样本准确率和目标 CPU 的 p95 延迟。
+
+腾讯云亲友内测以 4 vCPU / 4 GB、单进程和单并发为首发候选，生产默认 `OCR_ENABLED=false`。关闭时，已认证用户访问所有 `/api/v1/ocr/*` 入口统一返回 `503 {"code":"ocr_disabled"}`，未认证请求仍先执行认证并返回 `401`。语音请求的生产总预算只允许 `8 <= ASR_TIMEOUT_SECONDS <= 20` 秒，Gunicorn 为 `30` 秒、Nginx 为 `35` 秒。HTTPX 把总预算分成连接 2 秒、连接池 1 秒、上传 4 秒和读取 `总预算-7` 秒，响应完成后还会用单调时钟拒绝已超总预算的结果；分阶段超时不是任意分块读取的数学硬截止，因此仍保留外层余量。发布脚本复用匹配固定模型 revision 的缓存 marker；marker 缺失或过期时先停止旧 FunASR，再用同等 CPU、内存和线程上限初始化模型。部署开始会保存旧 API 与 FunASR 镜像，候选 API 必须先通过 PostgreSQL、Redis 和 FunASR 依赖预检，Nginx 配置也会在切换前用一次性容器验证；发生失败时统一先恢复 FunASR，再恢复已替换的 API/Worker。4 GB 是否有足够余量仍以服务器真实模型的 RSS、峰值内存、swap 和 OOM 记录为准，详见 `deploy/tencent/README.md`。
+
+当前 Compose 的 API 端口用于本地直连，IP 限流只使用连接来源 `REMOTE_ADDR`，不会信任客户端伪造的转发头。生产环境接入 Nginx 时，必须由 Nginx 覆盖 `X-Forwarded-For` 为单一客户端 IP，并把 Nginx 到 Django 的固定来源 IP 写入 `ASR_TRUSTED_PROXY_IPS`；未在白名单中的来源仍忽略转发头。
+
+模型缓存固定使用以下 ModelScope 权重标签；2026-08-05 通过 ModelScope 模型 API 核对，三者均标注为 Apache License 2.0。上线前仍需由发布负责人复核模型页与实际缓存文件中的许可证：
+
+| 用途 | ModelScope 模型 | Revision |
+|---|---|---|
+| ASR | [`iic/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch`](https://modelscope.cn/models/iic/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch) | `v2.0.4` |
+| VAD | [`iic/speech_fsmn_vad_zh-cn-16k-common-pytorch`](https://modelscope.cn/models/iic/speech_fsmn_vad_zh-cn-16k-common-pytorch) | `v2.0.4` |
+| 标点 | [`iic/punc_ct-transformer_zh-cn-common-vocab272727-pytorch`](https://modelscope.cn/models/iic/punc_ct-transformer_zh-cn-common-vocab272727-pytorch) | `v2.0.4` |
+
+普通开发和 CI 不需要下载模型。后端 Provider 使用 fake，模型服务使用 fake engine：
+
+```bash
+.venv/bin/pytest backend/tests/voice -q
+.venv/bin/python -m pip install -r services/funasr/requirements-test.txt
+.venv/bin/python -m pytest services/funasr/tests -q
+```
+
+完成真实服务启动后，用 iPhone 启动命令连接 Django，允许麦克风权限并录制一条普通话提醒。若返回忙碌、超时或服务不可用，App 会保留键盘输入和已有文字，不会自动把音频发送到第三方服务。
+
 ## Flutter 检查
 
 ```bash
@@ -84,6 +128,7 @@ cd app
 | POST | `/api/v1/auth/password/change` | 修改密码并撤销旧会话 |
 | POST | `/api/v1/reminder-drafts` | 解析文字并创建短期草稿 |
 | POST | `/api/v1/reminder-drafts/{id}/confirm` | 人工确认并创建正式提醒 |
+| POST | `/api/v1/voice/transcriptions` | 上传短 PCM WAV 并返回 FunASR 转写文字 |
 | POST | `/api/v1/voice/reminder-drafts` | 兼容上一阶段的转写草稿路径 |
 | POST | `/api/v1/voice/reminder-drafts/{id}/confirm` | 兼容上一阶段的确认路径 |
 | GET | `/api/v1/inventory-batches` | 分页查询当前用户的药品库存，可用 `q` 搜索 |
@@ -94,6 +139,12 @@ cd app
 
 业务请求需要 `Authorization: Bearer <token>`。新版 App 在 iOS Keychain 中保存每个用户自己的 JWT，并自动轮换 Refresh Token；旧版 DRF Token 仅在迁移窗口保留兼容。文字和语音最终使用同一套结构化草稿、确认和幂等逻辑。
 
+## 设计文档
+
+- 总体设计：`docs/superpowers/specs/2026-08-03-smart-life-reminder-design.md`
+- FunASR 服务端语音识别：`docs/superpowers/specs/2026-08-05-funasr-server-asr-design.md`
+- V2 提升路线图：`docs/superpowers/specs/2026-08-05-smart-reminder-v2-enhancements.md`
+
 ## Docker Compose
 
 安装 Docker Desktop 后运行：
@@ -103,7 +154,7 @@ docker compose config
 docker compose up --build
 ```
 
-服务包括 PostgreSQL、Redis、MinIO、Django API、普通 Celery Worker、并发为 1 的 OCR Worker 和 Celery Beat。MinIO 控制台位于 `http://127.0.0.1:9001`。
+服务包括 PostgreSQL、Redis、MinIO、Django API、普通 Celery Worker、并发为 1 的 OCR Worker、Celery Beat、FunASR 模型缓存初始化和私有 FunASR 推理服务。MinIO 控制台位于 `http://127.0.0.1:9001`；FunASR 没有宿主机访问地址。
 
 只启动 OCR 闭环依赖并执行安全冒烟检查：
 

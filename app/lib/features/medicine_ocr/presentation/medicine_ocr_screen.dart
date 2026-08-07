@@ -2,7 +2,11 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../app/theme/app_spacing.dart';
+import '../../../ui/components/app_page_header.dart';
+import '../../../ui/components/app_status_banner.dart';
 import '../domain/ocr_job.dart';
 
 enum MedicineOcrStage { capture, uploading, processing, review }
@@ -45,6 +49,7 @@ class _MedicineOcrScreenState extends State<MedicineOcrScreen> {
   OcrJob? _job;
   String? _error;
   bool _cancelPolling = false;
+  bool _isConfirming = false;
 
   @override
   void dispose() {
@@ -176,36 +181,45 @@ class _MedicineOcrScreenState extends State<MedicineOcrScreen> {
 
   Future<void> _confirm() async {
     final job = _job;
-    if (job == null || !_canConfirm) {
+    if (job == null || !_canConfirm || _isConfirming) {
       return;
     }
-    // OCR 只提供候选，实际入库始终使用用户核对后的表单值。
-    await widget.confirmJob(job.id, {
-      'medicine_name': _name.text.trim(),
-      'specification': _specification.text.trim(),
-      'batch_number': _batch.text.trim(),
-      'production_date':
-          _production.text.trim().isEmpty ? null : _production.text.trim(),
-      'expiry_date': _expiry.text.trim().isEmpty ? null : _expiry.text.trim(),
-      'quantity': int.tryParse(_quantity.text) ?? 1,
-    });
-    if (!mounted) {
-      return;
-    }
-    if (Navigator.canPop(context)) {
-      Navigator.of(context).pop(true);
-      return;
-    }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('已加入药箱')),
-    );
     setState(() {
-      _stage = MedicineOcrStage.capture;
-      _frontBytes = null;
-      _expiryBytes = null;
-      _job = null;
+      _isConfirming = true;
       _error = null;
     });
+    try {
+      // OCR 只提供候选，实际入库始终使用用户核对后的表单值。
+      await widget.confirmJob(job.id, {
+        'medicine_name': _name.text.trim(),
+        'specification': _specification.text.trim(),
+        'batch_number': _batch.text.trim(),
+        'production_date':
+            _production.text.trim().isEmpty ? null : _production.text.trim(),
+        'expiry_date': _expiry.text.trim().isEmpty ? null : _expiry.text.trim(),
+        'quantity': int.tryParse(_quantity.text) ?? 1,
+      });
+      if (!mounted) return;
+      if (Navigator.canPop(context)) {
+        Navigator.of(context).pop(true);
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('已加入药箱')),
+      );
+      setState(() {
+        _stage = MedicineOcrStage.capture;
+        _frontBytes = null;
+        _expiryBytes = null;
+        _job = null;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = '入库失败，请检查网络后重试');
+      }
+    } finally {
+      if (mounted) setState(() => _isConfirming = false);
+    }
   }
 
   Widget _photoSlot({
@@ -213,6 +227,7 @@ class _MedicineOcrScreenState extends State<MedicineOcrScreen> {
     required String label,
     required List<int>? bytes,
   }) {
+    final theme = Theme.of(context);
     final photoBytes = bytes;
     final retakeLabel = kind == 'front' ? '重新拍摄药盒正面' : '重新拍摄有效期';
 
@@ -226,24 +241,24 @@ class _MedicineOcrScreenState extends State<MedicineOcrScreen> {
                   fit: StackFit.expand,
                   children: [
                     ClipRRect(
-                      borderRadius: BorderRadius.circular(6),
+                      borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
                       child: Image.memory(
                         Uint8List.fromList(photoBytes),
                         key: Key('$kind-photo-preview'),
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => const ColoredBox(
-                          color: Color(0xFFE7ECE9),
-                          child: Icon(Icons.image_outlined),
+                        errorBuilder: (_, __, ___) => ColoredBox(
+                          color: theme.colorScheme.surfaceContainer,
+                          child: const Icon(LucideIcons.image),
                         ),
                       ),
                     ),
                     Positioned(
-                      top: 4,
-                      right: 4,
+                      top: AppSpacing.xs,
+                      right: AppSpacing.xs,
                       child: IconButton.filledTonal(
                         tooltip: retakeLabel,
                         onPressed: () => _capture(kind),
-                        icon: const Icon(Icons.camera_alt_outlined),
+                        icon: const Icon(LucideIcons.camera),
                       ),
                     ),
                   ],
@@ -252,14 +267,15 @@ class _MedicineOcrScreenState extends State<MedicineOcrScreen> {
                   onPressed: () => _capture(kind),
                   icon: Icon(
                     kind == 'front'
-                        ? Icons.camera_alt_outlined
-                        : Icons.event_outlined,
+                        ? LucideIcons.camera
+                        : LucideIcons.calendarDays,
                   ),
                   label: Text('拍摄$label'),
                 ),
         ),
-        const SizedBox(height: 6),
-        Text(label, textAlign: TextAlign.center),
+        const SizedBox(height: AppSpacing.sm),
+        Text(label,
+            textAlign: TextAlign.center, style: theme.textTheme.bodySmall),
       ],
     );
   }
@@ -267,6 +283,13 @@ class _MedicineOcrScreenState extends State<MedicineOcrScreen> {
   Widget _captureView() => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          Text('拍摄药盒', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            '药盒正面用于识别名称和规格；有效期照片可以补充日期信息。',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          const SizedBox(height: AppSpacing.xl),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -277,7 +300,7 @@ class _MedicineOcrScreenState extends State<MedicineOcrScreen> {
                   bytes: _frontBytes,
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: _photoSlot(
                   kind: 'expiry',
@@ -286,25 +309,6 @@ class _MedicineOcrScreenState extends State<MedicineOcrScreen> {
                 ),
               ),
             ],
-          ),
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: Text(
-                _error!,
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.error,
-                ),
-              ),
-            ),
-          const SizedBox(height: 20),
-          SizedBox(
-            height: 48,
-            child: FilledButton.icon(
-              onPressed: _frontBytes == null ? null : _start,
-              icon: const Icon(Icons.document_scanner_outlined),
-              label: const Text('开始识别'),
-            ),
           ),
         ],
       );
@@ -315,9 +319,10 @@ class _MedicineOcrScreenState extends State<MedicineOcrScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              '核对识别结果',
-              style: Theme.of(context).textTheme.titleLarge,
+              '请检查以下信息，确认后才会加入药箱。',
+              style: Theme.of(context).textTheme.bodyMedium,
             ),
+            const SizedBox(height: AppSpacing.xl),
             TextFormField(
               key: const Key('medicine-name'),
               controller: _name,
@@ -350,48 +355,106 @@ class _MedicineOcrScreenState extends State<MedicineOcrScreen> {
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(labelText: '数量'),
             ),
-            const SizedBox(height: 20),
-            SizedBox(
-              height: 48,
-              child: FilledButton.icon(
-                onPressed: _canConfirm ? _confirm : null,
-                icon: const Icon(Icons.check),
-                label: const Text('确认入库'),
-              ),
-            ),
           ],
         ),
       );
 
+  AppStatusBanner? _statusBanner() {
+    if (_error != null) {
+      return AppStatusBanner(
+        severity: AppStatusSeverity.error,
+        title: _error!,
+        message: '请保留已拍摄的照片，处理后可以再次尝试。',
+      );
+    }
+    return switch (_stage) {
+      MedicineOcrStage.uploading => const AppStatusBanner(
+          severity: AppStatusSeverity.info,
+          title: '正在上传药盒照片',
+          message: '请保持此页面打开。',
+        ),
+      MedicineOcrStage.processing => const AppStatusBanner(
+          severity: AppStatusSeverity.info,
+          title: '正在识别药盒信息',
+          message: '识别结果需要你核对后才会加入药箱。',
+        ),
+      MedicineOcrStage.capture || MedicineOcrStage.review => null,
+    };
+  }
+
+  Widget _bottomAction() {
+    final (label, icon, onPressed) = switch (_stage) {
+      MedicineOcrStage.capture => (
+          '开始识别',
+          LucideIcons.scanLine,
+          _frontBytes == null ? null : _start,
+        ),
+      MedicineOcrStage.review => (
+          _isConfirming ? '正在入库' : '确认入库',
+          _isConfirming ? LucideIcons.loaderCircle : LucideIcons.check,
+          _canConfirm && !_isConfirming ? _confirm : null,
+        ),
+      MedicineOcrStage.uploading => ('正在上传', LucideIcons.upload, null),
+      MedicineOcrStage.processing => ('正在识别', LucideIcons.scanLine, null),
+    };
+    return FilledButton.icon(
+      onPressed: onPressed,
+      icon: _isConfirming && _stage == MedicineOcrStage.review
+          ? const SizedBox.square(
+              dimension: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : Icon(icon),
+      label: Text(label),
+    );
+  }
+
   @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('药盒识别')),
-        body: ListView(
-          padding: const EdgeInsets.all(20),
+  Widget build(BuildContext context) {
+    final status = _statusBanner();
+    return Scaffold(
+      body: SafeArea(
+        bottom: false,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            AppSpacing.xxl,
+            AppSpacing.lg,
+            AppSpacing.xxl,
+          ),
           children: [
+            AppPageHeader(
+              eyebrow: '家庭药箱',
+              title: _stage == MedicineOcrStage.review ? '核对识别结果' : '药盒识别',
+              actions: [
+                if (Navigator.canPop(context))
+                  IconButton(
+                    tooltip: '返回药箱',
+                    onPressed: _stage == MedicineOcrStage.uploading ||
+                            _stage == MedicineOcrStage.processing
+                        ? null
+                        : () => Navigator.of(context).maybePop(),
+                    icon: const Icon(LucideIcons.arrowLeft),
+                  ),
+              ],
+            ),
+            if (status != null) ...[
+              const SizedBox(height: AppSpacing.xl),
+              status,
+            ],
+            const SizedBox(height: AppSpacing.xl),
             if (_stage == MedicineOcrStage.capture) _captureView(),
-            if (_stage == MedicineOcrStage.uploading)
-              const Center(
-                child: Column(
-                  children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 12),
-                    Text('正在上传图片'),
-                  ],
-                ),
-              ),
-            if (_stage == MedicineOcrStage.processing)
-              const Center(
-                child: Column(
-                  children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 12),
-                    Text('正在识别'),
-                  ],
-                ),
-              ),
             if (_stage == MedicineOcrStage.review) _reviewView(),
           ],
         ),
-      );
+      ),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: SizedBox(height: 48, child: _bottomAction()),
+        ),
+      ),
+    );
+  }
 }

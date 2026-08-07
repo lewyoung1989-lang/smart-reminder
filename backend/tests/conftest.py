@@ -9,10 +9,12 @@ def api_client():
 
 
 @pytest.fixture(autouse=True)
-def isolate_auth_rate_limit_cache():
+def isolate_rate_limit_caches():
     caches["auth"].clear()
+    caches["asr_throttle"].clear()
     yield
     caches["auth"].clear()
+    caches["asr_throttle"].clear()
 
 
 @pytest.fixture

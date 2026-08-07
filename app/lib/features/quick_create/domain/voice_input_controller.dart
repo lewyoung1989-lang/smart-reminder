@@ -10,4 +10,6 @@ abstract class VoiceInputController extends ChangeNotifier {
   Future<void> start();
   Future<String?> stopAndTranscribe();
   Future<void> retry();
+
+  Future<void> cancel() async {}
 }

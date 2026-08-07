@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 import pytest
+from django.test import override_settings
 
 from apps.ocr.models import OCRCandidate, OCRJob
 
@@ -34,6 +35,41 @@ def test_upload_requires_authentication(api_client):
     )
 
     assert response.status_code == 401
+
+
+@pytest.mark.django_db
+@override_settings(OCR_ENABLED=False)
+@pytest.mark.parametrize(
+    ("path", "payload"),
+    (
+        (
+            "/api/v1/ocr/uploads",
+            {
+                "kind": "front",
+                "content_type": "image/jpeg",
+                "byte_length": 100,
+            },
+        ),
+        (
+            "/api/v1/ocr/jobs",
+            {
+                "images": [
+                    {
+                        "kind": "front",
+                        "object_key": "ocr/tmp/anonymous/front.jpg",
+                    }
+                ]
+            },
+        ),
+    ),
+)
+def test_disabled_ocr_authenticates_before_returning_service_state(
+    api_client, path, payload
+):
+    response = api_client.post(path, payload, format="json")
+
+    assert response.status_code == 401
+    assert response.json() != {"code": "ocr_disabled"}
 
 
 @pytest.mark.django_db
@@ -187,3 +223,67 @@ def test_get_job_exposes_only_state_for_unfinished_jobs(
     assert response.status_code == 200
     assert response.json()["status"] == job_status
     assert ("error_code" in response.json()) is (expected_key is not None)
+
+
+@pytest.mark.django_db
+@override_settings(OCR_ENABLED=False)
+def test_disabled_ocr_rejects_upload_without_creating_grant(
+    api_client, user, mocker
+):
+    create_upload = mocker.patch("apps.ocr.api.views.create_upload")
+    storage = mocker.patch("apps.ocr.api.views.get_object_storage")
+    api_client.force_authenticate(user)
+
+    response = api_client.post(
+        "/api/v1/ocr/uploads",
+        {
+            "kind": "front",
+            "content_type": "image/jpeg",
+            "byte_length": 100,
+        },
+        format="json",
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {"code": "ocr_disabled"}
+    create_upload.assert_not_called()
+    storage.assert_not_called()
+
+
+@pytest.mark.django_db
+@override_settings(OCR_ENABLED=False)
+def test_disabled_ocr_rejects_job_create_without_row_or_queue(
+    api_client, user, mocker
+):
+    delay = mocker.patch("apps.ocr.api.views.process_ocr_job.delay")
+    api_client.force_authenticate(user)
+
+    response = api_client.post(
+        "/api/v1/ocr/jobs",
+        {
+            "images": [
+                {
+                    "kind": "front",
+                    "object_key": f"ocr/tmp/{user.id}/front.jpg",
+                }
+            ]
+        },
+        format="json",
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {"code": "ocr_disabled"}
+    assert OCRJob.objects.count() == 0
+    delay.assert_not_called()
+
+
+@pytest.mark.django_db
+@override_settings(OCR_ENABLED=False)
+def test_disabled_ocr_rejects_job_query(api_client, user):
+    job = OCRJob.objects.create(user=user, image_keys={"front": "private"})
+    api_client.force_authenticate(user)
+
+    response = api_client.get(f"/api/v1/ocr/jobs/{job.id}")
+
+    assert response.status_code == 503
+    assert response.json() == {"code": "ocr_disabled"}

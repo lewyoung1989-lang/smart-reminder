@@ -47,6 +47,23 @@ ensure_value() {
 }
 
 ensure_value FILES_DOMAIN files.aipupu.cloud
+ensure_value OCR_ENABLED false
+ensure_value ASR_PROVIDER funasr
+ensure_value ASR_BASE_URL http://funasr:8000
+ensure_value ASR_MODEL paraformer-zh
+ensure_value ASR_TIMEOUT_SECONDS 20
+ensure_value ASR_MAX_AUDIO_BYTES 4194304
+ensure_value ASR_MAX_REQUEST_BYTES 5242880
+ensure_value ASR_MIN_DURATION_SECONDS 0.3
+ensure_value ASR_MAX_DURATION_SECONDS 20
+ensure_value ASR_GLOBAL_CONCURRENCY 1
+ensure_value ASR_CONCURRENCY_PER_USER 1
+ensure_value ASR_LEASE_TTL_SECONDS 25
+ensure_value ASR_USER_RATE 10/min
+ensure_value ASR_IP_RATE 30/min
+ensure_value ASR_REDIS_URL redis://redis:6379/0
+ensure_value ASR_THROTTLE_REDIS_URL redis://redis:6379/2
+ensure_value ASR_TRUSTED_PROXY_IPS 172.29.0.10
 ensure_value OCR_PROVIDER rapidocr
 ensure_value OCR_STORAGE_PROVIDER s3
 ensure_value OCR_JOB_RETENTION_HOURS 24
@@ -75,17 +92,19 @@ if [[ -z "$(get_value CERTBOT_EMAIL)" ]]; then
   replace_value CERTBOT_EMAIL "$certbot_email"
   unset certbot_email
 fi
-if [[ -z "$(get_value MINIO_ROOT_USER)" ]]; then
-  replace_value MINIO_ROOT_USER "minio-root-$(openssl rand -hex 4)"
-fi
-if [[ -z "$(get_value MINIO_ROOT_PASSWORD)" ]]; then
-  replace_value MINIO_ROOT_PASSWORD "$(openssl rand -hex 32)"
-fi
-if [[ -z "$(get_value S3_ACCESS_KEY_ID)" ]]; then
-  replace_value S3_ACCESS_KEY_ID "sr-app-$(openssl rand -hex 4)"
-fi
-if [[ -z "$(get_value S3_SECRET_ACCESS_KEY)" ]]; then
-  replace_value S3_SECRET_ACCESS_KEY "$(openssl rand -hex 32)"
+if [[ "$(get_value OCR_ENABLED)" == "true" ]]; then
+  if [[ -z "$(get_value MINIO_ROOT_USER)" ]]; then
+    replace_value MINIO_ROOT_USER "minio-root-$(openssl rand -hex 4)"
+  fi
+  if [[ -z "$(get_value MINIO_ROOT_PASSWORD)" ]]; then
+    replace_value MINIO_ROOT_PASSWORD "$(openssl rand -hex 32)"
+  fi
+  if [[ -z "$(get_value S3_ACCESS_KEY_ID)" ]]; then
+    replace_value S3_ACCESS_KEY_ID "sr-app-$(openssl rand -hex 4)"
+  fi
+  if [[ -z "$(get_value S3_SECRET_ACCESS_KEY)" ]]; then
+    replace_value S3_SECRET_ACCESS_KEY "$(openssl rand -hex 32)"
+  fi
 fi
 
 python3 "$VALIDATOR" "$ENV_FILE" >/dev/null

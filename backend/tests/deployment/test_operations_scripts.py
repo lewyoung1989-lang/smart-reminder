@@ -116,6 +116,13 @@ def test_log_query_rejects_unknown_service_and_uses_stable_tag(tmp_path):
     assert "--output=short-iso-precise" in arguments
 
 
+def test_log_query_includes_funasr_services():
+    script = (SCRIPTS / "logs.sh").read_text()
+    assert "funasr|funasr-model-init" in script
+    assert '"CONTAINER_TAG=smart-reminder/funasr"' in script
+    assert '"CONTAINER_TAG=smart-reminder/funasr-model-init"' in script
+
+
 def test_logging_verifier_rejects_same_file_and_later_journald_overrides(tmp_path):
     assert "export LC_ALL=C" in (SCRIPTS / "verify_logging.sh").read_text()
 
@@ -321,18 +328,46 @@ def test_deploy_requires_clean_expected_revision_and_health_check():
     assert "/api/v1/health" in script
     assert "'Host':'aipupu.cloud'" in script
     assert "--profile production" in script
-    assert script.index("verify_logging.sh") < script.index('build api ocr-worker')
+    assert script.index("verify_logging.sh") < script.index('build api funasr')
 
 
-def test_deploy_initializes_minio_and_smoke_checks_ocr_before_start():
+def test_deploy_default_path_preserves_ocr_data_and_starts_funasr_first():
     script = (SCRIPTS / "deploy.sh").read_text()
-    build = script.index('build api ocr-worker')
-    minio = script.index('up -d postgres redis minio')
-    initialize = script.index('run --rm minio-init')
-    migrate = script.index('manage.py migrate --noinput')
-    smoke = script.index('manage.py check_ocr')
-    start = script.index('up -d api worker ocr-worker beat')
-    assert build < minio < initialize < migrate < smoke < start
+    build = script.index('build api funasr')
+    data = script.index('up -d postgres redis')
+    stop_ocr = script.index('stop ocr-worker minio beat')
+    model_init = script.index('run --rm --no-deps funasr-model-init')
+    start_funasr = script.index('up -d --no-deps funasr', model_init)
+    health = script.index("http://127.0.0.1:8000/health", start_funasr)
+    asr_smoke = script.index("smoke_transcription.py")
+    migrate = script.index('run --rm --no-deps api python manage.py migrate --noinput')
+    start_api = script.index('up -d --no-deps api worker', migrate)
+
+    assert "OCR_ENABLED" in script
+    assert "docker compose rm" not in script
+    assert "docker volume rm" not in script
+    assert (
+        build
+        < data
+        < stop_ocr
+        < model_init
+        < start_funasr
+        < health
+        < asr_smoke
+        < migrate
+        < start_api
+    )
+
+
+def test_deploy_ocr_enabled_path_builds_initializes_and_smoke_checks_ocr():
+    script = (SCRIPTS / "deploy.sh").read_text()
+
+    assert 'if [[ "$OCR_ENABLED" == "true" ]]' in script
+    assert "build ocr-worker" in script
+    assert "--profile ocr up -d minio" in script
+    assert "--profile ocr run --rm minio-init" in script
+    assert "manage.py check_ocr" in script
+    assert "--profile ocr up -d --no-deps ocr-worker beat" in script
 
 
 def test_deploy_validates_and_reloads_nginx_after_api_replacement():
@@ -343,6 +378,110 @@ def test_deploy_validates_and_reloads_nginx_after_api_replacement():
     validate_nginx = script.index("exec -T nginx nginx -t")
     reload_nginx = script.index("exec -T nginx nginx -s reload")
     assert start_nginx < validate_nginx < reload_nginx
+
+
+def test_deploy_keeps_old_api_and_nginx_during_build_and_asr_smoke():
+    script = (SCRIPTS / "deploy.sh").read_text()
+    build = script.index('build api funasr')
+    smoke = script.index("smoke_transcription.py")
+    start_api = script.index('up -d --no-deps api worker')
+    recreate_nginx = script.index(
+        "--profile production up -d --force-recreate nginx"
+    )
+
+    assert build < smoke < start_api < recreate_nginx
+
+
+def test_deploy_preflights_candidate_and_restores_old_api_on_health_failure():
+    script = (SCRIPTS / "deploy.sh").read_text()
+    capture = script.index("OLD_API_IMAGE_ID")
+    build = script.index('build api funasr')
+    preflight = script.index("manage.py check_release_dependencies")
+    migrate = script.index("manage.py migrate --noinput")
+    replace = script.index('up -d --no-deps api worker')
+
+    assert capture < build < preflight < migrate < replace
+    assert "rollback_api" in script
+    assert 'docker tag "$OLD_API_IMAGE_ID"' in script
+    assert "--force-recreate api worker" in script
+    assert "API rollback health check failed" in script
+    assert "docker volume rm" not in script
+
+
+def test_deploy_traps_every_failure_after_api_replacement():
+    script = (SCRIPTS / "deploy.sh").read_text()
+    handler = script.index("handle_deploy_failure()")
+    trap = script.index("ERR", handler)
+    replace_flag = script.index("API_REPLACED=true")
+    replace = script.index("up -d --no-deps api worker", replace_flag)
+    ocr = script.index("manage.py check_ocr", replace)
+    nginx = script.index("run --rm --no-deps nginx-check nginx -t", replace)
+    success_clear = script.rindex("trap - ERR")
+    funasr_health_failure = script.index("FunASR health check failed")
+    funasr_smoke = script.index("smoke_transcription.py")
+
+    assert handler < trap < replace_flag < replace < ocr < nginx < success_clear
+    assert script.index("\n  false", funasr_health_failure) < funasr_smoke
+    assert "DEPLOY_ROLLBACK_ACTIVE" in script
+    assert "failure_status" in script
+    assert 'exit "$failure_status"' in script
+    assert script.index("rollback_funasr", handler) < script.index(
+        "rollback_api", handler
+    )
+    assert "Deployment failed; starting rollback" in script
+    assert "Deployment completed; rollback trap cleared" in script
+
+
+def test_deploy_captures_and_restores_previous_funasr_image():
+    script = (SCRIPTS / "deploy.sh").read_text()
+    capture = script.index("OLD_FUNASR_IMAGE_ID")
+    build = script.index("build api funasr")
+    disrupted = script.index("FUNASR_DISRUPTED=true")
+    stop = script.index("stop funasr", disrupted)
+    initialize = script.index("run --rm --no-deps funasr-model-init", stop)
+
+    assert capture < build < disrupted < stop < initialize
+    assert 'docker tag "$OLD_FUNASR_IMAGE_ID"' in script
+    assert "--force-recreate funasr" in script
+    assert "FunASR rollback health check failed" in script
+    assert "no previous FunASR image is available" in script
+    assert "docker volume rm" not in script
+
+
+def test_deploy_validates_one_off_nginx_before_recreating_live_proxy():
+    script = (SCRIPTS / "deploy.sh").read_text()
+    preflight = script.index("run --rm --no-deps nginx-check nginx -t")
+    recreate = script.index(
+        "--profile production up -d --force-recreate nginx"
+    )
+    post_switch = script.index("exec -T nginx nginx -t")
+
+    assert preflight < recreate < post_switch
+
+
+def test_deploy_checks_marker_and_stops_old_funasr_before_model_init():
+    script = (SCRIPTS / "deploy.sh").read_text()
+    marker_check = script.index("app.download_models --check")
+    stop = script.index("stop funasr", marker_check)
+    initialize = script.index(
+        "run --rm --no-deps funasr-model-init", marker_check + 1
+    )
+    start = script.index("up -d --no-deps funasr")
+
+    assert marker_check < stop < initialize < start
+    assert "FunASR model cache is ready" in script
+
+
+def test_deploy_smoke_never_prints_transcript_or_audio_content():
+    smoke = (
+        REPO_ROOT / "services/funasr/smoke/smoke_transcription.py"
+    ).read_text()
+    assert "FUNASR_SMOKE_OK" in smoke
+    assert "print(transcript" not in smoke
+    assert "print(response" not in smoke
+    assert "明天" in smoke
+    assert "提醒" in smoke
+    assert "吃药" in smoke
 
 
 def test_tls_bootstrap_uses_webroot_and_never_starts_plain_http_api():

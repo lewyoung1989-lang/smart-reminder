@@ -26,6 +26,10 @@ import 'features/reminder_drafts/presentation/reminder_composer_screen.dart';
 import 'features/reminders/data/reminder_api.dart';
 import 'features/reminders/presentation/reminder_home_screen.dart';
 import 'features/today/data/today_repository.dart';
+import 'features/voice_input/data/audio_recorder_gateway.dart';
+import 'features/voice_input/data/voice_transcription_api.dart';
+import 'features/voice_input/services/voice_input_service.dart';
+import 'features/voice_input/services/voice_input_service_controller.dart';
 import 'platform/notifications/local_notification_scheduler.dart';
 import 'platform/notifications/reminder_notification_scheduler.dart';
 import 'platform/permissions/camera_permission_gateway.dart';
@@ -82,6 +86,9 @@ class _SmartReminderAppState extends State<SmartReminderApp>
   late final CameraPermissionGateway _cameraPermissionGateway;
   var _cameraPermissionState = CameraPermissionState.unavailable;
   var _themeMode = ThemeMode.system;
+  late final VoiceTranscriptionApi _voiceApi;
+  late final VoiceInputService _voiceInput;
+  late final VoiceInputServiceController _voiceInputController;
 
   @override
   void initState() {
@@ -134,6 +141,19 @@ class _SmartReminderAppState extends State<SmartReminderApp>
       baseUrl: widget.config.apiBaseUrl,
       client: _authenticatedClient,
     );
+    _voiceApi = VoiceTranscriptionApi(
+      baseUrl: widget.config.apiBaseUrl,
+      client: _authenticatedClient,
+    );
+    _voiceInput = VoiceInputService(
+      recorder: RecordAudioRecorderGateway(),
+      transcribe: _voiceApi.transcribe,
+    );
+    _voiceInputController = VoiceInputServiceController(
+      startRecording: _voiceInput.start,
+      stopAndTranscribe: _voiceInput.stopAndTranscribe,
+      cancelRecording: _voiceInput.cancel,
+    );
     if (_ownsAuthController) _authController.restore();
     unawaited(_refreshCameraPermission());
   }
@@ -164,6 +184,9 @@ class _SmartReminderAppState extends State<SmartReminderApp>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _voiceInputController.dispose();
+    unawaited(_voiceInput.dispose());
+    _voiceApi.close();
     _reminderDraftApi.close();
     _reminderApi.close();
     _medicineCabinetApi.close();
@@ -260,6 +283,7 @@ class _SmartReminderAppState extends State<SmartReminderApp>
           createReminder: (_) => ReminderComposerScreen(
             createDraft: _reminderDraftApi.createDraft,
             confirmDraft: _reminderDraftApi.confirmDraft,
+            voiceInputController: _voiceInputController,
             notificationScheduler: widget.notificationScheduler,
           ),
         ),
@@ -319,6 +343,7 @@ class _SmartReminderAppState extends State<SmartReminderApp>
             onOpenReminderManager: _openReminderManager,
             createDraft: _reminderDraftApi.createDraft,
             reminderCreationService: _reminderCreationService,
+            voiceInputController: _voiceInputController,
             onDeleteBatch: (batch) => _medicineCabinetApi.deleteBatch(batch.id),
             onCaptureMedicine: _openMedicineOcr,
             captureAvailability: _medicineCaptureAvailability,
