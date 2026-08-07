@@ -106,7 +106,7 @@ def test_legacy_rule_retains_existing_schedule_fields_after_workflow_expansion(r
 运行：
 
 ```bash
-.venv/bin/python -m pytest backend/tests/workflows/test_models.py -q
+../../.venv/bin/python -m pytest backend/tests/workflows/test_models.py -q
 ```
 
 预期：因 `apps.workflows`、模型或兼容字段不存在而失败。
@@ -118,8 +118,8 @@ def test_legacy_rule_retains_existing_schedule_fields_after_workflow_expansion(r
 - [ ] **步骤 4：运行模型与迁移测试确认 GREEN。**
 
 ```bash
-.venv/bin/python -m pytest backend/tests/workflows/test_models.py backend/tests/reminders/migrations -q
-.venv/bin/python backend/manage.py makemigrations --check --dry-run
+../../.venv/bin/python -m pytest backend/tests/workflows/test_models.py backend/tests/reminders/migrations -q
+../../.venv/bin/python backend/manage.py makemigrations --check --dry-run
 ```
 
 预期：测试通过且不存在未生成迁移。
@@ -161,7 +161,7 @@ def test_workflow_spec_rejects_cycle_and_requires_terminal_action():
 - [ ] **步骤 2：运行测试确认 RED。**
 
 ```bash
-.venv/bin/python -m pytest backend/tests/workflows/domain/test_schemas.py -q
+../../.venv/bin/python -m pytest backend/tests/workflows/domain/test_schemas.py -q
 ```
 
 - [ ] **步骤 3：实现严格的判别联合类型。**
@@ -171,7 +171,7 @@ def test_workflow_spec_rejects_cycle_and_requires_terminal_action():
 - [ ] **步骤 4：运行 Schema 测试确认 GREEN。**
 
 ```bash
-.venv/bin/python -m pytest backend/tests/workflows/domain/test_schemas.py -q
+../../.venv/bin/python -m pytest backend/tests/workflows/domain/test_schemas.py -q
 ```
 
 - [ ] **步骤 5：提交。**
@@ -217,7 +217,7 @@ def test_compiler_rejects_requested_capability_outside_template_manifest():
 - [ ] **步骤 2：运行测试确认 RED。**
 
 ```bash
-.venv/bin/python -m pytest backend/tests/workflows/services/test_compiler.py -q
+../../.venv/bin/python -m pytest backend/tests/workflows/services/test_compiler.py -q
 ```
 
 - [ ] **步骤 3：实现固定 V1 注册表与编译器。**
@@ -227,7 +227,7 @@ def test_compiler_rejects_requested_capability_outside_template_manifest():
 - [ ] **步骤 4：运行编译器测试确认 GREEN。**
 
 ```bash
-.venv/bin/python -m pytest backend/tests/workflows/services/test_compiler.py -q
+../../.venv/bin/python -m pytest backend/tests/workflows/services/test_compiler.py -q
 ```
 
 - [ ] **步骤 5：提交。**
@@ -262,7 +262,7 @@ def test_medication_never_auto_creates_even_with_matching_grant(user):
 - [ ] **步骤 2：运行测试确认 RED。**
 
 ```bash
-.venv/bin/python -m pytest backend/tests/workflows/services/test_policy.py -q
+../../.venv/bin/python -m pytest backend/tests/workflows/services/test_policy.py -q
 ```
 
 - [ ] **步骤 3：实现策略结果。**
@@ -272,7 +272,7 @@ def test_medication_never_auto_creates_even_with_matching_grant(user):
 - [ ] **步骤 4：运行策略测试确认 GREEN。**
 
 ```bash
-.venv/bin/python -m pytest backend/tests/workflows/services/test_policy.py -q
+../../.venv/bin/python -m pytest backend/tests/workflows/services/test_policy.py -q
 ```
 
 - [ ] **步骤 5：提交。**
@@ -329,7 +329,7 @@ def test_confirm_revalidates_the_persisted_spec_and_is_idempotent(api_client, wo
 - [ ] **步骤 2：运行测试确认 RED。**
 
 ```bash
-.venv/bin/python -m pytest backend/tests/workflows/api/test_workflow_drafts.py backend/tests/reminders/api/test_text_drafts.py -q
+../../.venv/bin/python -m pytest backend/tests/workflows/api/test_workflow_drafts.py backend/tests/reminders/api/test_text_drafts.py -q
 ```
 
 - [ ] **步骤 3：实现统一草稿服务和兼容投影。**
@@ -339,7 +339,7 @@ def test_confirm_revalidates_the_persisted_spec_and_is_idempotent(api_client, wo
 - [ ] **步骤 4：运行 API 与旧客户端回归测试确认 GREEN。**
 
 ```bash
-.venv/bin/python -m pytest backend/tests/workflows/api/test_workflow_drafts.py backend/tests/reminders/api/test_text_drafts.py backend/tests/reminders/api/test_voice_drafts.py -q
+../../.venv/bin/python -m pytest backend/tests/workflows/api/test_workflow_drafts.py backend/tests/reminders/api/test_text_drafts.py backend/tests/reminders/api/test_voice_drafts.py -q
 ```
 
 - [ ] **步骤 5：提交。**
@@ -361,9 +361,9 @@ git commit -m "feat: add typed workflow draft APIs"
 - [ ] **步骤 1：先增加部署前的迁移和安全回归。**
 
 ```bash
-.venv/bin/python -m pytest backend/tests/workflows backend/tests/reminders backend/tests/accounts -q
-.venv/bin/python backend/manage.py check
-.venv/bin/python backend/manage.py makemigrations --check --dry-run
+../../.venv/bin/python -m pytest backend/tests/workflows backend/tests/reminders backend/tests/accounts -q
+../../.venv/bin/python backend/manage.py check
+../../.venv/bin/python backend/manage.py makemigrations --check --dry-run
 git diff --check
 ```
 
