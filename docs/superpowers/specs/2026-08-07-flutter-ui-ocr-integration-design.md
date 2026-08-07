@@ -1,46 +1,46 @@
-# Flutter UI And OCR Integration Design
+# Flutter UI 与 OCR 整合设计
 
-## Goal
+## 目标
 
-Make the redesigned Flutter application the authenticated client shell while preserving the existing inventory and OCR production APIs. Users can inspect real medicine batches in the new medicine cabinet, create an OCR job from the cabinet, review its candidate, explicitly confirm it, and then see the resulting inventory in the same UI.
+以重新设计的 Flutter 应用作为已认证客户端外壳，同时保留既有库存与 OCR 的生产 API。用户可在新药箱中查看真实药品批次，从药箱创建 OCR 任务、核对候选结果、明确确认后在同一界面看到写入的库存。
 
-## Scope
+## 范围
 
-This integration starts from `main` and combines the completed UI branch with the existing authentication, authenticated HTTP client, inventory API, OCR API, image capture, and deployment configuration.
+本次整合以 `main` 为基础，合并已完成的 UI 分支，以及既有认证、已认证 HTTP 客户端、库存 API、OCR API、图像采集与部署配置。
 
-It does not change Django OCR behavior, storage, deployment topology, account policy, reminder backend endpoints, or add medical advice. Existing production APIs remain the source of truth. The new UI only presents typed projections of their responses.
+不修改 Django OCR 行为、存储、部署拓扑、账号策略或提醒后端端点，也不增加医疗建议。既有生产 API 仍是唯一事实来源；新 UI 仅展示其类型化投影。
 
-## Architecture
+## 架构
 
-`SmartReminderApp` retains `AuthController`, `AuthenticatedClient`, token storage, notification initialization, and API disposal from `main`. Once authenticated, it hosts the new adaptive `AppShell` instead of the legacy four-tab shell.
+`SmartReminderApp` 保留 `main` 中的 `AuthController`、`AuthenticatedClient`、令牌存储、通知初始化和 API 释放逻辑。认证成功后，使用新的自适应 `AppShell` 替换旧的四标签外壳。
 
-An `ApiMedicineRepository` adapts `MedicineCabinetApi` inventory-batch pages to the redesigned `MedicineRepository` models. It aggregates batches by medicine name and specification for the cabinet list, derives expiry status from the server-provided expiry date, and returns immutable detail data containing individual batches. Server deletion is exposed only through an injected async callback and never reports success before the API succeeds.
+`ApiMedicineRepository` 将 `MedicineCabinetApi` 的库存批次分页数据适配为重新设计的 `MedicineRepository` 模型：列表按药名和规格聚合批次；基于服务端有效期推导状态；详情返回不可变的单批次数据。服务端删除仅通过注入的异步回调暴露，API 成功前不得显示删除成功。
 
-The cabinet's camera entry opens the existing `MedicineOcrScreen` as a route. That screen retains its two-photo capture, signed upload, job polling, candidate review, and explicit confirmation behavior. On its successful confirmation result, the route returns to the cabinet, which reloads inventory. OCR candidates never become medicine data without the existing confirm endpoint.
+药箱的相机入口以路由方式打开既有 `MedicineOcrScreen`。该页面保留双照片采集、签名上传、任务轮询、候选核对和明确确认的行为。确认成功后返回药箱并刷新库存。没有既有确认端点，OCR 候选不得成为正式药品数据。
 
-## UI And Navigation
+## UI 与导航
 
-The adaptive shell keeps three primary destinations: Today, Plans, and Medicine. Authentication/profile remains reachable from Settings, not a fourth product destination. The medicine header camera action is available only to authenticated users with a configured camera adapter. Permission denial stays explicit; unavailable capture remains disabled and does not invent medicine data.
+自适应外壳保留“今天”“计划”“药箱”三个主目的地。认证与个人资料从设置进入，不作为第四个产品目的地。药箱头部相机操作仅对已认证且配置了采集适配器的用户可用。权限拒绝必须明确呈现；采集不可用时保持禁用，不能伪造药品数据。
 
-The desktop 380dp list/detail layout and compact push-detail behavior remain unchanged. Real inventory can expose pagination internally, but the first integration loads a bounded first page and surfaces a retryable error rather than silently losing further data. Pagination support is added only when the typed repository contract grows an explicit load-more operation.
+桌面端 380dp 列表/详情布局与紧凑端推入详情页的行为保持不变。真实库存可在内部提供分页，但首次整合仅加载受限的第一页，并在失败时呈现可重试错误，不能静默丢失后续数据。只有当类型化仓储契约增加明确的加载更多操作后，才增加分页支持。
 
-## Reminder And Authentication Compatibility
+## 提醒与认证兼容性
 
-The redesigned quick-create and confirmation screens call the existing authenticated `ReminderDraftApi`. Their idempotent `ReminderCreationService` remains responsible for local notification scheduling retries. Authentication failures continue through `AuthenticatedClient` to the root `AuthController`; feature screens show unavailable/error states rather than bypassing authentication.
+重新设计的快速创建与确认页调用既有、已认证的 `ReminderDraftApi`。幂等的 `ReminderCreationService` 继续负责本地通知的重试。认证失败仍通过 `AuthenticatedClient` 传递给根级 `AuthController`；功能页面必须显示不可用或错误状态，不能绕过认证。
 
-## Error Handling
+## 错误处理
 
-HTTP/authentication failures map to retryable collection/detail errors without replacing existing cached content. OCR job failures stay within the OCR flow and leave the cabinet unchanged. A confirmed OCR result causes a cabinet reload; a reload failure is shown as an error with retry, never as a fake new medicine.
+HTTP 或认证失败映射为可重试的集合/详情错误，且不替换既有缓存内容。OCR 任务失败保留在 OCR 流程内，药箱不发生变化。确认 OCR 成功后触发药箱重新加载；重新加载失败显示带重试的错误，绝不能伪造新增药品。
 
-## Testing
+## 测试
 
-Tests cover the API-to-repository mapping, expired and near-expiry aggregation, cabinet rendering of authenticated API data, OCR route launch and post-confirm refresh, unauthenticated shell routing, and retained reminder confirmation scheduling behavior. Existing Flutter UI golden and accessibility tests are regenerated only if integration changes their visible output. The complete Flutter test suite, analyzer, formatter check, and relevant backend OCR tests must pass before merge.
+测试覆盖 API 到仓储模型的映射、过期和临期聚合、药箱渲染已认证 API 数据、启动 OCR 路由及确认后的刷新、未认证时的外壳路由，以及提醒确认与通知调度行为的保留。仅当整合改变可见输出时才重新生成既有 Flutter UI Golden 与无障碍测试。合并前必须通过完整 Flutter 测试、静态分析、格式检查及相关后端 OCR 测试。
 
-## Acceptance Criteria
+## 验收标准
 
-- `main` authentication and deployment configuration remain intact.
-- The new shell is used after successful authentication.
-- The new cabinet reads real inventory through `AuthenticatedClient` and displays grouped medicine plus batch detail.
-- Camera OCR enters the existing review-and-confirm flow; confirmation refreshes the cabinet.
-- No OCR candidate, medicine batch, or notification is fabricated locally.
-- No medical dosage or treatment advice is introduced.
+- `main` 的认证与部署配置保持完整。
+- 认证成功后使用新的应用外壳。
+- 新药箱通过 `AuthenticatedClient` 读取真实库存，并展示聚合药品与批次详情。
+- 相机 OCR 进入既有的核对确认流程；确认后刷新药箱。
+- 不在本地伪造 OCR 候选、药品批次或通知。
+- 不引入药品剂量或治疗建议。
