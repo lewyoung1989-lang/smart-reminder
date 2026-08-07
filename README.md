@@ -92,7 +92,7 @@ FunASR 不映射宿主机端口，只能由 Compose 私有网络中的 Django AP
 
 | 用途 | ModelScope 模型 | Revision |
 |---|---|---|
-| ASR | [`iic/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch`](https://modelscope.cn/models/iic/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch) | `v2.0.4` |
+| ASR | [`iic/speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch`](https://modelscope.cn/models/iic/speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch) | `v2.0.4` |
 | VAD | [`iic/speech_fsmn_vad_zh-cn-16k-common-pytorch`](https://modelscope.cn/models/iic/speech_fsmn_vad_zh-cn-16k-common-pytorch) | `v2.0.4` |
 | 标点 | [`iic/punc_ct-transformer_zh-cn-common-vocab272727-pytorch`](https://modelscope.cn/models/iic/punc_ct-transformer_zh-cn-common-vocab272727-pytorch) | `v2.0.4` |
 

@@ -1,9 +1,26 @@
+import os
+from pathlib import Path
+
+
+MODEL_CACHE_DIR = Path(os.environ.get("MODELSCOPE_CACHE", "/models"))
+
+
+def _cached_model_path(model_id: str) -> str:
+    return str(MODEL_CACHE_DIR / "models" / model_id)
+
+
 MODEL_CONFIG = {
-    "model": "paraformer-zh",
+    "model": _cached_model_path(
+        "iic/speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch"
+    ),
     "model_revision": "v2.0.4",
-    "vad_model": "fsmn-vad",
+    "vad_model": _cached_model_path(
+        "iic/speech_fsmn_vad_zh-cn-16k-common-pytorch"
+    ),
     "vad_model_revision": "v2.0.4",
-    "punc_model": "ct-punc-c",
+    "punc_model": _cached_model_path(
+        "iic/punc_ct-transformer_zh-cn-common-vocab272727-pytorch"
+    ),
     "punc_model_revision": "v2.0.4",
     "device": "cpu",
     "disable_update": True,
