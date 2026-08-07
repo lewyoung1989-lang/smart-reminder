@@ -27,10 +27,13 @@ class AppShell extends StatefulWidget {
     required this.onThemeModeChanged,
     required this.onChangePassword,
     required this.onLogout,
+    this.onOpenReminderManager,
     this.createDraft,
     this.reminderCreationService,
     this.onDeleteBatch,
     this.onCaptureMedicine,
+    this.captureAvailability = MedicineCaptureAvailability.unavailable,
+    this.onOpenSystemSettings,
     super.key,
   });
 
@@ -46,10 +49,13 @@ class AppShell extends StatefulWidget {
     String newPasswordConfirm,
   ) onChangePassword;
   final Future<void> Function() onLogout;
+  final VoidCallback? onOpenReminderManager;
   final Future<ReminderDraft> Function(String text)? createDraft;
   final ReminderCreationService? reminderCreationService;
   final Future<void> Function(MedicineBatch batch)? onDeleteBatch;
   final Future<bool> Function()? onCaptureMedicine;
+  final MedicineCaptureAvailability captureAvailability;
+  final VoidCallback? onOpenSystemSettings;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -149,6 +155,7 @@ class _AppShellState extends State<AppShell> {
         key: const PageStorageKey<String>('today-tab'),
         child: TodayScreen(
           repository: widget.todayRepository,
+          onOpenReminderManager: widget.onOpenReminderManager,
           onOpenSettings: _openSettings,
         ),
       ),
@@ -164,10 +171,9 @@ class _AppShellState extends State<AppShell> {
         child: MedicineCabinetScreen(
           repository: widget.medicineRepository,
           onDeleteBatch: widget.onDeleteBatch,
-          captureAvailability: widget.onCaptureMedicine == null
-              ? MedicineCaptureAvailability.unavailable
-              : MedicineCaptureAvailability.ready,
+          captureAvailability: widget.captureAvailability,
           onCapture: widget.onCaptureMedicine,
+          onOpenSystemSettings: widget.onOpenSystemSettings,
           onOpenSettings: _openSettings,
         ),
       ),

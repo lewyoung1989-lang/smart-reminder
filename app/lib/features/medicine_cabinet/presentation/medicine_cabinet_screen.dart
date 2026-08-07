@@ -344,23 +344,38 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
 
   List<Widget> _contentSlivers(BuildContext context, bool expanded) {
     final collection = _collection;
+    final permissionRecovery = _permissionRecoverySlivers();
     if (collection == null) {
-      if (_isLoading) return _stateSlivers(const AppContentState.loading());
+      if (_isLoading) {
+        return [
+          ...permissionRecovery,
+          ..._stateSlivers(const AppContentState.loading())
+        ];
+      }
       if (_error is FeatureUnavailableException) {
-        return _stateSlivers(const AppContentState.unavailable(
-          title: '药箱暂时不可用',
-          message: '请稍后再试',
-        ));
+        return [
+          ...permissionRecovery,
+          ..._stateSlivers(const AppContentState.unavailable(
+            title: '药箱暂时不可用',
+            message: '请稍后再试',
+          )),
+        ];
       }
       if (_error != null) {
-        return _stateSlivers(AppContentState.error(
-          title: '药箱加载失败',
-          message: '请检查网络后重试',
-          actionLabel: '重试',
-          onAction: _load,
-        ));
+        return [
+          ...permissionRecovery,
+          ..._stateSlivers(AppContentState.error(
+            title: '药箱加载失败',
+            message: '请检查网络后重试',
+            actionLabel: '重试',
+            onAction: _load,
+          )),
+        ];
       }
-      return _stateSlivers(const AppContentState.loading());
+      return [
+        ...permissionRecovery,
+        ..._stateSlivers(const AppContentState.loading())
+      ];
     }
     final visible = _filtered(collection.items);
     final counts = <_ExpiryFilter, int>{
@@ -411,21 +426,8 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
         ),
       ),
       const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.lg)),
+      ...permissionRecovery,
     ];
-    if (widget.captureAvailability ==
-        MedicineCaptureAvailability.permanentlyDenied) {
-      slivers.add(
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(
-              AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.lg),
-          sliver: SliverToBoxAdapter(
-            child: _PermissionRecoveryBanner(
-              onOpenSystemSettings: widget.onOpenSystemSettings,
-            ),
-          ),
-        ),
-      );
-    }
     if (collection.isOffline) {
       slivers.add(const SliverPadding(
         padding:
@@ -485,6 +487,24 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
           sliver: SliverToBoxAdapter(child: state),
         ),
       ];
+
+  List<Widget> _permissionRecoverySlivers() {
+    if (widget.captureAvailability !=
+        MedicineCaptureAvailability.permanentlyDenied) {
+      return const [];
+    }
+    return <Widget>[
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.lg),
+        sliver: SliverToBoxAdapter(
+          child: _PermissionRecoveryBanner(
+            onOpenSystemSettings: widget.onOpenSystemSettings,
+          ),
+        ),
+      ),
+    ];
+  }
 
   Widget _detailPane() {
     final detail = _selectedDetail;

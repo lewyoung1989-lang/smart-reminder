@@ -16,6 +16,7 @@ class TodayScreen extends StatefulWidget {
     required this.repository,
     this.now,
     this.onOpenSettings,
+    this.onOpenReminderManager,
     this.onOpenAttention,
     this.onOpenTimeline,
     super.key,
@@ -24,6 +25,7 @@ class TodayScreen extends StatefulWidget {
   final TodayRepository repository;
   final DateTime? now;
   final VoidCallback? onOpenSettings;
+  final VoidCallback? onOpenReminderManager;
   final ValueChanged<AttentionItem>? onOpenAttention;
   final ValueChanged<TimelineItem>? onOpenTimeline;
 
@@ -96,6 +98,11 @@ class _TodayScreenState extends State<TodayScreen> {
                   eyebrow: _formatDate(now),
                   title: '今天',
                   actions: <Widget>[
+                    IconButton(
+                      tooltip: '管理提醒',
+                      onPressed: widget.onOpenReminderManager,
+                      icon: const Icon(LucideIcons.bell),
+                    ),
                     IconButton(
                       tooltip: '打开设置',
                       onPressed: widget.onOpenSettings,

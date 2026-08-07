@@ -47,6 +47,67 @@ void main() {
     expect(find.text('退出登录'), findsOneWidget);
   });
 
+  testWidgets('keeps the authenticated reminder manager reachable',
+      (tester) async {
+    var managerCalls = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppShell(
+          todayRepository: const UnavailableTodayRepository(),
+          planRepository: const UnavailablePlanRepository(),
+          medicineRepository: _UnavailableMedicineRepository(),
+          user: const AuthUser(
+            id: 'user-1',
+            phoneMasked: '138****8000',
+            phoneVerified: true,
+          ),
+          themeMode: ThemeMode.system,
+          onThemeModeChanged: (_) {},
+          onChangePassword: (_, __, ___) async {},
+          onLogout: () async {},
+          onOpenReminderManager: () => managerCalls += 1,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('管理提醒'), findsOneWidget);
+    await tester.tap(find.byTooltip('管理提醒'));
+    expect(managerCalls, 1);
+  });
+
+  testWidgets('surfaces permanent camera denial with a settings recovery',
+      (tester) async {
+    var settingsCalls = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppShell(
+          todayRepository: const UnavailableTodayRepository(),
+          planRepository: const UnavailablePlanRepository(),
+          medicineRepository: _UnavailableMedicineRepository(),
+          user: const AuthUser(
+            id: 'user-1',
+            phoneMasked: '138****8000',
+            phoneVerified: true,
+          ),
+          themeMode: ThemeMode.system,
+          onThemeModeChanged: (_) {},
+          onChangePassword: (_, __, ___) async {},
+          onLogout: () async {},
+          captureAvailability: MedicineCaptureAvailability.permanentlyDenied,
+          onOpenSystemSettings: () => settingsCalls += 1,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('药箱'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('需要相机权限才能拍照录入'), findsOneWidget);
+    await tester.tap(find.text('打开设置'));
+    expect(settingsCalls, 1);
+  });
+
   testWidgets('uses a navigation rail from 600dp', (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(900, 700);
