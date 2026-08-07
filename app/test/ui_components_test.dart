@@ -603,6 +603,20 @@ void main() {
     expect(tester.getSize(find.byType(AppPageHeader)).height, lessThan(96));
   });
 
+  testWidgets('AppPageHeader uses a large semantic title for root screens', (
+    tester,
+  ) async {
+    await tester.pumpApp(
+      const AppPageHeader(title: '今天', largeTitle: true),
+      surfaceSize: const Size(375, 812),
+    );
+
+    final title = tester.widget<Text>(find.text('今天'));
+    expect(title.style?.fontSize, 28);
+    expect(tester.getSemantics(find.text('今天')).flagsCollection.isHeader,
+        isTrue);
+  });
+
   testWidgets('pumpApp MediaQuery reaches dialog overlays', (tester) async {
     late MediaQueryData dialogMediaQuery;
 
@@ -664,6 +678,23 @@ void main() {
       final text = tester.widget<Text>(find.text(value));
       expect(text.maxLines, isNull);
       expect(text.overflow, isNot(TextOverflow.ellipsis));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('stacks detail values at 200 percent text on wide screens', (
+      tester,
+    ) async {
+      const value = '每周一上午九点十五分在上海时区提醒，并在出门前查询天气';
+      await tester.pumpApp(
+        const AppPropertyRow(label: '重复时间', value: Text(value)),
+        surfaceSize: const Size(800, 600),
+        textScaler: const TextScaler.linear(2),
+      );
+
+      expect(
+        tester.getTopLeft(find.text(value)).dy,
+        greaterThan(tester.getTopLeft(find.text('重复时间')).dy),
+      );
       expect(tester.takeException(), isNull);
     });
   });

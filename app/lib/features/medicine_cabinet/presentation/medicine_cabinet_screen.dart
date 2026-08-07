@@ -318,6 +318,7 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
           sliver: SliverToBoxAdapter(
             child: AppPageHeader(
               title: '家庭药箱',
+              largeTitle: true,
               actions: <Widget>[
                 _CaptureButton(
                   enabled: widget.onCapture != null &&

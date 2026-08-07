@@ -18,7 +18,9 @@ class AppPropertyRow extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final horizontal = constraints.maxWidth >= 480;
+        final textScaler = MediaQuery.textScalerOf(context);
+        final horizontal =
+            constraints.maxWidth >= 480 && textScaler.scale(14) <= 20;
         final labelWidget = Text(label, style: theme.textTheme.labelMedium);
         final valueWidget = DefaultTextStyle.merge(
           style: theme.textTheme.bodyMedium,

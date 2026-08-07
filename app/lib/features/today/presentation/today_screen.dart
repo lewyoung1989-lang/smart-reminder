@@ -97,6 +97,7 @@ class _TodayScreenState extends State<TodayScreen> {
                 child: AppPageHeader(
                   eyebrow: _formatDate(now),
                   title: '今天',
+                  largeTitle: true,
                   actions: <Widget>[
                     IconButton(
                       tooltip: '管理提醒',

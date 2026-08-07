@@ -49,6 +49,16 @@ void main() {
     expect(find.widgetWithText(FilledButton, '确认'), findsOneWidget);
   });
 
+  testWidgets('confirmation keeps content safe and actions in the thumb zone', (
+    tester,
+  ) async {
+    await tester.pumpWidget(app(value: draft(), onConfirm: () async {}));
+
+    final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
+    expect(find.byType(SafeArea), findsWidgets);
+    expect(scaffold.bottomNavigationBar, isNotNull);
+  });
+
   testWidgets('ambiguity warning disables confirmation', (tester) async {
     await tester.pumpWidget(
       app(value: draft(ambiguities: const ['缺少提醒时间']), onConfirm: () async {}),

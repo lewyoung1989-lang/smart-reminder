@@ -279,6 +279,7 @@ class _PlansScreenState extends State<PlansScreen> {
           sliver: SliverToBoxAdapter(
             child: AppPageHeader(
               title: '计划',
+              largeTitle: true,
               actions: <Widget>[
                 IconButton(
                   tooltip: '打开设置',

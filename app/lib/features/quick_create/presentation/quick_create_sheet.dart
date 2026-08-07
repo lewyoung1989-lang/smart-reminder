@@ -9,6 +9,7 @@ class QuickCreateSheet extends StatefulWidget {
   const QuickCreateSheet({
     required this.createDraft,
     this.onParsed,
+    this.onCancel,
     this.voiceInputController,
     this.initialText,
     super.key,
@@ -16,6 +17,7 @@ class QuickCreateSheet extends StatefulWidget {
 
   final Future<ReminderDraft> Function(String text) createDraft;
   final ValueChanged<QuickCreateResult>? onParsed;
+  final VoidCallback? onCancel;
   final VoiceInputController? voiceInputController;
   final String? initialText;
 
@@ -139,6 +141,15 @@ class _QuickCreateSheetState extends State<QuickCreateSheet> {
     }
   }
 
+  void _cancel() {
+    final onCancel = widget.onCancel;
+    if (onCancel != null) {
+      onCancel();
+      return;
+    }
+    Navigator.of(context).maybePop();
+  }
+
   @override
   Widget build(BuildContext context) {
     final voice = _voice;
@@ -168,8 +179,23 @@ class _QuickCreateSheetState extends State<QuickCreateSheet> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text('快速创建',
-                          style: Theme.of(context).textTheme.titleMedium),
+                      Row(
+                        children: <Widget>[
+                          Expanded(
+                            child: Text(
+                              '快速创建',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                          ),
+                          SizedBox(
+                            height: 44,
+                            child: TextButton(
+                              onPressed: _cancel,
+                              child: const Text('取消'),
+                            ),
+                          ),
+                        ],
+                      ),
                       const SizedBox(height: 12),
                       TextField(
                         key: const Key('quick-create-input'),

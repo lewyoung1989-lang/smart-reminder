@@ -79,6 +79,26 @@ void main() {
     expect(calls, 0);
   });
 
+  testWidgets('sheet exposes a 44 point cancel action for abandoning input', (
+    tester,
+  ) async {
+    var cancellations = 0;
+    await tester.pumpWidget(
+      app(
+        QuickCreateSheet(
+          createDraft: (_) async => draft,
+          onCancel: () => cancellations += 1,
+        ),
+      ),
+    );
+
+    final cancel = find.widgetWithText(TextButton, '取消');
+    expect(cancel, findsOneWidget);
+    expect(tester.getSize(cancel).height, greaterThanOrEqualTo(44));
+    await tester.tap(cancel);
+    expect(cancellations, 1);
+  });
+
   testWidgets('parse errors retain input and allow retry', (tester) async {
     var attempts = 0;
     await tester.pumpWidget(

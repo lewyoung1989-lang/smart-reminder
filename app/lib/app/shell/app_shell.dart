@@ -93,6 +93,7 @@ class _AppShellState extends State<AppShell> {
       builder: (sheetContext) => QuickCreateSheet(
         createDraft: createDraft,
         onParsed: (value) => Navigator.of(sheetContext).pop(value),
+        onCancel: () => Navigator.of(sheetContext).pop(),
       ),
     );
     if (mounted && result != null) await _showDraft(result, service);

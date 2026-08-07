@@ -7,11 +7,13 @@ class AppPageHeader extends StatelessWidget {
     super.key,
     required this.title,
     this.eyebrow,
+    this.largeTitle = false,
     this.actions = const [],
   });
 
   final String title;
   final String? eyebrow;
+  final bool largeTitle;
   final List<Widget> actions;
 
   @override
@@ -38,7 +40,12 @@ class AppPageHeader extends StatelessWidget {
               ],
               Semantics(
                 header: true,
-                child: Text(title, style: theme.textTheme.titleLarge),
+                child: Text(
+                  title,
+                  style: largeTitle
+                      ? theme.textTheme.displaySmall
+                      : theme.textTheme.titleLarge,
+                ),
               ),
             ],
           ),
