@@ -4,7 +4,21 @@ import 'package:http/http.dart' as http;
 
 import '../domain/inventory_batch.dart';
 
-class MedicineCabinetApi {
+typedef InventoryBatchLoader = Future<InventoryBatchPage> Function({
+  String query,
+  Uri? pageUrl,
+});
+
+abstract interface class MedicineCabinetDataSource {
+  Future<InventoryBatchPage> listBatches({
+    String query = '',
+    Uri? pageUrl,
+  });
+
+  Future<void> deleteBatch(String batchId);
+}
+
+class MedicineCabinetApi implements MedicineCabinetDataSource {
   MedicineCabinetApi({
     required String baseUrl,
     http.Client? client,
@@ -16,6 +30,7 @@ class MedicineCabinetApi {
   final http.Client _client;
   final bool _ownsClient;
 
+  @override
   Future<InventoryBatchPage> listBatches({
     String query = '',
     Uri? pageUrl,
@@ -53,6 +68,7 @@ class MedicineCabinetApi {
     );
   }
 
+  @override
   Future<void> deleteBatch(String batchId) async {
     final encodedBatchId = Uri.encodeComponent(batchId);
     final uri = Uri.parse(

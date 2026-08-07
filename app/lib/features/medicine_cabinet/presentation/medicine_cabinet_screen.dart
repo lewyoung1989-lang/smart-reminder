@@ -1,463 +1,614 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../domain/inventory_batch.dart';
-
-typedef InventoryBatchLoader = Future<InventoryBatchPage> Function({
-  String query,
-  Uri? pageUrl,
-});
-typedef InventoryBatchDeleter = Future<void> Function(String id);
+import '../../../app/theme/app_colors.dart';
+import '../../../app/theme/app_spacing.dart';
+import '../../../core/data/feature_unavailable_exception.dart';
+import '../../../ui/components/app_content_state.dart';
+import '../../../ui/components/app_list_row.dart';
+import '../../../ui/components/app_page_header.dart';
+import '../../../ui/components/app_segmented_control.dart';
+import '../../../ui/components/app_status_banner.dart';
+import '../data/api_medicine_repository.dart';
+import '../data/medicine_cabinet_api.dart';
+import '../data/medicine_repository.dart';
+import '../domain/medicine_models.dart';
+import 'medicine_detail_screen.dart';
 
 class MedicineCabinetScreen extends StatefulWidget {
   const MedicineCabinetScreen({
-    required this.listBatches,
-    required this.deleteBatch,
+    this.repository,
+    this.listBatches,
+    this.deleteBatch,
+    this.onDeleteBatch,
+    this.onCapture,
+    this.captureAvailability = MedicineCaptureAvailability.unavailable,
+    this.onOpenSystemSettings,
+    this.onOpenMedicine,
+    this.onOpenSettings,
     super.key,
-  });
+  }) : assert(
+          repository != null || listBatches != null,
+          'A medicine repository or inventory loader is required.',
+        );
 
-  final InventoryBatchLoader listBatches;
-  final InventoryBatchDeleter deleteBatch;
+  final MedicineRepository? repository;
+  final InventoryBatchLoader? listBatches;
+  final Future<void> Function(String batchId)? deleteBatch;
+  final Future<void> Function(MedicineBatch batch)? onDeleteBatch;
+  final Future<void> Function()? onCapture;
+  final MedicineCaptureAvailability captureAvailability;
+  final VoidCallback? onOpenSystemSettings;
+  final ValueChanged<MedicineSummary>? onOpenMedicine;
+  final VoidCallback? onOpenSettings;
 
   @override
   State<MedicineCabinetScreen> createState() => _MedicineCabinetScreenState();
 }
 
 class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
-  final _search = TextEditingController();
-  final _scroll = ScrollController();
-
-  List<InventoryBatch> _batches = const [];
-  Uri? _nextPage;
-  String _activeQuery = '';
-  bool _loading = true;
-  bool _loadingMore = false;
-  bool _loadMoreFailed = false;
-  bool _failed = false;
-  int _requestGeneration = 0;
-  final Set<String> _deletedBatchIds = {};
+  late MedicineRepository _repository;
+  MedicineCollection? _collection;
+  MedicineDetail? _selectedDetail;
+  String? _selectedMedicineId;
+  _ExpiryFilter _filter = _ExpiryFilter.all;
+  String _query = '';
+  Object? _error;
+  Object? _detailError;
+  var _isLoading = true;
+  var _isDetailLoading = false;
+  var _isOpeningCompactDetail = false;
+  var _isCapturing = false;
+  var _wasExpanded = false;
+  var _loadGeneration = 0;
+  var _detailGeneration = 0;
 
   @override
   void initState() {
     super.initState();
-    _search.addListener(_searchChanged);
-    _scroll.addListener(_scrollChanged);
-    _loadFirstPage();
+    _repository = widget.repository ??
+        ApiMedicineRepository.fromLoader(widget.listBatches!);
+    _load();
   }
 
   @override
-  void dispose() {
-    _search
-      ..removeListener(_searchChanged)
-      ..dispose();
-    _scroll
-      ..removeListener(_scrollChanged)
-      ..dispose();
-    super.dispose();
-  }
-
-  void _searchChanged() => setState(() {});
-
-  void _scrollChanged() {
-    if (_scroll.position.extentAfter < 160 && !_loadMoreFailed) {
-      _loadNextPage();
+  void didUpdateWidget(covariant MedicineCabinetScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.repository != widget.repository &&
+        widget.repository != null) {
+      _repository = widget.repository!;
+      _load(clearCollection: true);
     }
   }
 
-  Future<void> _loadFirstPage({String? query}) async {
-    final nextQuery = (query ?? _activeQuery).trim();
-    final generation = ++_requestGeneration;
-    setState(() {
-      _activeQuery = nextQuery;
-      _loading = true;
-      _loadingMore = false;
-      _loadMoreFailed = false;
-      _failed = false;
-    });
-    try {
-      final page = await widget.listBatches(query: nextQuery);
-      if (!mounted || generation != _requestGeneration) {
-        return;
-      }
-      setState(() {
-        _batches = page.batches;
-        _deletedBatchIds.clear();
-        _nextPage = page.nextPage;
-        _loading = false;
-      });
-    } catch (_) {
-      if (!mounted || generation != _requestGeneration) {
-        return;
-      }
-      setState(() {
-        _loading = false;
-        _failed = true;
-      });
-    }
-  }
-
-  Future<void> _loadNextPage() async {
-    final pageUrl = _nextPage;
-    if (pageUrl == null || _loading || _loadingMore || _failed) {
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final expanded =
+        MediaQuery.sizeOf(context).width >= AppSpacing.breakpointExpanded;
+    final enteredExpanded = expanded && !_wasExpanded;
+    _wasExpanded = expanded;
+    if (!enteredExpanded ||
+        _collection == null ||
+        _selectedMedicineId == null ||
+        _selectedDetail != null ||
+        _isDetailLoading) {
       return;
     }
-    final generation = _requestGeneration;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadSelectedDetail();
+    });
+  }
+
+  Future<void> _load({bool clearCollection = false}) async {
+    final generation = ++_loadGeneration;
     setState(() {
-      _loadingMore = true;
-      _loadMoreFailed = false;
+      _isLoading = true;
+      _error = null;
+      if (clearCollection) {
+        _collection = null;
+        _selectedMedicineId = null;
+        _selectedDetail = null;
+        _detailError = null;
+        _isDetailLoading = false;
+        _detailGeneration += 1;
+      }
     });
     try {
-      final page = await widget.listBatches(
-        query: _activeQuery,
-        pageUrl: pageUrl,
-      );
-      if (!mounted || generation != _requestGeneration) {
+      final collection = await _repository.load();
+      if (!mounted || generation != _loadGeneration) return;
+      setState(() {
+        _collection = collection;
+        _selectedMedicineId ??= _filtered(collection.items).firstOrNull?.id;
+      });
+      if (MediaQuery.sizeOf(context).width >= AppSpacing.breakpointExpanded) {
+        await _loadSelectedDetail(collectionGeneration: generation);
+      }
+    } catch (error) {
+      if (!mounted || generation != _loadGeneration) return;
+      setState(() => _error = error);
+    } finally {
+      if (mounted && generation == _loadGeneration) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _loadSelectedDetail({int? collectionGeneration}) async {
+    final id = _selectedMedicineId;
+    if (id == null) {
+      setState(() {
+        _selectedDetail = null;
+        _detailError = null;
+        _isDetailLoading = false;
+      });
+      return;
+    }
+    final generation = ++_detailGeneration;
+    setState(() {
+      _selectedDetail = null;
+      _detailError = null;
+      _isDetailLoading = true;
+    });
+    try {
+      final detail = await _repository.getById(id);
+      if (!mounted ||
+          generation != _detailGeneration ||
+          (collectionGeneration != null &&
+              collectionGeneration != _loadGeneration) ||
+          _selectedMedicineId != id) {
         return;
       }
-      setState(() {
-        _batches = [
-          ..._batches,
-          ...page.batches.where(
-            (batch) => !_deletedBatchIds.contains(batch.id),
-          ),
-        ];
-        _nextPage = page.nextPage;
-        _loadingMore = false;
-        _loadMoreFailed = false;
-      });
-    } catch (_) {
-      if (mounted && generation == _requestGeneration) {
-        setState(() {
-          _loadingMore = false;
-          _loadMoreFailed = true;
-        });
+      setState(() => _selectedDetail = detail);
+    } catch (error) {
+      if (!mounted ||
+          generation != _detailGeneration ||
+          (collectionGeneration != null &&
+              collectionGeneration != _loadGeneration) ||
+          _selectedMedicineId != id) {
+        return;
+      }
+      setState(() => _detailError = error);
+    } finally {
+      if (mounted && generation == _detailGeneration) {
+        setState(() => _isDetailLoading = false);
       }
     }
   }
 
-  void _retryNextPage() {
-    setState(() => _loadMoreFailed = false);
-    _loadNextPage();
+  List<MedicineSummary> _filtered(List<MedicineSummary> medicines) {
+    final query = _query.trim().toLowerCase();
+    return medicines
+        .where((medicine) => switch (_filter) {
+              _ExpiryFilter.all => true,
+              _ExpiryFilter.expiring =>
+                medicine.status == MedicineStatus.expiring,
+              _ExpiryFilter.expired =>
+                medicine.status == MedicineStatus.expired,
+            })
+        .where((medicine) =>
+            query.isEmpty ||
+            medicine.name.toLowerCase().contains(query) ||
+            medicine.specification.toLowerCase().contains(query))
+        .toList();
   }
 
-  void _submitSearch() => _loadFirstPage(query: _search.text);
-
-  void _clearSearch() {
-    _search.clear();
-    _loadFirstPage(query: '');
-  }
-
-  Future<bool> _confirmDelete(InventoryBatch batch) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('删除这批药品？'),
-        content: Text(
-          [
-            '确定删除“${batch.medicineName}”吗？',
-            if (batch.batchNumber.isNotEmpty) '批号 ${batch.batchNumber}',
-            '只会删除当前批次，其他批次不受影响。',
-          ].join('\n'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            style: TextButton.styleFrom(
-              foregroundColor: Theme.of(dialogContext).colorScheme.error,
-            ),
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('删除'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) {
-      return false;
-    }
-
-    try {
-      await widget.deleteBatch(batch.id);
-      return mounted;
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('删除失败，请稍后重试')),
-        );
-      }
-      return false;
-    }
-  }
-
-  void _removeDeletedBatch(String batchId) {
+  void _setFilter(_ExpiryFilter filter) {
     setState(() {
-      _deletedBatchIds.add(batchId);
-      _batches = _batches
-          .where((batch) => batch.id != batchId)
-          .toList(growable: false);
+      _filter = filter;
+      _reconcileSelection();
     });
+    if (MediaQuery.sizeOf(context).width >= AppSpacing.breakpointExpanded) {
+      _loadSelectedDetail();
+    }
   }
 
-  @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('家庭药箱')),
-        body: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-              child: TextField(
-                key: const Key('medicine-search'),
-                controller: _search,
-                textInputAction: TextInputAction.search,
-                onSubmitted: (_) => _submitSearch(),
-                decoration: InputDecoration(
-                  hintText: '搜索药品、规格或批号',
-                  prefixIcon: const Icon(Icons.search),
-                  suffixIcon: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (_search.text.isNotEmpty)
-                        IconButton(
-                          tooltip: '清除搜索',
-                          onPressed: _clearSearch,
-                          icon: const Icon(Icons.clear),
-                        ),
-                      IconButton(
-                        tooltip: '搜索',
-                        onPressed: _submitSearch,
-                        icon: const Icon(Icons.search),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            Expanded(child: _body()),
-          ],
-        ),
-      );
-
-  Widget _body() {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+  void _setQuery(String query) {
+    setState(() {
+      _query = query;
+      _reconcileSelection();
+    });
+    if (MediaQuery.sizeOf(context).width >= AppSpacing.breakpointExpanded) {
+      _loadSelectedDetail();
     }
-    if (_failed) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.cloud_off_outlined, size: 40),
-            const SizedBox(height: 12),
-            const Text('药箱加载失败'),
-            const SizedBox(height: 8),
-            TextButton.icon(
-              onPressed: _loadFirstPage,
-              icon: const Icon(Icons.refresh),
-              label: const Text('重试'),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: _loadFirstPage,
-      child: ListView.separated(
-        key: const Key('medicine-cabinet-list'),
-        controller: _scroll,
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-        itemCount: _batches.isEmpty ? 1 : _batches.length + 1,
-        separatorBuilder: (_, __) => const Divider(height: 1),
-        itemBuilder: (context, index) {
-          if (_batches.isEmpty) {
-            final hasQuery = _activeQuery.isNotEmpty;
-            return SizedBox(
-              height: 280,
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      hasQuery
-                          ? Icons.search_off_outlined
-                          : Icons.medication_outlined,
-                      size: 44,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(hasQuery ? '没有找到匹配药品' : '药箱里还没有药品'),
-                    const SizedBox(height: 4),
-                    Text(
-                      hasQuery ? '请尝试其他关键词' : '可从“拍照录入”添加药品',
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
-          if (index == _batches.length) {
-            return SizedBox(
-              height: 64,
-              child: _loadMoreFailed
-                  ? Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Text('更多药品加载失败'),
-                        const SizedBox(width: 4),
-                        TextButton.icon(
-                          onPressed: _retryNextPage,
-                          icon: const Icon(Icons.refresh),
-                          label: const Text('重试加载'),
-                        ),
-                      ],
-                    )
-                  : _loadingMore
-                      ? const Center(
-                          child: SizedBox.square(
-                            dimension: 22,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        )
-                      : null,
-            );
-          }
-          final batch = _batches[index];
-          return Dismissible(
-            key: ValueKey('medicine-batch-${batch.id}'),
-            direction: DismissDirection.endToStart,
-            dismissThresholds: const {
-              DismissDirection.endToStart: 0.35,
-            },
-            background: const _DeleteBackground(),
-            confirmDismiss: (_) => _confirmDelete(batch),
-            onDismissed: (_) => _removeDeletedBatch(batch.id),
-            child: _MedicineBatchRow(batch: batch),
-          );
-        },
-      ),
-    );
   }
-}
 
-class _DeleteBackground extends StatelessWidget {
-  const _DeleteBackground();
+  void _reconcileSelection() {
+    final visible = _filtered(_collection?.items ?? const []);
+    if (!visible.any((medicine) => medicine.id == _selectedMedicineId)) {
+      _selectedMedicineId = visible.firstOrNull?.id;
+      _selectedDetail = null;
+    }
+  }
 
-  @override
-  Widget build(BuildContext context) => Container(
-        color: Theme.of(context).colorScheme.errorContainer,
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.delete_outline,
-              color: Theme.of(context).colorScheme.onErrorContainer,
-            ),
-            const SizedBox(height: 2),
-            Text(
-              '删除',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onErrorContainer,
-              ),
-            ),
-          ],
+  Future<void> _openMedicine(MedicineSummary medicine, bool expanded) async {
+    if (widget.onOpenMedicine != null) {
+      widget.onOpenMedicine!(medicine);
+      return;
+    }
+    if (expanded) {
+      setState(() {
+        _selectedMedicineId = medicine.id;
+        _selectedDetail = null;
+      });
+      await _loadSelectedDetail();
+      return;
+    }
+    if (_isOpeningCompactDetail) return;
+    setState(() => _isOpeningCompactDetail = true);
+    try {
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => MedicineDetailLoaderScreen(
+            repository: _repository,
+            medicineId: medicine.id,
+            onDeleteBatch: _deleteCallback,
+          ),
         ),
       );
-}
+    } finally {
+      if (mounted) setState(() => _isOpeningCompactDetail = false);
+    }
+  }
 
-class _MedicineBatchRow extends StatelessWidget {
-  const _MedicineBatchRow({required this.batch});
+  Future<void> _deleteBatch(MedicineBatch batch) async {
+    final delete = widget.onDeleteBatch;
+    if (delete != null) {
+      await delete(batch);
+    } else {
+      await widget.deleteBatch!(batch.id);
+    }
+    if (mounted) await _load(clearCollection: true);
+  }
 
-  final InventoryBatch batch;
+  Future<void> Function(MedicineBatch batch)? get _deleteCallback =>
+      widget.onDeleteBatch == null && widget.deleteBatch == null
+          ? null
+          : _deleteBatch;
+
+  Future<void> _capture() async {
+    final capture = widget.onCapture;
+    final canCapture =
+        widget.captureAvailability == MedicineCaptureAvailability.ready ||
+            widget.captureAvailability == MedicineCaptureAvailability.denied;
+    if (capture == null || !canCapture || _isCapturing) {
+      return;
+    }
+    setState(() => _isCapturing = true);
+    try {
+      await capture();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('拍照录入失败，请稍后重试')),
+      );
+    } finally {
+      if (mounted) setState(() => _isCapturing = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final secondary = [
-      if (batch.specification.isNotEmpty) batch.specification,
-      if (batch.batchNumber.isNotEmpty) '批号 ${batch.batchNumber}',
-    ].join(' · ');
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 14),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  batch.medicineName,
-                  style: Theme.of(context).textTheme.titleMedium,
+    final expanded =
+        MediaQuery.sizeOf(context).width >= AppSpacing.breakpointExpanded;
+    final content = _collectionContent(context, expanded);
+    if (expanded && _collection != null && _error == null) {
+      return Scaffold(
+        body: SafeArea(
+          child: Row(
+            children: <Widget>[
+              SizedBox(width: 380, child: content),
+              const VerticalDivider(width: 1),
+              Expanded(child: _detailPane()),
+            ],
+          ),
+        ),
+      );
+    }
+    return Scaffold(body: SafeArea(child: content));
+  }
+
+  Widget _collectionContent(BuildContext context, bool expanded) {
+    return CustomScrollView(
+      slivers: <Widget>[
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg, AppSpacing.xxl, AppSpacing.lg, AppSpacing.lg),
+          sliver: SliverToBoxAdapter(
+            child: AppPageHeader(
+              title: '家庭药箱',
+              actions: <Widget>[
+                _CaptureButton(
+                  enabled: widget.onCapture != null &&
+                      !_isCapturing &&
+                      (widget.captureAvailability ==
+                              MedicineCaptureAvailability.ready ||
+                          widget.captureAvailability ==
+                              MedicineCaptureAvailability.denied),
+                  onPressed: _capture,
                 ),
-                if (secondary.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(secondary),
-                ],
-                const SizedBox(height: 6),
-                Text(
-                  batch.expiryDate == null
-                      ? '有效期未录入'
-                      : '有效期 ${_formatDate(batch.expiryDate!)}',
+                IconButton(
+                  tooltip: '打开设置',
+                  onPressed: widget.onOpenSettings,
+                  icon: const Icon(LucideIcons.settings),
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text('数量 ${batch.quantity}'),
-              const SizedBox(height: 6),
-              Chip(
-                visualDensity: VisualDensity.compact,
-                backgroundColor: _chipBackground(batch.expiryStatus),
-                labelStyle: TextStyle(
-                  color: _chipForeground(batch.expiryStatus),
-                ),
-                label: Text(_statusLabel(batch)),
-              ),
-            ],
-          ),
-        ],
-      ),
+        ),
+        ..._contentSlivers(context, expanded),
+      ],
     );
   }
 
-  static String _formatDate(DateTime date) =>
-      '${date.year.toString().padLeft(4, '0')}-'
-      '${date.month.toString().padLeft(2, '0')}-'
-      '${date.day.toString().padLeft(2, '0')}';
-
-  static String _statusLabel(InventoryBatch batch) {
-    final days = batch.daysUntilExpiry;
-    return switch (batch.expiryStatus) {
-      InventoryExpiryStatus.expired =>
-        days == null ? '已过期' : '已过期 ${days.abs()} 天',
-      InventoryExpiryStatus.expiringSoon => days == 0
-          ? '今天过期'
-          : days == null
-              ? '即将过期'
-              : '$days 天后过期',
-      InventoryExpiryStatus.valid => '有效',
-      InventoryExpiryStatus.unknown => '未录入有效期',
+  List<Widget> _contentSlivers(BuildContext context, bool expanded) {
+    final collection = _collection;
+    if (collection == null) {
+      if (_isLoading) return _stateSlivers(const AppContentState.loading());
+      if (_error is FeatureUnavailableException) {
+        return _stateSlivers(const AppContentState.unavailable(
+          title: '药箱暂时不可用',
+          message: '请稍后再试',
+        ));
+      }
+      if (_error != null) {
+        return _stateSlivers(AppContentState.error(
+          title: '药箱加载失败',
+          message: '请检查网络后重试',
+          actionLabel: '重试',
+          onAction: _load,
+        ));
+      }
+      return _stateSlivers(const AppContentState.loading());
+    }
+    final visible = _filtered(collection.items);
+    final counts = <_ExpiryFilter, int>{
+      _ExpiryFilter.all: collection.items.length,
+      _ExpiryFilter.expiring: collection.items
+          .where((item) => item.status == MedicineStatus.expiring)
+          .length,
+      _ExpiryFilter.expired: collection.items
+          .where((item) => item.status == MedicineStatus.expired)
+          .length,
     };
+    final slivers = <Widget>[
+      SliverPadding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+        sliver: SliverToBoxAdapter(
+          child: TextField(
+            key: const Key('medicine-search'),
+            onChanged: _setQuery,
+            decoration: const InputDecoration(
+              hintText: '搜索药品或规格',
+              prefixIcon: Icon(LucideIcons.search),
+            ),
+          ),
+        ),
+      ),
+      const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.md)),
+      SliverPadding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+        sliver: SliverToBoxAdapter(
+          child: AppSegmentedControl<_ExpiryFilter>(
+            value: _filter,
+            options: <AppSegment<_ExpiryFilter>>[
+              AppSegment(
+                  value: _ExpiryFilter.all,
+                  label: '全部',
+                  count: counts[_ExpiryFilter.all]),
+              AppSegment(
+                  value: _ExpiryFilter.expiring,
+                  label: '临期',
+                  count: counts[_ExpiryFilter.expiring]),
+              AppSegment(
+                  value: _ExpiryFilter.expired,
+                  label: '已过期',
+                  count: counts[_ExpiryFilter.expired]),
+            ],
+            onChanged: _setFilter,
+          ),
+        ),
+      ),
+      const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.lg)),
+    ];
+    if (widget.captureAvailability ==
+        MedicineCaptureAvailability.permanentlyDenied) {
+      slivers.add(
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.lg),
+          sliver: SliverToBoxAdapter(
+            child: _PermissionRecoveryBanner(
+              onOpenSystemSettings: widget.onOpenSystemSettings,
+            ),
+          ),
+        ),
+      );
+    }
+    if (collection.isOffline) {
+      slivers.add(const SliverPadding(
+        padding:
+            EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.lg),
+        sliver: SliverToBoxAdapter(
+          child: AppStatusBanner(
+            severity: AppStatusSeverity.offline,
+            title: '正在显示上次同步药箱',
+          ),
+        ),
+      ));
+    }
+    if (visible.isEmpty) {
+      slivers.addAll(_stateSlivers(const AppContentState.empty(
+        title: '没有符合条件的药品',
+        message: '调整搜索或有效期筛选后再查看',
+      )));
+      return slivers;
+    }
+    slivers.add(SliverPadding(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.xxl),
+      sliver: SliverToBoxAdapter(
+        child: Column(
+          children: <Widget>[
+            for (var index = 0; index < visible.length; index += 1)
+              _MedicineRow(
+                medicine: visible[index],
+                position: _positionFor(index, visible.length),
+                onTap: () => _openMedicine(visible[index], expanded),
+              ),
+          ],
+        ),
+      ),
+    ));
+    return slivers;
   }
 
-  static Color _chipBackground(InventoryExpiryStatus status) =>
-      switch (status) {
-        InventoryExpiryStatus.expired => const Color(0xFFFCE8E6),
-        InventoryExpiryStatus.expiringSoon => const Color(0xFFFFE9B8),
-        InventoryExpiryStatus.valid => const Color(0xFFDDEFE6),
-        InventoryExpiryStatus.unknown => const Color(0xFFE7E8EA),
-      };
+  List<Widget> _stateSlivers(Widget state) => <Widget>[
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+          sliver: SliverToBoxAdapter(child: state),
+        ),
+      ];
 
-  static Color _chipForeground(InventoryExpiryStatus status) =>
-      switch (status) {
-        InventoryExpiryStatus.expired => const Color(0xFF9B1C1C),
-        InventoryExpiryStatus.expiringSoon => const Color(0xFF6B4B00),
-        InventoryExpiryStatus.valid => const Color(0xFF195C45),
-        InventoryExpiryStatus.unknown => const Color(0xFF4C4F54),
-      };
+  Widget _detailPane() {
+    final detail = _selectedDetail;
+    if (detail != null) {
+      return MedicineDetailScreen(
+        detail: detail,
+        onDeleteBatch: _deleteCallback,
+      );
+    }
+    if (_isDetailLoading) {
+      return const Padding(
+          padding: EdgeInsets.all(AppSpacing.lg),
+          child: AppContentState.loading());
+    }
+    if (_detailError is FeatureUnavailableException) {
+      return const Padding(
+        padding: EdgeInsets.all(AppSpacing.lg),
+        child:
+            AppContentState.unavailable(title: '药品详情暂时不可用', message: '请稍后再试'),
+      );
+    }
+    if (_detailError != null) {
+      return Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: AppContentState.error(
+          title: '药品详情加载失败',
+          message: '请稍后再试',
+          actionLabel: '重试',
+          onAction: _loadSelectedDetail,
+        ),
+      );
+    }
+    return const Padding(
+      padding: EdgeInsets.all(AppSpacing.lg),
+      child: AppContentState.empty(title: '选择一个药品', message: '药品详情会显示在这里'),
+    );
+  }
+}
+
+class _CaptureButton extends StatelessWidget {
+  const _CaptureButton({required this.enabled, required this.onPressed});
+
+  final bool enabled;
+  final Future<void> Function() onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final button = TextButton.icon(
+      onPressed: enabled ? () => onPressed() : null,
+      icon: const Icon(LucideIcons.camera),
+      label: const Text('拍照录入'),
+    );
+    if (enabled) return button;
+    return Semantics(
+      button: true,
+      enabled: false,
+      label: '拍照录入，拍照录入服务尚未接入',
+      hint: '拍照录入服务尚未接入',
+      child: ExcludeSemantics(child: button),
+    );
+  }
+}
+
+class _PermissionRecoveryBanner extends StatelessWidget {
+  const _PermissionRecoveryBanner({this.onOpenSystemSettings});
+
+  final VoidCallback? onOpenSystemSettings;
+
+  @override
+  Widget build(BuildContext context) {
+    if (onOpenSystemSettings != null) {
+      return AppStatusBanner(
+        severity: AppStatusSeverity.warning,
+        title: '需要相机权限才能拍照录入',
+        actionLabel: '打开设置',
+        onAction: onOpenSystemSettings,
+      );
+    }
+    return Semantics(
+      container: true,
+      button: true,
+      enabled: false,
+      label: '打开设置，服务尚未接入',
+      child: ExcludeSemantics(
+        child: const AppStatusBanner(
+          severity: AppStatusSeverity.warning,
+          title: '需要相机权限才能拍照录入',
+          message: '打开设置服务尚未接入',
+        ),
+      ),
+    );
+  }
+}
+
+class _MedicineRow extends StatelessWidget {
+  const _MedicineRow(
+      {required this.medicine, required this.position, required this.onTap});
+
+  final MedicineSummary medicine;
+  final AppListRowPosition position;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final semantic = Theme.of(context).extension<AppSemanticColors>() ??
+        (Theme.of(context).brightness == Brightness.dark
+            ? AppSemanticColors.dark
+            : AppSemanticColors.light);
+    final color = switch (medicine.status) {
+      MedicineStatus.active => semantic.success,
+      MedicineStatus.expiring => semantic.warning,
+      MedicineStatus.expired => Theme.of(context).colorScheme.error,
+    };
+    return AppListRow(
+      icon: LucideIcons.pill,
+      title: medicine.name,
+      subtitle:
+          '${medicine.specification} · ${medicine.totalQuantity} 件 · ${_formatExpiry(medicine.nearestExpiry)}',
+      statusText: medicineStatusLabel(medicine.status),
+      statusColor: color,
+      position: position,
+      onTap: onTap,
+    );
+  }
+}
+
+enum _ExpiryFilter { all, expiring, expired }
+
+AppListRowPosition _positionFor(int index, int length) =>
+    switch ((index, length)) {
+      (_, 1) => AppListRowPosition.single,
+      (0, _) => AppListRowPosition.first,
+      (final value, final total) when value == total - 1 =>
+        AppListRowPosition.last,
+      _ => AppListRowPosition.middle,
+    };
+
+String _formatExpiry(DateTime? value) =>
+    value == null ? '有效期未录入' : '有效期至 ${value.year}/${value.month}/${value.day}';
+
+extension on List<MedicineSummary> {
+  MedicineSummary? get firstOrNull => isEmpty ? null : first;
 }
