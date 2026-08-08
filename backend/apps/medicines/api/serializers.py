@@ -5,7 +5,11 @@ from zoneinfo import ZoneInfo
 from django.utils import timezone
 from rest_framework import serializers
 
-from apps.medicines.models import InventoryBatch
+from apps.medicines.models import ExpiryBatchAction, InventoryBatch
+
+
+class ExpiryBatchActionSerializer(serializers.Serializer):
+    action = serializers.ChoiceField(choices=ExpiryBatchAction.Action.choices)
 
 
 class InventoryBatchSerializer(serializers.ModelSerializer):

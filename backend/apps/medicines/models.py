@@ -21,6 +21,7 @@ class MedicineItem(models.Model):
             )
         ]
 
+
 class InventoryBatch(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     medicine = models.ForeignKey(
@@ -66,3 +67,51 @@ class InventoryBatch(models.Model):
             value for value in (self.expiry_date, self.opened_use_before) if value is not None
         ]
         return min(candidates) if candidates else None
+
+
+class ExpiryAlertState(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        ACTIVE = "active", "Active"
+        COVERED = "covered", "Covered"
+        RESOLVED = "resolved", "Resolved"
+        SUPERSEDED = "superseded", "Superseded"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    batch = models.ForeignKey(
+        InventoryBatch,
+        on_delete=models.CASCADE,
+        related_name="expiry_alerts",
+    )
+    threshold_days = models.PositiveIntegerField()
+    deadline = models.DateField()
+    status = models.CharField(max_length=16, choices=Status, default=Status.PENDING)
+    activated_at = models.DateTimeField(null=True, blank=True)
+    covered_at = models.DateTimeField(null=True, blank=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["batch", "threshold_days", "deadline"],
+                name="expiry_alert_state_batch_threshold_deadline_unique",
+            ),
+        ]
+
+
+class ExpiryBatchAction(models.Model):
+    class Action(models.TextChoices):
+        HANDLED = "handled", "Handled"
+        USED_UP = "used_up", "Used up"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    batch = models.ForeignKey(
+        InventoryBatch,
+        on_delete=models.CASCADE,
+        related_name="expiry_actions",
+    )
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    action = models.CharField(max_length=16, choices=Action)
+    created_at = models.DateTimeField(auto_now_add=True)

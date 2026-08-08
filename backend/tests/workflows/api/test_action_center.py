@@ -4,7 +4,7 @@ import pytest
 
 from apps.reminders.models import ReminderRule
 from apps.medication.models import MedicationOccurrence, MedicationPlan
-from apps.medicines.models import MedicineItem
+from apps.medicines.models import ExpiryAlertState, InventoryBatch, MedicineItem
 from apps.workflows.models import NotificationOutbox, WorkflowRun
 
 
@@ -188,6 +188,47 @@ def test_today_returns_empty_paginated_queues(api_client, user):
         "need_decision": {"next": None, "results": []},
         "upcoming": {"next": None, "results": []},
     }
+
+
+@pytest.mark.django_db
+def test_today_includes_active_expiry_alerts_only_for_the_owner(api_client, user, django_user_model):
+    medicine = MedicineItem.objects.create(owner=user, name="滴眼液")
+    batch = InventoryBatch.objects.create(
+        medicine=medicine,
+        expiry_date=NOW.date(),
+    )
+    alert = ExpiryAlertState.objects.create(
+        batch=batch,
+        threshold_days=0,
+        deadline=NOW.date(),
+        status=ExpiryAlertState.Status.ACTIVE,
+    )
+    other = django_user_model.objects.create_user(username="expiry-other")
+    other_medicine = MedicineItem.objects.create(owner=other, name="他人的药")
+    other_batch = InventoryBatch.objects.create(
+        medicine=other_medicine,
+        expiry_date=NOW.date(),
+    )
+    ExpiryAlertState.objects.create(
+        batch=other_batch,
+        threshold_days=0,
+        deadline=NOW.date(),
+        status=ExpiryAlertState.Status.ACTIVE,
+    )
+    api_client.force_authenticate(user)
+
+    response = api_client.get("/api/v1/action-center/today")
+
+    assert response.status_code == 200
+    assert response.json()["need_decision"]["results"] == [
+        {
+            "id": str(alert.id),
+            "title": "滴眼液已到期，请确认是否已处理",
+            "kind": "medicine_expiry",
+            "status": "expired",
+            "occurred_at": "2026-08-08",
+        }
+    ]
 
 
 @pytest.mark.django_db

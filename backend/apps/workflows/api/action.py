@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.medication.models import MedicationOccurrence
+from apps.medicines.models import ExpiryAlertState
 from apps.reminders.models import ReminderRule
 from apps.workflows.models import NotificationOutbox
 
@@ -82,6 +83,10 @@ class TodayActionCenterView(APIView):
             status=MedicationOccurrence.Status.PENDING,
             scheduled_at__lte=now,
         ).select_related("plan__medicine")
+        active_expiry_alerts = ExpiryAlertState.objects.filter(
+            batch__medicine__owner=request.user,
+            status=ExpiryAlertState.Status.ACTIVE,
+        ).select_related("batch__medicine")
         upcoming_medication = MedicationOccurrence.objects.filter(
             plan__owner=request.user,
             plan__enabled=True,
@@ -118,6 +123,16 @@ class TodayActionCenterView(APIView):
                 "occurred_at": _as_local_iso(occurrence.scheduled_at),
             }
             for occurrence in due_medication.order_by("scheduled_at", "id")[:window]
+        )
+        need_decision.extend(
+            {
+                "id": str(alert.id),
+                "title": _expiry_title(alert),
+                "kind": "medicine_expiry",
+                "status": "expired" if alert.threshold_days == 0 else "expiring_soon",
+                "occurred_at": alert.deadline.isoformat(),
+            }
+            for alert in active_expiry_alerts.order_by("deadline", "id")[:window]
         )
 
         upcoming = [
@@ -181,3 +196,9 @@ class TodayActionCenterView(APIView):
 
 def _medication_title(occurrence):
     return f"服用{occurrence.plan.medicine.name}（{occurrence.plan.dosage_text}）"
+
+
+def _expiry_title(alert):
+    if alert.threshold_days == 0:
+        return f"{alert.batch.medicine.name}已到期，请确认是否已处理"
+    return f"{alert.batch.medicine.name}有效期还有{alert.threshold_days}天，请确认库存"
