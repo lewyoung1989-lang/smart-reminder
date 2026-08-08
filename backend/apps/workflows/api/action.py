@@ -101,6 +101,10 @@ class TodayActionCenterView(APIView):
                 "kind": "delivery",
                 "status": "failed",
                 "occurred_at": _as_local_iso(outbox.created_at),
+                "action_target": {
+                    "resource": "notification_outbox",
+                    "id": str(outbox.id),
+                },
             }
             for outbox in failed_outbox.order_by("-created_at", "-id")[:window]
         ]
@@ -111,6 +115,7 @@ class TodayActionCenterView(APIView):
                 "kind": "workflow",
                 "status": "paused",
                 "occurred_at": _as_local_iso(rule.next_run_at),
+                "action_target": {"resource": "workflow", "id": str(rule.id)},
             }
             for rule in paused_rules.order_by("next_run_at", "id")[:window]
         )
@@ -121,6 +126,10 @@ class TodayActionCenterView(APIView):
                 "kind": "medication",
                 "status": "due",
                 "occurred_at": _as_local_iso(occurrence.scheduled_at),
+                "action_target": {
+                    "resource": "medication_occurrence",
+                    "id": str(occurrence.id),
+                },
             }
             for occurrence in due_medication.order_by("scheduled_at", "id")[:window]
         )
@@ -131,6 +140,10 @@ class TodayActionCenterView(APIView):
                 "kind": "medicine_expiry",
                 "status": "expired" if alert.threshold_days == 0 else "expiring_soon",
                 "occurred_at": alert.deadline.isoformat(),
+                "action_target": {
+                    "resource": "inventory_batch",
+                    "id": str(alert.batch_id),
+                },
             }
             for alert in active_expiry_alerts.order_by("deadline", "id")[:window]
         )

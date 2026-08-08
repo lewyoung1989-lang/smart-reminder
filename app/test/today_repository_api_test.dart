@@ -42,6 +42,10 @@ void main() {
               'kind': 'medicine_expiry',
               'status': 'expired',
               'occurred_at': '2026-08-08',
+              'action_target': {
+                'resource': 'inventory_batch',
+                'id': 'batch-1',
+              },
             },
             {
               'id': 'medication-1',
@@ -49,6 +53,10 @@ void main() {
               'kind': 'medication',
               'status': 'due',
               'occurred_at': '2026-08-08T08:00:00+08:00',
+              'action_target': {
+                'resource': 'medication_occurrence',
+                'id': 'medication-1',
+              },
             },
           ],
         },
@@ -83,7 +91,13 @@ void main() {
     expect(snapshot.decisions.first.id, 'expiry-alert-1');
     expect(snapshot.decisions.first.kind, AttentionKind.confirmation);
     expect(snapshot.decisions.first.actionLabel, '处理');
+    expect(snapshot.decisions.first.actionTarget?.resource, 'inventory_batch');
+    expect(snapshot.decisions.first.actionTarget?.id, 'batch-1');
     expect(snapshot.decisions.last.title, '服用布洛芬（1粒）');
+    expect(
+      snapshot.decisions.last.actionTarget?.resource,
+      'medication_occurrence',
+    );
     expect(snapshot.decisions.last.dueAt, DateTime.parse('2026-08-08T08:00:00+08:00'));
     expect(snapshot.timeline.single.id, 'departure-1');
     expect(snapshot.timeline.single.status, TimelineStatus.upcoming);

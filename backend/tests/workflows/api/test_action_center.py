@@ -99,7 +99,18 @@ def test_today_is_owner_scoped_and_exposes_only_business_fields(
     item = response.json()["need_decision"]["results"][0]
     assert item["title"] == "my failed"
     assert item["status"] == "failed"
-    assert set(item) == {"id", "title", "kind", "status", "occurred_at"}
+    assert set(item) == {
+        "id",
+        "title",
+        "kind",
+        "status",
+        "occurred_at",
+        "action_target",
+    }
+    assert item["action_target"] == {
+        "resource": "notification_outbox",
+        "id": item["id"],
+    }
     assert all(
         item["title"] not in {"other failed", "other paused", "other scheduled", "other retry"}
         for queue in response.json().values()
@@ -227,6 +238,10 @@ def test_today_includes_active_expiry_alerts_only_for_the_owner(api_client, user
             "kind": "medicine_expiry",
             "status": "expired",
             "occurred_at": "2026-08-08",
+            "action_target": {
+                "resource": "inventory_batch",
+                "id": str(batch.id),
+            },
         }
     ]
 
@@ -252,6 +267,7 @@ def test_today_includes_paused_rules_without_a_next_run(api_client, user, mocker
             "kind": "workflow",
             "status": "paused",
             "occurred_at": None,
+            "action_target": {"resource": "workflow", "id": str(paused.id)},
         }
     ]
 
@@ -339,6 +355,10 @@ def test_today_includes_due_and_upcoming_medication_occurrences(api_client, user
         "kind": "medication",
         "status": "due",
         "occurred_at": "2026-08-08T08:55:00+08:00",
+        "action_target": {
+            "resource": "medication_occurrence",
+            "id": str(due.id),
+        },
     } in response.json()["need_decision"]["results"]
     assert {
         "id": str(upcoming.id),

@@ -146,6 +146,7 @@ AttentionItem _attentionItem(Map<String, dynamic> json) {
     dueAt: _parseActionCenterTime(json['occurred_at']),
     kind: _attentionKind(kind, status),
     actionLabel: _attentionActionLabel(kind, status),
+    actionTarget: _actionTarget(json['action_target']),
   );
 }
 
@@ -203,4 +204,12 @@ String _timelineSubtitle(String kind, String status) {
   if (kind == 'delivery') return '通知队列';
   if (kind == 'workflow') return status == 'scheduled' ? '已安排' : '工作流';
   return status;
+}
+
+ActionTarget? _actionTarget(Object? value) {
+  if (value is! Map<String, dynamic>) return null;
+  final resource = value['resource'];
+  final id = value['id'];
+  if (resource is! String || id is! String) return null;
+  return ActionTarget(resource: resource, id: id);
 }

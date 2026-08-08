@@ -10,6 +10,7 @@ class AttentionItem {
     required this.dueAt,
     required this.kind,
     required this.actionLabel,
+    this.actionTarget,
   });
 
   final String id;
@@ -18,6 +19,17 @@ class AttentionItem {
   final DateTime dueAt;
   final AttentionKind kind;
   final String actionLabel;
+  final ActionTarget? actionTarget;
+}
+
+class ActionTarget {
+  const ActionTarget({
+    required this.resource,
+    required this.id,
+  });
+
+  final String resource;
+  final String id;
 }
 
 class TimelineItem {
