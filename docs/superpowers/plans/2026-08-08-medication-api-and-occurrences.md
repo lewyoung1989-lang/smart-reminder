@@ -153,6 +153,6 @@ elif occurrence.status != action:
 
 逐项确认：所有 API 均认证；查询和动作均过滤 `plan__owner=request.user`；计划调用 `full_clean()`；实例生成 30 天；动作持有行锁且只有一条 `IntakeEvent`；未修改 OCR 或库存代码。
 
-- [ ] **步骤 3：提交。**
+- [x] **步骤 3：提交。**
 
 运行：`git add backend/apps/medication backend/config/urls.py backend/tests/medication && git commit -m "feat: add medication occurrence APIs"`
