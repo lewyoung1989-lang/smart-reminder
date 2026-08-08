@@ -163,6 +163,73 @@ def _dispatch_medicine_expiry_rule(rule, workflow, now):
     return dispatched
 
 
+def _node_config(workflow, *, node_id, node_type):
+    for node in workflow.nodes:
+        if node.id == node_id and node.type == node_type:
+            return node.config
+    raise ValueError(f"workflow is missing {node_id}")
+
+
+def _smart_departure_payload(workflow):
+    trigger = _node_config(
+        workflow,
+        node_id="before-arrival",
+        node_type="trigger.before_arrival",
+    )
+    route = _node_config(
+        workflow,
+        node_id="route-eta",
+        node_type="source.route_eta",
+    )
+    arrival_time = datetime.fromisoformat(trigger["arrival_time"])
+    static_duration_minutes = 45
+    lead_time_minutes = int(trigger["lead_time_minutes"])
+    departure_at = arrival_time - timedelta(
+        minutes=static_duration_minutes + lead_time_minutes
+    )
+    return {
+        "kind": "smart_departure",
+        "arrival_time": arrival_time.isoformat(),
+        "destination_text": route["destination_text"],
+        "travel_mode": route["travel_mode"],
+        "departure_at": departure_at.astimezone(datetime_timezone.utc).isoformat(),
+        "route": {
+            "status": "fallback_static",
+            "duration_minutes": static_duration_minutes,
+            "source": "route.last_success_or_static",
+        },
+        "weather": {
+            "status": "unavailable",
+            "source": "weather.unavailable",
+        },
+    }
+
+
+def _dispatch_smart_departure_rule(rule, workflow, scheduled_for):
+    payload = _smart_departure_payload(workflow)
+    run, _ = WorkflowRun.objects.get_or_create(
+        workflow=rule,
+        idempotency_key=f"rule:{rule.id}:{scheduled_for.isoformat()}:scheduled",
+        defaults={"scheduled_for": scheduled_for, "result_json": payload},
+    )
+    outbox, outbox_created = NotificationOutbox.objects.get_or_create(
+        idempotency_key=f"run:{run.id}:notify",
+        defaults={
+            "workflow_run": run,
+            "node_id": "notify",
+            "kind": "notification",
+            "payload_json": payload,
+        },
+    )
+    rule.next_run_at = None
+    rule.save(update_fields=["next_run_at"])
+    if outbox_created:
+        transaction.on_commit(
+            lambda outbox_id=outbox.id: _enqueue_outbox(outbox_id)
+        )
+    return run.id
+
+
 def dispatch_due_workflows(now, batch_size):
     """Persist the single scheduled occurrence for each currently due workflow."""
     due_rules = (
@@ -189,6 +256,11 @@ def dispatch_due_workflows(now, batch_size):
             )
             if workflow and workflow.template_key == "medicine_expiry":
                 dispatched.extend(_dispatch_medicine_expiry_rule(rule, workflow, now))
+                continue
+            if workflow and workflow.template_key == "smart_departure":
+                dispatched.append(
+                    _dispatch_smart_departure_rule(rule, workflow, scheduled_for)
+                )
                 continue
 
             run, _ = WorkflowRun.objects.get_or_create(

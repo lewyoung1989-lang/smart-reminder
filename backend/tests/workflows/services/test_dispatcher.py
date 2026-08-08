@@ -263,6 +263,51 @@ def test_medicine_expiry_workflow_recomputes_stale_due_time_from_inventory_deadl
 
 
 @pytest.mark.django_db
+def test_smart_departure_dispatcher_creates_explicit_degraded_payload(user, mocker):
+    from apps.workflows.services.dispatcher import dispatch_due_workflows
+
+    arrival_time = (NOW + timedelta(minutes=55)).astimezone(
+        ZoneInfo("Asia/Shanghai")
+    )
+    rule = create_compiled_rule(
+        user,
+        suffix="smart-departure",
+        slots={
+            "arrival_time": arrival_time.isoformat(),
+            "destination_text": "虹桥火车站",
+            "travel_mode": "transit",
+        },
+        next_run_at=NOW,
+    )
+    mocker.patch("apps.workflows.tasks.enqueue_outbox.delay")
+
+    dispatch_due_workflows(NOW, batch_size=10)
+
+    run = WorkflowRun.objects.get(workflow=rule)
+    outbox = NotificationOutbox.objects.get(workflow_run=run)
+    expected_payload = {
+        "kind": "smart_departure",
+        "arrival_time": arrival_time.isoformat(),
+        "destination_text": "虹桥火车站",
+        "travel_mode": "transit",
+        "departure_at": NOW.isoformat(),
+        "route": {
+            "status": "fallback_static",
+            "duration_minutes": 45,
+            "source": "route.last_success_or_static",
+        },
+        "weather": {
+            "status": "unavailable",
+            "source": "weather.unavailable",
+        },
+    }
+    assert run.result_json == expected_payload
+    assert outbox.payload_json == expected_payload
+    rule.refresh_from_db()
+    assert rule.next_run_at is None
+
+
+@pytest.mark.django_db
 def test_unknown_medication_frequency_keeps_the_due_time(user, mocker):
     from apps.workflows.services.dispatcher import dispatch_due_workflows
 
