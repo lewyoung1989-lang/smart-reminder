@@ -3,6 +3,9 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone as datetime_timezone
 from typing import Protocol
 
+from django.conf import settings
+from django.utils.module_loading import import_string
+
 
 STATIC_ROUTE_DURATION_MINUTES = 45
 EARLY_PRECHECK_LEAD = timedelta(hours=2)
@@ -26,6 +29,20 @@ class UnavailableRouteProvider:
 class UnavailableWeatherProvider:
     def forecast(self, *, destination_text, arrival_time):
         raise RuntimeError("weather provider unavailable")
+
+
+def get_route_provider():
+    return _provider_from_setting(
+        settings.SMART_DEPARTURE_ROUTE_PROVIDER,
+        UnavailableRouteProvider,
+    )
+
+
+def get_weather_provider():
+    return _provider_from_setting(
+        settings.SMART_DEPARTURE_WEATHER_PROVIDER,
+        UnavailableWeatherProvider,
+    )
 
 
 def build_departure_payload(
@@ -158,3 +175,10 @@ def _has_rain_risk(payload):
     return "rain" in condition or (
         isinstance(probability, int | float) and probability > 0
     )
+
+
+def _provider_from_setting(configured, fallback_class):
+    if configured in {"", "none", None}:
+        return fallback_class()
+    provider = import_string(configured) if isinstance(configured, str) else configured
+    return provider() if isinstance(provider, type) else provider

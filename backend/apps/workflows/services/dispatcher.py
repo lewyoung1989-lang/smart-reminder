@@ -10,6 +10,8 @@ from apps.workflows.domain.schemas import WorkflowSpec
 from apps.workflows.models import NotificationOutbox, WorkflowRun
 from apps.workflows.services.smart_departure import (
     build_departure_payload,
+    get_route_provider,
+    get_weather_provider,
     next_departure_run_at,
     should_notify_departure,
 )
@@ -169,7 +171,11 @@ def _dispatch_medicine_expiry_rule(rule, workflow, now):
 
 
 def _dispatch_smart_departure_rule(rule, workflow, scheduled_for):
-    payload = build_departure_payload(workflow)
+    payload = build_departure_payload(
+        workflow,
+        route_provider=get_route_provider(),
+        weather_provider=get_weather_provider(),
+    )
     run_key = f"rule:{rule.id}:{scheduled_for.isoformat()}:scheduled"
     previous_run = (
         WorkflowRun.objects.filter(workflow=rule)

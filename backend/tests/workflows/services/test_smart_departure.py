@@ -145,3 +145,37 @@ def test_smart_departure_notification_fires_when_rain_risk_appears():
     }
 
     assert should_notify_departure(previous, current) is True
+
+
+def test_smart_departure_provider_factories_default_to_unavailable(settings):
+    from apps.workflows.services.smart_departure import (
+        UnavailableRouteProvider,
+        UnavailableWeatherProvider,
+        get_route_provider,
+        get_weather_provider,
+    )
+
+    settings.SMART_DEPARTURE_ROUTE_PROVIDER = "none"
+    settings.SMART_DEPARTURE_WEATHER_PROVIDER = "none"
+
+    assert isinstance(get_route_provider(), UnavailableRouteProvider)
+    assert isinstance(get_weather_provider(), UnavailableWeatherProvider)
+
+
+def test_smart_departure_provider_factories_load_configured_classes(settings):
+    from apps.workflows.services.smart_departure import (
+        UnavailableRouteProvider,
+        UnavailableWeatherProvider,
+        get_route_provider,
+        get_weather_provider,
+    )
+
+    settings.SMART_DEPARTURE_ROUTE_PROVIDER = (
+        "apps.workflows.services.smart_departure.UnavailableRouteProvider"
+    )
+    settings.SMART_DEPARTURE_WEATHER_PROVIDER = (
+        "apps.workflows.services.smart_departure.UnavailableWeatherProvider"
+    )
+
+    assert isinstance(get_route_provider(), UnavailableRouteProvider)
+    assert isinstance(get_weather_provider(), UnavailableWeatherProvider)

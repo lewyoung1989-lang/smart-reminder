@@ -300,6 +300,10 @@ NOTIFICATION_PUBLISHER = os.environ.get(
     "NOTIFICATION_PUBLISHER",
     "apps.workflows.services.outbox.InAppNotificationPublisher",
 )
+SMART_DEPARTURE_ROUTE_PROVIDER = os.environ.get("SMART_DEPARTURE_ROUTE_PROVIDER", "none")
+SMART_DEPARTURE_WEATHER_PROVIDER = os.environ.get(
+    "SMART_DEPARTURE_WEATHER_PROVIDER", "none"
+)
 CELERY_BEAT_SCHEDULE = {
     "materialize-medication-occurrences-daily": {
         "task": "apps.medication.tasks.materialize_medication_occurrences_task",
