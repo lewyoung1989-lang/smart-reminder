@@ -301,6 +301,10 @@ NOTIFICATION_PUBLISHER = os.environ.get(
     "apps.workflows.services.outbox.InAppNotificationPublisher",
 )
 CELERY_BEAT_SCHEDULE = {
+    "materialize-medication-occurrences-daily": {
+        "task": "apps.medication.tasks.materialize_medication_occurrences_task",
+        "schedule": 86400.0,
+    },
     "dispatch-due-workflows-minute": {
         "task": "apps.workflows.tasks.dispatch_due_workflows_task",
         "schedule": 60.0,

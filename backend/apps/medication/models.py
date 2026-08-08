@@ -19,6 +19,13 @@ class MedicationPlan(models.Model):
         on_delete=models.PROTECT,
         related_name="medication_plans",
     )
+    source_workflow_draft = models.OneToOneField(
+        "workflows.WorkflowDraft",
+        on_delete=models.PROTECT,
+        related_name="medication_plan",
+        null=True,
+        blank=True,
+    )
     dosage_text = models.CharField(max_length=200)
     timezone = models.CharField(max_length=64)
     schedule_json = models.JSONField()

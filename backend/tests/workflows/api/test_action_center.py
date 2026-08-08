@@ -3,6 +3,8 @@ from datetime import datetime, timedelta, timezone as datetime_timezone
 import pytest
 
 from apps.reminders.models import ReminderRule
+from apps.medication.models import MedicationOccurrence, MedicationPlan
+from apps.medicines.models import MedicineItem
 from apps.workflows.models import NotificationOutbox, WorkflowRun
 
 
@@ -260,3 +262,47 @@ def test_today_uses_validated_bounded_pagination(api_client, user, mocker):
 
     too_large = api_client.get("/api/v1/action-center/today", {"limit": 51})
     assert too_large.status_code == 400
+
+
+@pytest.mark.django_db
+def test_today_includes_due_and_upcoming_medication_occurrences(api_client, user, mocker):
+    medicine = MedicineItem.objects.create(owner=user, name="布洛芬")
+    plan = MedicationPlan.objects.create(
+        owner=user,
+        medicine=medicine,
+        dosage_text="一次一片",
+        timezone="Asia/Shanghai",
+        schedule_json={"times": ["08:00"]},
+    )
+    due = MedicationOccurrence.objects.create(
+        plan=plan,
+        scheduled_at=NOW - timedelta(minutes=5),
+        index=1,
+        idempotency_key="due-medication",
+    )
+    upcoming = MedicationOccurrence.objects.create(
+        plan=plan,
+        scheduled_at=NOW + timedelta(hours=1),
+        index=2,
+        idempotency_key="upcoming-medication",
+    )
+    mocker.patch("apps.workflows.api.action.timezone.now", return_value=NOW)
+    api_client.force_authenticate(user)
+
+    response = api_client.get("/api/v1/action-center/today")
+
+    assert response.status_code == 200
+    assert {
+        "id": str(due.id),
+        "title": "服用布洛芬（一次一片）",
+        "kind": "medication",
+        "status": "due",
+        "occurred_at": "2026-08-08T08:55:00+08:00",
+    } in response.json()["need_decision"]["results"]
+    assert {
+        "id": str(upcoming.id),
+        "title": "服用布洛芬（一次一片）",
+        "kind": "medication",
+        "status": "scheduled",
+        "occurred_at": "2026-08-08T10:00:00+08:00",
+    } in response.json()["upcoming"]["results"]

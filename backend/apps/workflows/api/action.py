@@ -7,6 +7,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.medication.models import MedicationOccurrence
 from apps.reminders.models import ReminderRule
 from apps.workflows.models import NotificationOutbox
 
@@ -75,6 +76,18 @@ class TodayActionCenterView(APIView):
             enabled=True,
             next_run_at__gt=now,
         )
+        due_medication = MedicationOccurrence.objects.filter(
+            plan__owner=request.user,
+            plan__enabled=True,
+            status=MedicationOccurrence.Status.PENDING,
+            scheduled_at__lte=now,
+        ).select_related("plan__medicine")
+        upcoming_medication = MedicationOccurrence.objects.filter(
+            plan__owner=request.user,
+            plan__enabled=True,
+            status=MedicationOccurrence.Status.PENDING,
+            scheduled_at__gt=now,
+        ).select_related("plan__medicine")
 
         need_decision = [
             {
@@ -95,6 +108,16 @@ class TodayActionCenterView(APIView):
                 "occurred_at": _as_local_iso(rule.next_run_at),
             }
             for rule in paused_rules.order_by("next_run_at", "id")[:window]
+        )
+        need_decision.extend(
+            {
+                "id": str(occurrence.id),
+                "title": _medication_title(occurrence),
+                "kind": "medication",
+                "status": "due",
+                "occurred_at": _as_local_iso(occurrence.scheduled_at),
+            }
+            for occurrence in due_medication.order_by("scheduled_at", "id")[:window]
         )
 
         upcoming = [
@@ -125,6 +148,20 @@ class TodayActionCenterView(APIView):
             )
             for rule in upcoming_rules.order_by("next_run_at", "id")[:window]
         )
+        upcoming.extend(
+            (
+                occurrence.scheduled_at,
+                str(occurrence.id),
+                {
+                    "id": str(occurrence.id),
+                    "title": _medication_title(occurrence),
+                    "kind": "medication",
+                    "status": "scheduled",
+                    "occurred_at": _as_local_iso(occurrence.scheduled_at),
+                },
+            )
+            for occurrence in upcoming_medication.order_by("scheduled_at", "id")[:window]
+        )
         upcoming.sort(key=lambda item: (item[0], item[1]))
 
         return Response(
@@ -140,3 +177,7 @@ class TodayActionCenterView(APIView):
                 ),
             }
         )
+
+
+def _medication_title(occurrence):
+    return f"服用{occurrence.plan.medicine.name}（{occurrence.plan.dosage_text}）"
