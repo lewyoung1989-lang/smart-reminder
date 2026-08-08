@@ -89,6 +89,7 @@ class _SmartReminderAppState extends State<SmartReminderApp>
   late final VoiceTranscriptionApi _voiceApi;
   late final VoiceInputService _voiceInput;
   late final VoiceInputServiceController _voiceInputController;
+  var _medicineOcrEnabled = false;
 
   @override
   void initState() {
@@ -156,11 +157,17 @@ class _SmartReminderAppState extends State<SmartReminderApp>
     );
     if (_ownsAuthController) _authController.restore();
     unawaited(_refreshCameraPermission());
+    if (_authController.status == AuthStatus.authenticated) {
+      unawaited(_refreshMedicineOcrCapability());
+    }
   }
 
   void _authChanged() {
     if (_authController.status != AuthStatus.authenticated) {
       _navigatorKey.currentState?.popUntil((route) => route.isFirst);
+      _medicineOcrEnabled = false;
+    } else {
+      unawaited(_refreshMedicineOcrCapability());
     }
     if (mounted) setState(() {});
   }
@@ -169,6 +176,9 @@ class _SmartReminderAppState extends State<SmartReminderApp>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       unawaited(_refreshCameraPermission());
+      if (_authController.status == AuthStatus.authenticated) {
+        unawaited(_refreshMedicineOcrCapability());
+      }
     }
   }
 
@@ -179,6 +189,18 @@ class _SmartReminderAppState extends State<SmartReminderApp>
 
   void _updateCameraPermission(CameraPermissionState state) {
     if (mounted) setState(() => _cameraPermissionState = state);
+  }
+
+  Future<void> _refreshMedicineOcrCapability() async {
+    try {
+      final enabled = await _medicineOcrApi.isEnabled();
+      if (!mounted || _authController.status != AuthStatus.authenticated) {
+        return;
+      }
+      setState(() => _medicineOcrEnabled = enabled);
+    } catch (_) {
+      if (mounted) setState(() => _medicineOcrEnabled = false);
+    }
   }
 
   @override
@@ -209,6 +231,7 @@ class _SmartReminderAppState extends State<SmartReminderApp>
   }
 
   Future<bool> _openMedicineOcr() async {
+    if (!_medicineOcrEnabled) return false;
     var permission = await _cameraPermissionGateway.current();
     if (!mounted) return false;
     _updateCameraPermission(permission);
@@ -261,14 +284,17 @@ class _SmartReminderAppState extends State<SmartReminderApp>
   }
 
   MedicineCaptureAvailability get _medicineCaptureAvailability =>
-      switch (_cameraPermissionState) {
-        CameraPermissionState.ready => MedicineCaptureAvailability.ready,
-        CameraPermissionState.denied => MedicineCaptureAvailability.denied,
-        CameraPermissionState.permanentlyDenied =>
-          MedicineCaptureAvailability.permanentlyDenied,
-        CameraPermissionState.unavailable =>
-          MedicineCaptureAvailability.unavailable,
-      };
+      !_medicineOcrEnabled
+          ? MedicineCaptureAvailability.unavailable
+          : switch (_cameraPermissionState) {
+              CameraPermissionState.ready => MedicineCaptureAvailability.ready,
+              CameraPermissionState.denied =>
+                MedicineCaptureAvailability.denied,
+              CameraPermissionState.permanentlyDenied =>
+                MedicineCaptureAvailability.permanentlyDenied,
+              CameraPermissionState.unavailable =>
+                MedicineCaptureAvailability.unavailable,
+            };
 
   Future<void> _openReminderManager() async {
     final navigator = _navigatorKey.currentState;

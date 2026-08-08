@@ -53,6 +53,15 @@ class OcrEnabledAPIView(APIView):
             raise OCRDisabled()
 
 
+class CapabilityView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if settings.OCR_ENABLED:
+            return Response({"enabled": True})
+        return Response({"enabled": False, "code": "ocr_disabled"})
+
+
 class UploadView(OcrEnabledAPIView):
     permission_classes = [IsAuthenticated]
 

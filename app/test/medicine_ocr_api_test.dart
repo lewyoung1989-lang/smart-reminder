@@ -32,6 +32,25 @@ class RecordingClient extends http.BaseClient {
 }
 
 void main() {
+  test('reads OCR capability before opening capture flow', () async {
+    final client = RecordingClient([
+      jsonResponse(200, {'enabled': false, 'code': 'ocr_disabled'}),
+    ]);
+    final api = MedicineOcrApi(
+      baseUrl: 'https://api.invalid',
+      client: client,
+    );
+
+    final enabled = await api.isEnabled();
+
+    expect(enabled, isFalse);
+    expect(client.requests.single.method, 'GET');
+    expect(
+      client.requests.single.url.toString(),
+      'https://api.invalid/api/v1/ocr/capability',
+    );
+  });
+
   test('uploads two photos and creates an OCR job', () async {
     final client = RecordingClient([
       jsonResponse(201, {

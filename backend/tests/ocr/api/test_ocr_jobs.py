@@ -7,6 +7,34 @@ from django.test import override_settings
 from apps.ocr.models import OCRCandidate, OCRJob
 
 
+@pytest.mark.django_db
+def test_ocr_capability_requires_authentication(api_client):
+    response = api_client.get("/api/v1/ocr/capability")
+
+    assert response.status_code == 401
+
+
+@pytest.mark.django_db
+def test_ocr_capability_reports_enabled(api_client, user):
+    api_client.force_authenticate(user)
+
+    response = api_client.get("/api/v1/ocr/capability")
+
+    assert response.status_code == 200
+    assert response.json() == {"enabled": True}
+
+
+@pytest.mark.django_db
+@override_settings(OCR_ENABLED=False)
+def test_ocr_capability_reports_disabled_without_service_error(api_client, user):
+    api_client.force_authenticate(user)
+
+    response = api_client.get("/api/v1/ocr/capability")
+
+    assert response.status_code == 200
+    assert response.json() == {"enabled": False, "code": "ocr_disabled"}
+
+
 @dataclass(frozen=True)
 class FakeGrant:
     object_key: str = "ocr/tmp/user/random.jpg"

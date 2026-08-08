@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    CapabilityView,
     JobConfirmView,
     JobDetailView,
     JobListCreateView,
@@ -9,6 +10,7 @@ from .views import (
 
 
 urlpatterns = [
+    path("capability", CapabilityView.as_view(), name="ocr-capability"),
     path("uploads", UploadView.as_view(), name="ocr-upload"),
     path("jobs", JobListCreateView.as_view(), name="ocr-job-list"),
     path(

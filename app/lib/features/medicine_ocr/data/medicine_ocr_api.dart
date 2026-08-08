@@ -27,6 +27,18 @@ class MedicineOcrApi {
         'Content-Type': 'application/json',
       };
 
+  Future<bool> isEnabled() async {
+    final response = await _client.get(
+      Uri.parse('$baseUrl/api/v1/ocr/capability'),
+      headers: _apiHeaders,
+    );
+    if (response.statusCode != 200) {
+      throw MedicineOcrApiException(response.statusCode);
+    }
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    return json['enabled'] == true;
+  }
+
   Future<_UploadGrant> _createUpload(
     String kind,
     List<int> bytes,
