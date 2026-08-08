@@ -56,6 +56,40 @@ void main() {
     expect(find.text('布洛芬胶囊'), findsOneWidget);
   });
 
+  testWidgets('corrects a batch expiry date and reloads the cabinet',
+      (tester) async {
+    final repository = _Repository();
+    final corrections = <({String batchId, DateTime expiryDate})>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MedicineCabinetScreen(
+          repository: repository,
+          onCorrectBatchExpiry: (batch, expiryDate) async {
+            corrections.add((batchId: batch.id, expiryDate: expiryDate));
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('布洛芬胶囊'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('medicine-correct-expiry-batch-a')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('medicine-expiry-date-input')),
+      '2027-06-30',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, '保存'));
+    await tester.pumpAndSettle();
+
+    expect(corrections, [
+      (batchId: 'batch-a', expiryDate: DateTime(2027, 6, 30)),
+    ]);
+    expect(repository.loadCalls, 2);
+    expect(find.text('有效期已修正'), findsOneWidget);
+  });
+
   testWidgets('discloses truncated batches and labels unknown expiry neutrally',
       (tester) async {
     final repository = _Repository(

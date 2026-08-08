@@ -16,6 +16,11 @@ abstract interface class MedicineCabinetDataSource {
   });
 
   Future<void> deleteBatch(String batchId);
+
+  Future<InventoryBatch> correctExpiryDate(
+    String batchId, {
+    required DateTime expiryDate,
+  });
 }
 
 class MedicineCabinetApi implements MedicineCabinetDataSource {
@@ -80,6 +85,31 @@ class MedicineCabinetApi implements MedicineCabinetDataSource {
     }
   }
 
+  @override
+  Future<InventoryBatch> correctExpiryDate(
+    String batchId, {
+    required DateTime expiryDate,
+  }) async {
+    final encodedBatchId = Uri.encodeComponent(batchId);
+    final uri = Uri.parse(
+      '${_baseUri.origin}/api/v1/inventory-batches/$encodedBatchId/expiry-dates',
+    );
+    final response = await _client.patch(
+      uri,
+      headers: {
+        ..._headers,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'expiry_date': _formatDate(expiryDate)}),
+    );
+    if (response.statusCode != 200) {
+      throw MedicineCabinetApiException(response.statusCode, response.body);
+    }
+    return InventoryBatch.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
+  }
+
   Map<String, String> get _headers => {
         'Accept': 'application/json',
       };
@@ -88,6 +118,12 @@ class MedicineCabinetApi implements MedicineCabinetDataSource {
       candidate.scheme == base.scheme &&
       candidate.host == base.host &&
       candidate.port == base.port;
+
+  static String _formatDate(DateTime value) {
+    final month = value.month.toString().padLeft(2, '0');
+    final day = value.day.toString().padLeft(2, '0');
+    return '${value.year}-$month-$day';
+  }
 
   void close() {
     if (_ownsClient) _client.close();

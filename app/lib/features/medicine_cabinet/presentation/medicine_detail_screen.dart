@@ -14,11 +14,14 @@ class MedicineDetailScreen extends StatelessWidget {
   const MedicineDetailScreen({
     required this.detail,
     this.onDeleteBatch,
+    this.onCorrectBatchExpiry,
     super.key,
   });
 
   final MedicineDetail detail;
   final Future<void> Function(MedicineBatch batch)? onDeleteBatch;
+  final Future<void> Function(MedicineBatch batch, DateTime expiryDate)?
+      onCorrectBatchExpiry;
 
   @override
   Widget build(BuildContext context) {
@@ -74,6 +77,7 @@ class MedicineDetailScreen extends StatelessWidget {
                 _BatchRow(
                   batch: detail.batches[index],
                   onDelete: onDeleteBatch,
+                  onCorrectExpiry: onCorrectBatchExpiry,
                 ),
                 if (index < detail.batches.length - 1) const Divider(),
               ],
@@ -90,12 +94,15 @@ class MedicineDetailLoaderScreen extends StatefulWidget {
     required this.repository,
     required this.medicineId,
     this.onDeleteBatch,
+    this.onCorrectBatchExpiry,
     super.key,
   });
 
   final MedicineRepository repository;
   final String medicineId;
   final Future<void> Function(MedicineBatch batch)? onDeleteBatch;
+  final Future<void> Function(MedicineBatch batch, DateTime expiryDate)?
+      onCorrectBatchExpiry;
 
   @override
   State<MedicineDetailLoaderScreen> createState() =>
@@ -142,6 +149,7 @@ class _MedicineDetailLoaderScreenState
       return MedicineDetailScreen(
         detail: detail,
         onDeleteBatch: widget.onDeleteBatch,
+        onCorrectBatchExpiry: widget.onCorrectBatchExpiry,
       );
     }
     final state = switch (_error) {
@@ -202,6 +210,119 @@ class _DeleteBatchAction extends StatefulWidget {
 
   @override
   State<_DeleteBatchAction> createState() => _DeleteBatchActionState();
+}
+
+class _CorrectExpiryAction extends StatefulWidget {
+  const _CorrectExpiryAction({required this.batch, this.onCorrect});
+
+  final MedicineBatch batch;
+  final Future<void> Function(MedicineBatch batch, DateTime expiryDate)?
+      onCorrect;
+
+  @override
+  State<_CorrectExpiryAction> createState() => _CorrectExpiryActionState();
+}
+
+class _CorrectExpiryActionState extends State<_CorrectExpiryAction> {
+  var _isSaving = false;
+
+  Future<void> _openDialog() async {
+    if (_isSaving || widget.onCorrect == null) return;
+    final controller = TextEditingController(
+      text: _formatInputDate(widget.batch.expiresOn),
+    );
+    final expiryDate = await showDialog<DateTime>(
+      context: context,
+      builder: (dialogContext) {
+        String? errorText;
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('修正有效期'),
+            content: TextField(
+              key: const Key('medicine-expiry-date-input'),
+              controller: controller,
+              keyboardType: TextInputType.datetime,
+              decoration: InputDecoration(
+                labelText: '有效期',
+                hintText: '例如 2027-06-30',
+                errorText: errorText,
+              ),
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final parsed = _parseInputDate(controller.text);
+                  if (parsed == null) {
+                    setDialogState(() {
+                      errorText = '请输入 YYYY-MM-DD 格式的日期';
+                    });
+                    return;
+                  }
+                  Navigator.of(dialogContext).pop(parsed);
+                },
+                child: const Text('保存'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    controller.dispose();
+    if (expiryDate == null || widget.onCorrect == null || !mounted) return;
+
+    setState(() => _isSaving = true);
+    try {
+      await widget.onCorrect!(widget.batch, expiryDate);
+      if (mounted && Navigator.canPop(context)) {
+        await Navigator.of(context).maybePop();
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('有效期修正失败，请稍后重试')),
+      );
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final button = OutlinedButton.icon(
+      key: Key('medicine-correct-expiry-${widget.batch.id}'),
+      onPressed: widget.onCorrect == null || _isSaving ? null : _openDialog,
+      icon: const Icon(LucideIcons.calendarDays),
+      label: const Text('修正有效期'),
+    );
+    if (widget.onCorrect != null) return button;
+    return Semantics(
+      button: true,
+      enabled: false,
+      label: '修正有效期，服务尚未接入',
+      child: ExcludeSemantics(child: button),
+    );
+  }
+
+  static String _formatInputDate(DateTime? value) {
+    if (value == null) return '';
+    final month = value.month.toString().padLeft(2, '0');
+    final day = value.day.toString().padLeft(2, '0');
+    return '${value.year}-$month-$day';
+  }
+
+  static DateTime? _parseInputDate(String value) {
+    final trimmed = value.trim();
+    if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(trimmed)) return null;
+    final parsed = DateTime.tryParse(trimmed);
+    if (parsed == null) return null;
+    final normalized = _formatInputDate(parsed);
+    if (normalized != trimmed) return null;
+    return DateTime(parsed.year, parsed.month, parsed.day);
+  }
 }
 
 class _DeleteBatchActionState extends State<_DeleteBatchAction> {
@@ -319,10 +440,16 @@ class _DetailSection extends StatelessWidget {
 }
 
 class _BatchRow extends StatelessWidget {
-  const _BatchRow({required this.batch, this.onDelete});
+  const _BatchRow({
+    required this.batch,
+    this.onDelete,
+    this.onCorrectExpiry,
+  });
 
   final MedicineBatch batch;
   final Future<void> Function(MedicineBatch batch)? onDelete;
+  final Future<void> Function(MedicineBatch batch, DateTime expiryDate)?
+      onCorrectExpiry;
 
   @override
   Widget build(BuildContext context) {
@@ -344,7 +471,14 @@ class _BatchRow extends StatelessWidget {
           const SizedBox(height: AppSpacing.xs),
           Text('有效期至 ${_formatDate(batch.expiresOn)}'),
           const SizedBox(height: AppSpacing.sm),
-          _DeleteBatchAction(batch: batch, onDelete: onDelete),
+          Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
+            children: <Widget>[
+              _CorrectExpiryAction(batch: batch, onCorrect: onCorrectExpiry),
+              _DeleteBatchAction(batch: batch, onDelete: onDelete),
+            ],
+          ),
         ],
       ),
     );

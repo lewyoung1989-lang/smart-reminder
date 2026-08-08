@@ -10,10 +10,14 @@ class RecordingClient extends http.BaseClient {
 
   final List<http.Response> responses;
   final requests = <http.BaseRequest>[];
+  final requestBodies = <String>[];
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     requests.add(request);
+    if (request is http.Request) {
+      requestBodies.add(request.body);
+    }
     final response = responses.removeAt(0);
     return http.StreamedResponse(
       Stream.value(response.bodyBytes),
@@ -152,5 +156,44 @@ void main() {
         ),
       ),
     );
+  });
+
+  test('corrects one inventory batch expiry date through the shared client',
+      () async {
+    final client = RecordingClient([
+      jsonResponse(200, {
+        'id': 'batch-1',
+        'medicine_id': 'medicine-1',
+        'medicine_name': '布洛芬胶囊',
+        'specification': '0.3g*20粒',
+        'batch_number': 'LOT-88',
+        'production_date': null,
+        'expiry_date': '2027-06-30',
+        'quantity': 2,
+        'expiry_status': 'valid',
+        'days_until_expiry': 325,
+      }),
+    ]);
+    final api = MedicineCabinetApi(
+      baseUrl: 'https://api.invalid',
+      client: client,
+    );
+
+    final batch = await api.correctExpiryDate(
+      'batch id/1',
+      expiryDate: DateTime(2027, 6, 30),
+    );
+
+    expect(client.requests.single.method, 'PATCH');
+    expect(
+      client.requests.single.url.toString(),
+      'https://api.invalid/api/v1/inventory-batches/batch%20id%2F1/expiry-dates',
+    );
+    expect(client.requests.single.headers['Accept'], 'application/json');
+    expect(client.requests.single.headers['Content-Type'], 'application/json');
+    expect(jsonDecode(client.requestBodies.single), {
+      'expiry_date': '2027-06-30',
+    });
+    expect(batch.expiryDate, DateTime(2027, 6, 30));
   });
 }

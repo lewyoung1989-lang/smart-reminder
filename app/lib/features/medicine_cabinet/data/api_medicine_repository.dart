@@ -119,6 +119,15 @@ class _LoaderDataSource implements MedicineCabinetDataSource {
       Future.error(UnsupportedError('Batch deletion is not configured.'));
 
   @override
+  Future<InventoryBatch> correctExpiryDate(
+    String batchId, {
+    required DateTime expiryDate,
+  }) =>
+      Future.error(
+        UnsupportedError('Batch expiry correction is not configured.'),
+      );
+
+  @override
   Future<InventoryBatchPage> listBatches({
     String query = '',
     Uri? pageUrl,

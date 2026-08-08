@@ -26,6 +26,7 @@ class MedicineCabinetScreen extends StatefulWidget {
     this.onOpenSystemSettings,
     this.onOpenMedicine,
     this.onOpenSettings,
+    this.onCorrectBatchExpiry,
     super.key,
   }) : assert(
           repository != null || listBatches != null,
@@ -41,6 +42,8 @@ class MedicineCabinetScreen extends StatefulWidget {
   final VoidCallback? onOpenSystemSettings;
   final ValueChanged<MedicineSummary>? onOpenMedicine;
   final VoidCallback? onOpenSettings;
+  final Future<void> Function(MedicineBatch batch, DateTime expiryDate)?
+      onCorrectBatchExpiry;
 
   @override
   State<MedicineCabinetScreen> createState() => _MedicineCabinetScreenState();
@@ -243,6 +246,7 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
             repository: _repository,
             medicineId: medicine.id,
             onDeleteBatch: _deleteCallback,
+            onCorrectBatchExpiry: _correctExpiryCallback,
           ),
         ),
       );
@@ -265,6 +269,25 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
       widget.onDeleteBatch == null && widget.deleteBatch == null
           ? null
           : _deleteBatch;
+
+  Future<void> _correctBatchExpiry(
+    MedicineBatch batch,
+    DateTime expiryDate,
+  ) async {
+    final correct = widget.onCorrectBatchExpiry;
+    if (correct == null) return;
+    await correct(batch, expiryDate);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('有效期已修正')),
+    );
+    await _load(clearCollection: true);
+  }
+
+  Future<void> Function(MedicineBatch batch, DateTime expiryDate)?
+      get _correctExpiryCallback => widget.onCorrectBatchExpiry == null
+          ? null
+          : _correctBatchExpiry;
 
   Future<void> _capture() async {
     final capture = widget.onCapture;
@@ -513,6 +536,7 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
       return MedicineDetailScreen(
         detail: detail,
         onDeleteBatch: _deleteCallback,
+        onCorrectBatchExpiry: _correctExpiryCallback,
       );
     }
     if (_isDetailLoading) {
