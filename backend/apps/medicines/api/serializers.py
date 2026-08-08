@@ -11,6 +11,8 @@ from apps.medicines.models import InventoryBatch
 class InventoryBatchSerializer(serializers.ModelSerializer):
     medicine_name = serializers.CharField(source="medicine.name")
     specification = serializers.CharField(source="medicine.specification")
+    opened_use_before = serializers.SerializerMethodField()
+    effective_deadline = serializers.SerializerMethodField()
     expiry_status = serializers.SerializerMethodField()
     days_until_expiry = serializers.SerializerMethodField()
 
@@ -24,6 +26,10 @@ class InventoryBatchSerializer(serializers.ModelSerializer):
             "batch_number",
             "production_date",
             "expiry_date",
+            "opened_at",
+            "opened_shelf_life_days",
+            "opened_use_before",
+            "effective_deadline",
             "quantity",
             "expiry_status",
             "days_until_expiry",
@@ -34,17 +40,24 @@ class InventoryBatchSerializer(serializers.ModelSerializer):
         return timezone.localdate(timezone=ZoneInfo("Asia/Shanghai"))
 
     def get_expiry_status(self, batch):
-        expiry_date = batch.expiry_date
-        if expiry_date is None:
+        deadline = batch.effective_deadline
+        if deadline is None:
             return "unknown"
         today = self.today
-        if expiry_date < today:
+        if deadline < today:
             return "expired"
-        if expiry_date <= today + timedelta(days=30):
+        if deadline <= today + timedelta(days=30):
             return "expiring_soon"
         return "valid"
 
     def get_days_until_expiry(self, batch):
-        if batch.expiry_date is None:
+        deadline = batch.effective_deadline
+        if deadline is None:
             return None
-        return (batch.expiry_date - self.today).days
+        return (deadline - self.today).days
+
+    def get_opened_use_before(self, batch):
+        return batch.opened_use_before
+
+    def get_effective_deadline(self, batch):
+        return batch.effective_deadline

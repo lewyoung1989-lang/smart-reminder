@@ -233,3 +233,25 @@ def test_inventory_expiry_uses_shanghai_calendar_date(
     item = response.json()["results"][0]
     assert item["expiry_status"] == "expiring_soon"
     assert item["days_until_expiry"] == 0
+
+
+@pytest.mark.django_db
+def test_inventory_exposes_opened_lifetime_and_effective_deadline(api_client, user):
+    batch = create_batch(
+        owner=user,
+        name="滴眼液",
+        expiry_date=date(2027, 1, 1),
+    )
+    batch.opened_at = date(2026, 8, 1)
+    batch.opened_shelf_life_days = 28
+    batch.save(update_fields=["opened_at", "opened_shelf_life_days"])
+    api_client.force_authenticate(user)
+
+    response = api_client.get("/api/v1/inventory-batches")
+
+    assert response.status_code == 200
+    item = response.json()["results"][0]
+    assert item["opened_at"] == "2026-08-01"
+    assert item["opened_shelf_life_days"] == 28
+    assert item["opened_use_before"] == "2026-08-29"
+    assert item["effective_deadline"] == "2026-08-29"
