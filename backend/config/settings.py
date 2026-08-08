@@ -13,6 +13,13 @@ def env_bool(name, default):
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _positive_int_setting(name, value):
+    parsed = int(value)
+    if parsed <= 0:
+        raise ImproperlyConfigured(f"{name} must be positive")
+    return parsed
+
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR.parent / ".env")
 
@@ -282,9 +289,23 @@ S3_SECRET_ACCESS_KEY = os.environ.get("S3_SECRET_ACCESS_KEY", "")
 CELERY_TASK_ROUTES = {"apps.ocr.tasks.*": {"queue": OCR_QUEUE}}
 CELERY_TASK_SOFT_TIME_LIMIT = OCR_TASK_SOFT_TIME_LIMIT
 CELERY_TASK_TIME_LIMIT = OCR_TASK_TIME_LIMIT
+OUTBOX_LEASE_SECONDS = _positive_int_setting(
+    "OUTBOX_LEASE_SECONDS", os.environ.get("OUTBOX_LEASE_SECONDS", "60")
+)
+OUTBOX_PUBLISH_BATCH_SIZE = _positive_int_setting(
+    "OUTBOX_PUBLISH_BATCH_SIZE", os.environ.get("OUTBOX_PUBLISH_BATCH_SIZE", "100")
+)
+NOTIFICATION_PUBLISHER = os.environ.get(
+    "NOTIFICATION_PUBLISHER",
+    "apps.workflows.services.outbox.InAppNotificationPublisher",
+)
 CELERY_BEAT_SCHEDULE = {
     "dispatch-due-workflows-minute": {
         "task": "apps.workflows.tasks.dispatch_due_workflows_task",
+        "schedule": 60.0,
+    },
+    "publish-due-outbox-minute": {
+        "task": "apps.workflows.tasks.publish_due_outbox_task",
         "schedule": 60.0,
     },
     "purge-expired-ocr-images-hourly": {

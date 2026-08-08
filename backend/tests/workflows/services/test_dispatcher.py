@@ -55,6 +55,15 @@ def test_beat_dispatches_due_workflows_every_minute():
     }
 
 
+def test_beat_publishes_due_outbox_every_minute():
+    schedule = settings.CELERY_BEAT_SCHEDULE["publish-due-outbox-minute"]
+
+    assert schedule == {
+        "task": "apps.workflows.tasks.publish_due_outbox_task",
+        "schedule": 60.0,
+    }
+
+
 @pytest.mark.django_db
 def test_dispatcher_creates_run_outbox_and_advances_due_rule(
     user, django_capture_on_commit_callbacks, mocker
@@ -293,8 +302,7 @@ def test_dispatch_task_uses_the_dispatcher_with_late_acknowledgement(mocker):
     assert dispatch_due_workflows_task.acks_late is True
 
 
-def test_outbox_task_is_a_late_acknowledged_noop_stub():
+def test_outbox_task_is_late_acknowledged():
     from apps.workflows.tasks import enqueue_outbox
 
-    assert enqueue_outbox.run("outbox-id") is None
     assert enqueue_outbox.acks_late is True
