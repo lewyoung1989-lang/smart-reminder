@@ -105,3 +105,43 @@ def test_smart_departure_payload_degrades_without_faking_provider_data():
         "source": "weather.unavailable",
     }
     assert payload["departure_at"] == NOW.isoformat()
+
+
+def test_smart_departure_notification_requires_material_departure_change():
+    from apps.workflows.services.smart_departure import should_notify_departure
+
+    previous = {
+        "departure_at": "2026-08-08T09:30:00+00:00",
+        "weather": {"status": "unavailable"},
+    }
+    small_change = {
+        "departure_at": "2026-08-08T09:34:00+00:00",
+        "weather": {"status": "unavailable"},
+    }
+    material_change = {
+        "departure_at": "2026-08-08T09:35:00+00:00",
+        "weather": {"status": "unavailable"},
+    }
+
+    assert should_notify_departure(None, previous) is True
+    assert should_notify_departure(previous, small_change) is False
+    assert should_notify_departure(previous, material_change) is True
+
+
+def test_smart_departure_notification_fires_when_rain_risk_appears():
+    from apps.workflows.services.smart_departure import should_notify_departure
+
+    previous = {
+        "departure_at": "2026-08-08T09:30:00+00:00",
+        "weather": {"status": "available", "condition": "cloudy"},
+    }
+    current = {
+        "departure_at": "2026-08-08T09:30:00+00:00",
+        "weather": {
+            "status": "available",
+            "condition": "rain",
+            "precipitation_probability": 0.6,
+        },
+    }
+
+    assert should_notify_departure(previous, current) is True

@@ -337,6 +337,41 @@ def test_smart_departure_dispatcher_finishes_after_final_precheck(user, mocker):
 
 
 @pytest.mark.django_db
+def test_smart_departure_dispatcher_skips_unchanged_final_notification(
+    user, mocker, django_capture_on_commit_callbacks
+):
+    from apps.workflows.services.dispatcher import dispatch_due_workflows
+
+    first_check_at = NOW
+    arrival_time = (first_check_at + timedelta(hours=2)).astimezone(
+        ZoneInfo("Asia/Shanghai")
+    )
+    rule = create_compiled_rule(
+        user,
+        suffix="smart-departure-unchanged",
+        slots={
+            "arrival_time": arrival_time.isoformat(),
+            "destination_text": "虹桥火车站",
+            "travel_mode": "transit",
+        },
+        next_run_at=first_check_at,
+    )
+    enqueue = mocker.patch("apps.workflows.tasks.enqueue_outbox.delay")
+
+    with django_capture_on_commit_callbacks(execute=True):
+        dispatch_due_workflows(first_check_at, batch_size=10)
+    rule.refresh_from_db()
+    with django_capture_on_commit_callbacks(execute=True):
+        dispatch_due_workflows(rule.next_run_at, batch_size=10)
+
+    assert WorkflowRun.objects.filter(workflow=rule).count() == 2
+    assert NotificationOutbox.objects.filter(workflow_run__workflow=rule).count() == 1
+    rule.refresh_from_db()
+    assert rule.next_run_at is None
+    enqueue.assert_called_once()
+
+
+@pytest.mark.django_db
 def test_unknown_medication_frequency_keeps_the_due_time(user, mocker):
     from apps.workflows.services.dispatcher import dispatch_due_workflows
 

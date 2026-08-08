@@ -11,6 +11,7 @@ from apps.workflows.models import NotificationOutbox, WorkflowRun
 from apps.workflows.services.smart_departure import (
     build_departure_payload,
     next_departure_run_at,
+    should_notify_departure,
 )
 
 
@@ -169,26 +170,38 @@ def _dispatch_medicine_expiry_rule(rule, workflow, now):
 
 def _dispatch_smart_departure_rule(rule, workflow, scheduled_for):
     payload = build_departure_payload(workflow)
+    run_key = f"rule:{rule.id}:{scheduled_for.isoformat()}:scheduled"
+    previous_run = (
+        WorkflowRun.objects.filter(workflow=rule)
+        .exclude(idempotency_key=run_key)
+        .order_by("-scheduled_for", "-id")
+        .first()
+    )
+    should_notify = should_notify_departure(
+        previous_run.result_json if previous_run is not None else None,
+        payload,
+    )
     run, _ = WorkflowRun.objects.get_or_create(
         workflow=rule,
-        idempotency_key=f"rule:{rule.id}:{scheduled_for.isoformat()}:scheduled",
+        idempotency_key=run_key,
         defaults={"scheduled_for": scheduled_for, "result_json": payload},
     )
-    outbox, outbox_created = NotificationOutbox.objects.get_or_create(
-        idempotency_key=f"run:{run.id}:notify",
-        defaults={
-            "workflow_run": run,
-            "node_id": "notify",
-            "kind": "notification",
-            "payload_json": payload,
-        },
-    )
+    if should_notify:
+        outbox, outbox_created = NotificationOutbox.objects.get_or_create(
+            idempotency_key=f"run:{run.id}:notify",
+            defaults={
+                "workflow_run": run,
+                "node_id": "notify",
+                "kind": "notification",
+                "payload_json": payload,
+            },
+        )
+        if outbox_created:
+            transaction.on_commit(
+                lambda outbox_id=outbox.id: _enqueue_outbox(outbox_id)
+            )
     rule.next_run_at = next_departure_run_at(workflow, scheduled_for)
     rule.save(update_fields=["next_run_at"])
-    if outbox_created:
-        transaction.on_commit(
-            lambda outbox_id=outbox.id: _enqueue_outbox(outbox_id)
-        )
     return run.id
 
 

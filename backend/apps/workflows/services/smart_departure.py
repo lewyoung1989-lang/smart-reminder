@@ -7,6 +7,7 @@ from typing import Protocol
 STATIC_ROUTE_DURATION_MINUTES = 45
 EARLY_PRECHECK_LEAD = timedelta(hours=2)
 FINAL_PRECHECK_LEAD = timedelta(minutes=20)
+DEPARTURE_CHANGE_THRESHOLD = timedelta(minutes=5)
 
 
 class RouteProvider(Protocol):
@@ -92,6 +93,16 @@ def departure_precheck_times(workflow):
     return arrival_time - EARLY_PRECHECK_LEAD, arrival_time - FINAL_PRECHECK_LEAD
 
 
+def should_notify_departure(previous_payload, current_payload):
+    if previous_payload is None:
+        return True
+    previous_departure = datetime.fromisoformat(previous_payload["departure_at"])
+    current_departure = datetime.fromisoformat(current_payload["departure_at"])
+    if abs(current_departure - previous_departure) >= DEPARTURE_CHANGE_THRESHOLD:
+        return True
+    return not _has_rain_risk(previous_payload) and _has_rain_risk(current_payload)
+
+
 def _node_config(workflow, *, node_id, node_type):
     for node in workflow.nodes:
         if node.id == node_id and node.type == node_type:
@@ -136,3 +147,14 @@ def _weather_payload(provider, *, destination_text, arrival_time):
             "source": "weather.unavailable",
         }
     return dict(payload)
+
+
+def _has_rain_risk(payload):
+    weather = payload.get("weather") or {}
+    if weather.get("status") != "available":
+        return False
+    condition = str(weather.get("condition", "")).lower()
+    probability = weather.get("precipitation_probability")
+    return "rain" in condition or (
+        isinstance(probability, int | float) and probability > 0
+    )
