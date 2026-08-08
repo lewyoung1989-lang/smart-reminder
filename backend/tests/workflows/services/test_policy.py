@@ -75,7 +75,12 @@ def test_active_matching_r1_trust_grant_allows_automatic_creation(user):
 def test_r2_workflow_never_auto_creates_even_with_a_matching_grant(user):
     task = TaskSpec(
         title="Create medication reminder",
-        slots={"medicine_name": "Aspirin", "dose_text": "100mg", "frequency": "daily"},
+        slots={
+            "medicine_name": "Aspirin",
+            "dose_text": "100mg",
+            "frequency": "daily",
+            "time_of_day": "08:00",
+        },
     )
     spec = WorkflowCompiler().compile(task)
     scope = {"household": "primary"}

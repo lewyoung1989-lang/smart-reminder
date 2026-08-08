@@ -67,7 +67,9 @@ WORKFLOW_TEMPLATES: Mapping[str, WorkflowTemplate] = MappingProxyType(
             key="medication_cycle",
             version="1.0.0",
             risk_level="R2",
-            required_slots=frozenset({"medicine_name", "dose_text", "frequency"}),
+            required_slots=frozenset(
+                {"medicine_name", "dose_text", "frequency", "time_of_day"}
+            ),
             optional_slots=frozenset(),
             capability_manifest=frozenset(
                 {"medicine.schedule", "notification.important"}
@@ -108,6 +110,7 @@ WORKFLOW_TEMPLATES: Mapping[str, WorkflowTemplate] = MappingProxyType(
                 SlotConfigBinding("medicine_name", "medication-schedule", "medicine_name"),
                 SlotConfigBinding("dose_text", "medication-schedule", "dose_text"),
                 SlotConfigBinding("frequency", "medication-schedule", "frequency"),
+                SlotConfigBinding("time_of_day", "medication-schedule", "time_of_day"),
             ),
         ),
         "medicine_expiry": WorkflowTemplate(
@@ -171,7 +174,12 @@ WORKFLOW_TEMPLATES: Mapping[str, WorkflowTemplate] = MappingProxyType(
                 RegisteredNode(
                     id="before-arrival",
                     type="trigger.before_arrival",
-                    config=_fixed_config({"lead_time_policy": "smart_departure.default"}),
+                    config=_fixed_config(
+                        {
+                            "lead_time_policy": "smart_departure.default",
+                            "lead_time_minutes": 10,
+                        }
+                    ),
                     failure_mode="fail",
                 ),
                 RegisteredNode(

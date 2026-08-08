@@ -283,6 +283,10 @@ CELERY_TASK_ROUTES = {"apps.ocr.tasks.*": {"queue": OCR_QUEUE}}
 CELERY_TASK_SOFT_TIME_LIMIT = OCR_TASK_SOFT_TIME_LIMIT
 CELERY_TASK_TIME_LIMIT = OCR_TASK_TIME_LIMIT
 CELERY_BEAT_SCHEDULE = {
+    "dispatch-due-workflows-minute": {
+        "task": "apps.workflows.tasks.dispatch_due_workflows_task",
+        "schedule": 60.0,
+    },
     "purge-expired-ocr-images-hourly": {
         "task": "apps.ocr.tasks.purge_expired_ocr_images",
         "schedule": 3600.0,

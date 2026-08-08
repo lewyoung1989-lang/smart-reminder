@@ -74,6 +74,9 @@ class WorkflowTaskParser:
         frequency = "daily" if "每天" in text or "每日" in text else None
         if medication_match is None or dose_match is None or frequency is None:
             return _clarification("请补充药品剂量和服药周期")
+        time_of_day = _parse_time_of_day(text)
+        if time_of_day is None:
+            return _clarification("请补充服药时间")
 
         return TaskSpec(
             template_hint="medication_cycle",
@@ -82,6 +85,7 @@ class WorkflowTaskParser:
                 "medicine_name": medication_match.group("name"),
                 "dose_text": dose_match.group(0).replace(" ", ""),
                 "frequency": frequency,
+                "time_of_day": time_of_day,
             },
             requested_capabilities=[
                 "medicine.schedule",
@@ -192,6 +196,24 @@ def _parse_arrival_time(
         minute,
         tzinfo=local_timezone,
     )
+
+
+def _parse_time_of_day(text: str) -> str | None:
+    time_match = _TIME_PATTERN.search(text)
+    if time_match is None:
+        return None
+    hour = _chinese_number(time_match.group("hour"))
+    minute_group = time_match.group("minute")
+    minute = (
+        30
+        if time_match.group("half")
+        else _chinese_number(minute_group)
+        if minute_group
+        else 0
+    )
+    if hour is None or minute is None or not 0 <= hour <= 23 or not 0 <= minute <= 59:
+        return None
+    return f"{hour:02d}:{minute:02d}"
 
 
 def _chinese_number(value: str) -> int | None:

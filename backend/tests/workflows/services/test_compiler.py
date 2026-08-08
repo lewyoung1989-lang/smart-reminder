@@ -59,7 +59,8 @@ def test_compiler_rejects_capabilities_outside_the_selected_manifest():
                 slots={
                     "medicine_name": "Aspirin",
                     "dose_text": "100mg",
-                    "frequency": "daily",
+                "frequency": "daily",
+                "time_of_day": "08:00",
                 },
                 requested_capabilities=["network.arbitrary_request"],
             )
@@ -209,9 +210,19 @@ def test_compiler_thaws_nested_fixed_configs_into_json_values():
     "slots, template_key, expected_config",
     [
         (
-            {"medicine_name": "Aspirin", "dose_text": "100mg", "frequency": "daily"},
+            {
+                "medicine_name": "Aspirin",
+                "dose_text": "100mg",
+                "frequency": "daily",
+                "time_of_day": "08:00",
+            },
             "medication_cycle",
-            {"medicine_name": "Aspirin", "dose_text": "100mg", "frequency": "daily"},
+            {
+                "medicine_name": "Aspirin",
+                "dose_text": "100mg",
+                "frequency": "daily",
+                "time_of_day": "08:00",
+            },
         ),
         (
             {"medicine_id": "med-1", "threshold_days": 30},

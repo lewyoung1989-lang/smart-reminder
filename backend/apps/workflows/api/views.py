@@ -1,4 +1,5 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from django.db import transaction
 from django.utils import timezone
@@ -45,6 +46,47 @@ def _clarification_policy(task: TaskSpec) -> dict:
         "question": task.ambiguities[0] if task.ambiguities else None,
         "scope": WORKFLOW_SCOPE,
     }
+
+
+def _initial_next_run_at(workflow: WorkflowSpec, now):
+    if workflow.template_key == "medicine_expiry":
+        return now
+    if workflow.template_key == "medication_cycle":
+        for node in workflow.nodes:
+            if (
+                node.id == "medication-schedule"
+                and node.type == "trigger.medication_schedule"
+            ):
+                time_of_day = node.config.get("time_of_day")
+                if not isinstance(time_of_day, str):
+                    break
+                try:
+                    hour_text, minute_text = time_of_day.split(":", maxsplit=1)
+                    hour, minute = int(hour_text), int(minute_text)
+                except ValueError:
+                    break
+                if not 0 <= hour <= 23 or not 0 <= minute <= 59:
+                    break
+                local_now = now.astimezone(ZoneInfo(workflow.timezone))
+                next_run_at = local_now.replace(
+                    hour=hour, minute=minute, second=0, microsecond=0
+                )
+                if next_run_at <= local_now:
+                    next_run_at += timedelta(days=1)
+                return next_run_at
+        raise ValueError("medication workflow is missing time_of_day")
+    if workflow.template_key == "smart_departure":
+        for node in workflow.nodes:
+            if (
+                node.id == "before-arrival"
+                and node.type == "trigger.before_arrival"
+            ):
+                arrival_time = node.config.get("arrival_time")
+                lead_time_minutes = node.config.get("lead_time_minutes")
+                if isinstance(arrival_time, str) and lead_time_minutes == 10:
+                    return datetime.fromisoformat(arrival_time) - timedelta(minutes=10)
+        raise ValueError("smart departure workflow is missing arrival_time")
+    raise ValueError(f"unsupported workflow template: {workflow.template_key}")
 
 
 def _response_for_draft(draft: WorkflowDraft) -> Response:
@@ -157,6 +199,13 @@ class WorkflowDraftConfirmView(APIView):
                     {"code": "workflow_needs_clarification"},
                     status=status.HTTP_409_CONFLICT,
                 )
+            try:
+                next_run_at = _initial_next_run_at(workflow, now)
+            except ValueError:
+                return Response(
+                    {"code": "workflow_draft_invalid"},
+                    status=status.HTTP_409_CONFLICT,
+                )
 
             decision = evaluate(request.user, task, workflow, now, WORKFLOW_SCOPE)
             if decision.decision == "needs_clarification":
@@ -177,6 +226,7 @@ class WorkflowDraftConfirmView(APIView):
                 template_version=workflow.template_version,
                 schema_version=workflow.schema_version,
                 workflow_spec_json=workflow.model_dump(mode="json"),
+                next_run_at=next_run_at,
                 source_draft=None,
                 workflow_draft=draft,
             )

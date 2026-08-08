@@ -19,6 +19,7 @@ def test_parses_complete_medication_schedule():
         "medicine_name": "阿莫西林",
         "dose_text": "0.5g",
         "frequency": "daily",
+        "time_of_day": "08:00",
     }
     assert task.requested_capabilities == [
         "medicine.schedule",
@@ -28,13 +29,14 @@ def test_parses_complete_medication_schedule():
 
 
 def test_parses_medication_when_dose_immediately_follows_the_name():
-    task = parse("每天服药阿莫西林0.5g")
+    task = parse("每天早上八点服药阿莫西林0.5g")
 
     assert task.template_hint == "medication_cycle"
     assert task.slots == {
         "medicine_name": "阿莫西林",
         "dose_text": "0.5g",
         "frequency": "daily",
+        "time_of_day": "08:00",
     }
 
 
@@ -73,6 +75,14 @@ def test_returns_clarification_when_medication_dose_is_missing():
     assert task.template_hint is None
     assert task.slots == {}
     assert task.ambiguities == ["请补充药品剂量和服药周期"]
+
+
+def test_returns_clarification_when_medication_time_is_missing():
+    task = parse("每天吃阿莫西林 0.5g")
+
+    assert task.template_hint is None
+    assert task.slots == {}
+    assert task.ambiguities == ["请补充服药时间"]
 
 
 def test_returns_clarification_when_expiry_medicine_id_is_missing():

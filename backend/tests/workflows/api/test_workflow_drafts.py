@@ -1,14 +1,15 @@
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone as datetime_timezone
 
 import pytest
 from django.utils import timezone
 
 from apps.reminders.models import ReminderRule
-from apps.workflows.models import TrustGrant, WorkflowDraft
+from apps.workflows.models import TrustGrant, WorkflowDraft, WorkflowRun
 
 
 CREATE_URL = "/api/v1/workflow-drafts"
 COMPLETE_TEXT = "明天八点到虹桥火车站，坐公交出门"
+NOW = datetime(2026, 8, 8, 9, 30, tzinfo=datetime_timezone.utc)
 
 
 def create_draft(api_client, text=COMPLETE_TEXT):
@@ -79,6 +80,63 @@ def test_confirmation_creates_a_workflow_backed_reminder_idempotently(api_client
         TrustGrant.objects.filter(user=user, status=TrustGrant.Status.ACTIVE).count()
         == 1
     )
+
+
+@pytest.mark.django_db
+def test_smart_departure_confirmation_is_due_and_dispatches(
+    api_client, user, mocker, django_capture_on_commit_callbacks
+):
+    from apps.workflows.services.dispatcher import dispatch_due_workflows
+
+    mocker.patch("apps.workflows.api.views.timezone.now", return_value=NOW)
+    enqueue = mocker.patch("apps.workflows.tasks.enqueue_outbox.delay")
+    api_client.force_authenticate(user)
+    created = create_draft(api_client).json()
+
+    confirmed = api_client.post(f"{CREATE_URL}/{created['id']}/confirm")
+
+    assert confirmed.status_code == 201
+    rule = ReminderRule.objects.get(id=confirmed.json()["reminder_id"])
+    arrival = next(
+        node["config"]["arrival_time"]
+        for node in created["workflow"]["nodes"]
+        if node["id"] == "before-arrival"
+    )
+    assert rule.next_run_at == datetime.fromisoformat(arrival) - timedelta(minutes=10)
+
+    with django_capture_on_commit_callbacks(execute=True):
+        dispatch_due_workflows(rule.next_run_at, batch_size=10)
+
+    assert WorkflowRun.objects.filter(workflow=rule).count() == 1
+    rule.refresh_from_db()
+    assert rule.next_run_at is None
+    enqueue.assert_called_once()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "text, template_key",
+    [
+        ("每天早上八点吃阿莫西林 0.5g", "medication_cycle"),
+        ("药品 med-1 有效期提前30天提醒", "medicine_expiry"),
+    ],
+)
+def test_medication_and_expiry_confirmations_get_template_schedule(
+    api_client, user, mocker, text, template_key
+):
+    mocker.patch("apps.workflows.api.views.timezone.now", return_value=NOW)
+    api_client.force_authenticate(user)
+    created = create_draft(api_client, text).json()
+
+    confirmed = api_client.post(f"{CREATE_URL}/{created['id']}/confirm")
+
+    assert confirmed.status_code == 201
+    rule = ReminderRule.objects.get(id=confirmed.json()["reminder_id"])
+    assert rule.template_key == template_key
+    if template_key == "medication_cycle":
+        assert rule.next_run_at == datetime.fromisoformat("2026-08-09T08:00:00+08:00")
+    else:
+        assert rule.next_run_at == NOW
 
 
 @pytest.mark.django_db
