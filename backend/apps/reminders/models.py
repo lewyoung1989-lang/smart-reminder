@@ -36,6 +36,14 @@ class ReminderRule(models.Model):
     scheduled_at = models.DateTimeField(db_index=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
     enabled = models.BooleanField(default=True)
+    template_key = models.CharField(max_length=128, null=True, blank=True)
+    template_version = models.CharField(max_length=32, null=True, blank=True)
+    schema_version = models.PositiveIntegerField(null=True, blank=True)
+    workflow_spec_json = models.JSONField(null=True, blank=True)
+    next_run_at = models.DateTimeField(null=True, blank=True)
+    last_run_at = models.DateTimeField(null=True, blank=True)
+    revision = models.PositiveIntegerField(default=1, null=True, blank=True)
+    paused_reason = models.CharField(max_length=128, null=True, blank=True)
     source_draft = models.OneToOneField(
         ReminderDraft,
         on_delete=models.PROTECT,

@@ -81,6 +81,7 @@ INSTALLED_APPS = [
     "apps.accounts.apps.AccountsConfig",
     "apps.core",
     "apps.reminders",
+    "apps.workflows.apps.WorkflowsConfig",
     "apps.voice",
     "apps.medicines.apps.MedicinesConfig",
     "apps.ocr.apps.OCRConfig",
