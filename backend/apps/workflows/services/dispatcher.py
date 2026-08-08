@@ -8,7 +8,10 @@ from apps.medicines.services.expiry_alerts import refresh_expiry_alerts
 from apps.reminders.models import ReminderRule
 from apps.workflows.domain.schemas import WorkflowSpec
 from apps.workflows.models import NotificationOutbox, WorkflowRun
-from apps.workflows.services.smart_departure import build_departure_payload
+from apps.workflows.services.smart_departure import (
+    build_departure_payload,
+    next_departure_run_at,
+)
 
 
 def _enqueue_outbox(outbox_id):
@@ -180,7 +183,7 @@ def _dispatch_smart_departure_rule(rule, workflow, scheduled_for):
             "payload_json": payload,
         },
     )
-    rule.next_run_at = None
+    rule.next_run_at = next_departure_run_at(workflow, scheduled_for)
     rule.save(update_fields=["next_run_at"])
     if outbox_created:
         transaction.on_commit(

@@ -266,7 +266,7 @@ def test_medicine_expiry_workflow_recomputes_stale_due_time_from_inventory_deadl
 def test_smart_departure_dispatcher_creates_explicit_degraded_payload(user, mocker):
     from apps.workflows.services.dispatcher import dispatch_due_workflows
 
-    arrival_time = (NOW + timedelta(minutes=55)).astimezone(
+    arrival_time = (NOW + timedelta(hours=2)).astimezone(
         ZoneInfo("Asia/Shanghai")
     )
     rule = create_compiled_rule(
@@ -290,7 +290,7 @@ def test_smart_departure_dispatcher_creates_explicit_degraded_payload(user, mock
         "arrival_time": arrival_time.isoformat(),
         "destination_text": "虹桥火车站",
         "travel_mode": "transit",
-        "departure_at": NOW.isoformat(),
+        "departure_at": (NOW + timedelta(minutes=65)).isoformat(),
         "route": {
             "status": "fallback_static",
             "duration_minutes": 45,
@@ -304,6 +304,35 @@ def test_smart_departure_dispatcher_creates_explicit_degraded_payload(user, mock
     assert run.result_json == expected_payload
     assert outbox.payload_json == expected_payload
     rule.refresh_from_db()
+    assert rule.next_run_at == datetime.fromisoformat(
+        arrival_time.isoformat()
+    ) - timedelta(minutes=20)
+
+
+@pytest.mark.django_db
+def test_smart_departure_dispatcher_finishes_after_final_precheck(user, mocker):
+    from apps.workflows.services.dispatcher import dispatch_due_workflows
+
+    final_check_at = NOW
+    arrival_time = (final_check_at + timedelta(minutes=20)).astimezone(
+        ZoneInfo("Asia/Shanghai")
+    )
+    rule = create_compiled_rule(
+        user,
+        suffix="smart-departure-final",
+        slots={
+            "arrival_time": arrival_time.isoformat(),
+            "destination_text": "虹桥火车站",
+            "travel_mode": "transit",
+        },
+        next_run_at=final_check_at,
+    )
+    mocker.patch("apps.workflows.tasks.enqueue_outbox.delay")
+
+    dispatch_due_workflows(final_check_at, batch_size=10)
+
+    rule.refresh_from_db()
+    assert WorkflowRun.objects.filter(workflow=rule).count() == 1
     assert rule.next_run_at is None
 
 

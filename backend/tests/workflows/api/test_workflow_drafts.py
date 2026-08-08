@@ -102,14 +102,14 @@ def test_smart_departure_confirmation_is_due_and_dispatches(
         for node in created["workflow"]["nodes"]
         if node["id"] == "before-arrival"
     )
-    assert rule.next_run_at == datetime.fromisoformat(arrival) - timedelta(minutes=10)
+    assert rule.next_run_at == datetime.fromisoformat(arrival) - timedelta(hours=2)
 
     with django_capture_on_commit_callbacks(execute=True):
         dispatch_due_workflows(rule.next_run_at, batch_size=10)
 
     assert WorkflowRun.objects.filter(workflow=rule).count() == 1
     rule.refresh_from_db()
-    assert rule.next_run_at is None
+    assert rule.next_run_at == datetime.fromisoformat(arrival) - timedelta(minutes=20)
     enqueue.assert_called_once()
 
 

@@ -18,6 +18,7 @@ from apps.workflows.domain.schemas import TaskSpec, WorkflowSpec
 from apps.workflows.models import TrustGrant, WorkflowDraft
 from apps.workflows.services.compiler import WorkflowCompileError, WorkflowCompiler
 from apps.workflows.services.policy import PolicyDecision, evaluate
+from apps.workflows.services.smart_departure import initial_departure_run_at
 from apps.workflows.services.task_parser import WorkflowTaskParser
 
 
@@ -76,16 +77,7 @@ def _initial_next_run_at(workflow: WorkflowSpec, now):
                 return next_run_at
         raise ValueError("medication workflow is missing time_of_day")
     if workflow.template_key == "smart_departure":
-        for node in workflow.nodes:
-            if (
-                node.id == "before-arrival"
-                and node.type == "trigger.before_arrival"
-            ):
-                arrival_time = node.config.get("arrival_time")
-                lead_time_minutes = node.config.get("lead_time_minutes")
-                if isinstance(arrival_time, str) and lead_time_minutes == 10:
-                    return datetime.fromisoformat(arrival_time) - timedelta(minutes=10)
-        raise ValueError("smart departure workflow is missing arrival_time")
+        return initial_departure_run_at(workflow)
     raise ValueError(f"unsupported workflow template: {workflow.template_key}")
 
 
