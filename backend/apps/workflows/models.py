@@ -123,4 +123,121 @@ class WorkflowRun(models.Model):
                 fields=["workflow", "idempotency_key"],
                 name="workflow_run_idempotency_unique",
             ),
+            models.CheckConstraint(
+                condition=~models.Q(idempotency_key=""),
+                name="workflow_run_idempotency_key_nonempty",
+            ),
+        ]
+
+
+class NodeRun(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        CLAIMED = "claimed", "Claimed"
+        SENT = "sent", "Sent"
+        FAILED = "failed", "Failed"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workflow_run = models.ForeignKey(
+        WorkflowRun,
+        on_delete=models.CASCADE,
+        related_name="node_runs",
+    )
+    node_id = models.CharField(max_length=128)
+    status = models.CharField(max_length=32, choices=Status, default=Status.PENDING)
+    attempt = models.PositiveIntegerField()
+    result_json = models.JSONField(default=dict)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workflow_run", "node_id", "attempt"],
+                name="workflow_node_run_attempt_unique",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(status__in=["pending", "claimed", "sent", "failed"]),
+                name="workflow_node_run_status_valid",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(attempt__gte=1),
+                name="workflow_node_run_attempt_positive",
+            ),
+        ]
+
+
+class NotificationOutbox(models.Model):
+    """持久化外发意图；PROTECT 保留审计记录，清理前必须先终态化 Outbox。"""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        CLAIMED = "claimed", "Claimed"
+        SENT = "sent", "Sent"
+        FAILED = "failed", "Failed"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workflow_run = models.ForeignKey(
+        WorkflowRun,
+        on_delete=models.PROTECT,
+        related_name="notification_outbox_entries",
+    )
+    node_id = models.CharField(max_length=128)
+    kind = models.CharField(max_length=64)
+    payload_json = models.JSONField(default=dict)
+    idempotency_key = models.CharField(max_length=128, unique=True)
+    status = models.CharField(max_length=32, choices=Status, default=Status.PENDING)
+    published_at = models.DateTimeField(null=True, blank=True)
+    claimed_at = models.DateTimeField(null=True, blank=True)
+    claim_token = models.UUIDField(null=True, blank=True)
+    lease_expires_at = models.DateTimeField(null=True, blank=True)
+    next_attempt_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    attempts = models.PositiveIntegerField(default=0)
+    last_error = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(status__in=["pending", "claimed", "sent", "failed"]),
+                name="workflow_notification_outbox_status_valid",
+            ),
+            models.CheckConstraint(
+                condition=~models.Q(idempotency_key=""),
+                name="workflow_notification_outbox_idempotency_key_nonempty",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        status="claimed",
+                        claimed_at__isnull=False,
+                        claim_token__isnull=False,
+                        lease_expires_at__isnull=False,
+                    )
+                    | (
+                        ~models.Q(status="claimed")
+                        & models.Q(
+                            claimed_at__isnull=True,
+                            claim_token__isnull=True,
+                            lease_expires_at__isnull=True,
+                        )
+                    )
+                ),
+                name="workflow_notification_outbox_lease_consistent",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    ~models.Q(status="claimed")
+                    | models.Q(lease_expires_at__gt=models.F("claimed_at"))
+                ),
+                name="workflow_notification_outbox_lease_expires_after_claim",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(status="sent", published_at__isnull=False)
+                    | (
+                        ~models.Q(status="sent")
+                        & models.Q(published_at__isnull=True)
+                    )
+                ),
+                name="workflow_notification_outbox_sent_published",
+            ),
         ]

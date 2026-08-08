@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 from datetime import datetime, timedelta
+import importlib
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -415,3 +416,94 @@ def assert_workflow_compatibility_migration_is_irreversible_and_preserves_workfl
     assert CurrentWorkflowDraft.objects.get(id=workflow_draft.id).user_id == user.id
     assert CurrentRun.objects.get(id=run.id).workflow_id == rule.id
     assert MigrationRecorder(connection).applied_migrations() == migrations_before
+
+
+@pytest.mark.django_db(transaction=True)
+def test_workflow_run_empty_idempotency_key_blocks_0004_upgrade(tmp_path):
+    with isolated_default_connection(
+        tmp_path,
+        "workflow-run-idempotency-preflight.sqlite3",
+    ) as isolated_connection:
+        executor = MigrationExecutor(isolated_connection)
+        executor.migrate([("workflows", "0003_noderun_notificationoutbox")])
+        apps = executor.loader.project_state(
+            [("workflows", "0003_noderun_notificationoutbox")]
+        ).apps
+        app_label, model_name = settings.AUTH_USER_MODEL.split(".")
+        User = apps.get_model(app_label, model_name)
+        Session = apps.get_model("reminders", "VoiceParseSession")
+        Draft = apps.get_model("reminders", "ReminderDraft")
+        Rule = apps.get_model("reminders", "ReminderRule")
+        Run = apps.get_model("workflows", "WorkflowRun")
+
+        user = User.objects.create(username="empty-run-idempotency-owner")
+        session = Session.objects.create(
+            user=user,
+            transcript_sha256="f" * 64,
+            expires_at="2026-08-08T00:00:00+00:00",
+        )
+        draft = Draft.objects.create(
+            session=session,
+            draft_json={},
+            expires_at="2026-08-08T00:00:00+00:00",
+        )
+        rule = Rule.objects.create(
+            owner=user,
+            title="empty run idempotency",
+            timezone="UTC",
+            schedule_json={"type": "once"},
+            conditions_json={},
+            severity="notification",
+            scheduled_at="2026-08-08T00:00:00+00:00",
+            source_draft=draft,
+        )
+        Run.objects.create(workflow=rule, idempotency_key="", result_json={})
+
+        executor = MigrationExecutor(isolated_connection)
+        with pytest.raises(RuntimeError, match="empty idempotency_key"):
+            executor.migrate([("workflows", "0004_workflowrun_idempotency_key_nonempty")])
+
+
+def test_workflow_run_idempotency_preflight_uses_migration_connection_alias():
+    migration = importlib.import_module(
+        "apps.workflows.migrations.0004_workflowrun_idempotency_key_nonempty"
+    )
+
+    class FakeQuerySet:
+        def filter(self, **kwargs):
+            self.filters = kwargs
+            return self
+
+        def exists(self):
+            return False
+
+    class FakeManager:
+        def __init__(self):
+            self.queryset = FakeQuerySet()
+            self.alias = None
+
+        def using(self, alias):
+            self.alias = alias
+            return self.queryset
+
+    class FakeWorkflowRun:
+        objects = FakeManager()
+
+    class FakeApps:
+        def get_model(self, app_label, model_name):
+            assert (app_label, model_name) == ("workflows", "WorkflowRun")
+            return FakeWorkflowRun
+
+    class FakeConnection:
+        alias = "migration-test"
+
+    class FakeSchemaEditor:
+        connection = FakeConnection()
+
+    migration.reject_empty_workflow_run_idempotency_keys(
+        FakeApps(),
+        FakeSchemaEditor(),
+    )
+
+    assert FakeWorkflowRun.objects.alias == "migration-test"
+    assert FakeWorkflowRun.objects.queryset.filters == {"idempotency_key": ""}
