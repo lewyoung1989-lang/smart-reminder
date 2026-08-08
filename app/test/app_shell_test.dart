@@ -3,12 +3,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:smart_reminder_app/app/shell/app_shell.dart';
 import 'package:smart_reminder_app/app/theme/app_theme.dart';
 import 'package:smart_reminder_app/features/auth/domain/auth_models.dart';
+import 'package:smart_reminder_app/features/reminder_drafts/application/reminder_creation_service.dart';
+import 'package:smart_reminder_app/features/reminder_drafts/domain/reminder_draft.dart';
 import 'package:smart_reminder_app/features/medicine_cabinet/data/medicine_repository.dart';
 import 'package:smart_reminder_app/features/medicine_cabinet/domain/medicine_models.dart';
 import 'package:smart_reminder_app/features/plans/data/plan_repository.dart';
 import 'package:smart_reminder_app/features/today/data/action_center_api.dart';
 import 'package:smart_reminder_app/features/today/data/today_repository.dart';
 import 'package:smart_reminder_app/features/today/domain/today_models.dart';
+import 'package:smart_reminder_app/platform/notifications/reminder_notification_scheduler.dart';
 
 void main() {
   testWidgets('uses redesigned destinations and opens account settings',
@@ -173,6 +176,60 @@ void main() {
     expect(find.text('设置'), findsNothing);
   });
 
+  testWidgets(
+      'quick create exits the draft after server creation when notification scheduling fails',
+      (tester) async {
+    final draft = ReminderDraft(
+      id: 'draft-1',
+      title: '喝水',
+      scheduledAt: DateTime(2026, 8, 8, 18, 40),
+      timezone: 'Asia/Shanghai',
+      severity: ReminderSeverity.notification,
+      weatherMessage: null,
+      ambiguities: const [],
+    );
+    final creationService = ReminderCreationService(
+      confirmDraft: (_) async => 'reminder-1',
+      notificationScheduler: _ThrowingNotificationScheduler(),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppShell(
+          todayRepository: const UnavailableTodayRepository(),
+          planRepository: const UnavailablePlanRepository(),
+          medicineRepository: _UnavailableMedicineRepository(),
+          user: const AuthUser(
+            id: 'user-1',
+            phoneMasked: '138****8000',
+            phoneVerified: true,
+          ),
+          themeMode: ThemeMode.system,
+          onThemeModeChanged: (_) {},
+          onChangePassword: (_, __, ___) async {},
+          onLogout: () async {},
+          createDraft: (_) async => draft,
+          reminderCreationService: creationService,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('quick-create-action')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('quick-create-input')),
+      '1分钟后提醒我喝水',
+    );
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, '继续'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '确认'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('确认计划'), findsNothing);
+    expect(find.text('提醒已创建，但手机通知未安排'), findsOneWidget);
+  });
+
   testWidgets('dispatches today medication decisions to verified actions',
       (tester) async {
     final todayRepository = _SequenceTodayRepository([
@@ -225,6 +282,19 @@ void main() {
     expect(find.text('服用布洛芬'), findsNothing);
     expect(find.text('已记录服药'), findsOneWidget);
   });
+}
+
+class _ThrowingNotificationScheduler implements ReminderNotificationScheduler {
+  @override
+  Future<void> schedule({
+    required String reminderId,
+    required ReminderDraft draft,
+  }) async {
+    throw StateError('notification bridge unavailable');
+  }
+
+  @override
+  Future<void> cancel({required String reminderId}) async {}
 }
 
 class _UnavailableMedicineRepository implements MedicineRepository {

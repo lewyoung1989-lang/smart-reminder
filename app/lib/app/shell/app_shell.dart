@@ -145,6 +145,7 @@ class _AppShellState extends State<AppShell> {
       );
     } on ReminderNotificationSchedulingException {
       if (mounted) {
+        Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('提醒已创建，但手机通知未安排')),
         );

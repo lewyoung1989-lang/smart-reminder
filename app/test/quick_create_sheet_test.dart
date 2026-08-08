@@ -109,6 +109,7 @@ void main() {
           createDraft: (_) async => draft,
           voiceInputController: voice,
         ),
+        textScaler: const TextScaler.linear(1.3),
       ),
     );
 
@@ -354,6 +355,27 @@ void main() {
 
     expect(find.text('语音输入失败，请重试'), findsOneWidget);
     expect(find.widgetWithText(TextButton, '重试'), findsOneWidget);
+  });
+
+  testWidgets('voice failure status fits without a render overflow', (
+    tester,
+  ) async {
+    final voice = _FakeVoiceInputController();
+    await tester.pumpWidget(
+      app(
+        QuickCreateSheet(
+          createDraft: (_) async => draft,
+          voiceInputController: voice,
+        ),
+      ),
+    );
+
+    voice.setFailure('语音服务暂不可用，请稍后重试');
+    await tester.pump();
+
+    expect(find.text('语音服务暂不可用，请稍后重试'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, '重试'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('delayed transcript does not overwrite a manual edit', (

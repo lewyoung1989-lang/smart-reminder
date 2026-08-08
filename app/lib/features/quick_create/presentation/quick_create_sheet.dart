@@ -231,8 +231,8 @@ class _QuickCreateSheetState extends State<QuickCreateSheet> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      SizedBox(
-                        height: 64,
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 64),
                         child: _buildStatusRegion(
                           context: context,
                           voice: voice,
@@ -347,6 +347,7 @@ class _QuickCreateSheetState extends State<QuickCreateSheet> {
 
   Widget _buildVoiceFailure(BuildContext context, String? message) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
