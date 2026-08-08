@@ -28,8 +28,8 @@ class AuthScreen extends StatefulWidget {
 
 class _AuthScreenState extends State<AuthScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _phoneController = TextEditingController();
-  final _passwordController = TextEditingController();
+  final _phoneController = TextEditingController(text: '13800138000');
+  final _passwordController = TextEditingController(text: 'Test-pass-2026');
   final _confirmController = TextEditingController();
   _AuthMode _mode = _AuthMode.login;
   bool _passwordVisible = false;

@@ -19,6 +19,20 @@ Widget buildScreen({
     );
 
 void main() {
+  testWidgets('login screen pre-fills local test account', (tester) async {
+    await tester.pumpWidget(buildScreen());
+
+    final phone = tester.widget<TextFormField>(
+      find.byKey(const Key('phone-field')),
+    );
+    final password = tester.widget<TextFormField>(
+      find.byKey(const Key('password-field')),
+    );
+
+    expect(phone.controller?.text, '13800138000');
+    expect(password.controller?.text, 'Test-pass-2026');
+  });
+
   testWidgets('registration maps duplicate phone and preserves input',
       (tester) async {
     await tester.pumpWidget(
