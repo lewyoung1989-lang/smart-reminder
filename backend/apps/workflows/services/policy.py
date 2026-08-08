@@ -89,4 +89,3 @@ def _required_business_fields_are_present(
 
 def _missing_business_value(value: object) -> bool:
     return value is None or (isinstance(value, str) and not value.strip())
-
