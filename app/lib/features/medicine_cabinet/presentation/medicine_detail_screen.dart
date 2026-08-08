@@ -228,50 +228,12 @@ class _CorrectExpiryActionState extends State<_CorrectExpiryAction> {
 
   Future<void> _openDialog() async {
     if (_isSaving || widget.onCorrect == null) return;
-    final controller = TextEditingController(
-      text: _formatInputDate(widget.batch.expiresOn),
-    );
     final expiryDate = await showDialog<DateTime>(
       context: context,
-      builder: (dialogContext) {
-        String? errorText;
-        return StatefulBuilder(
-          builder: (context, setDialogState) => AlertDialog(
-            title: const Text('修正有效期'),
-            content: TextField(
-              key: const Key('medicine-expiry-date-input'),
-              controller: controller,
-              keyboardType: TextInputType.datetime,
-              decoration: InputDecoration(
-                labelText: '有效期',
-                hintText: '例如 2027-06-30',
-                errorText: errorText,
-              ),
-            ),
-            actions: <Widget>[
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('取消'),
-              ),
-              FilledButton(
-                onPressed: () {
-                  final parsed = _parseInputDate(controller.text);
-                  if (parsed == null) {
-                    setDialogState(() {
-                      errorText = '请输入 YYYY-MM-DD 格式的日期';
-                    });
-                    return;
-                  }
-                  Navigator.of(dialogContext).pop(parsed);
-                },
-                child: const Text('保存'),
-              ),
-            ],
-          ),
-        );
-      },
+      builder: (dialogContext) => _ExpiryDateCorrectionDialog(
+        initialValue: _formatInputDate(widget.batch.expiresOn),
+      ),
     );
-    controller.dispose();
     if (expiryDate == null || widget.onCorrect == null || !mounted) return;
 
     setState(() => _isSaving = true);
@@ -323,6 +285,70 @@ class _CorrectExpiryActionState extends State<_CorrectExpiryAction> {
     if (normalized != trimmed) return null;
     return DateTime(parsed.year, parsed.month, parsed.day);
   }
+}
+
+class _ExpiryDateCorrectionDialog extends StatefulWidget {
+  const _ExpiryDateCorrectionDialog({required this.initialValue});
+
+  final String initialValue;
+
+  @override
+  State<_ExpiryDateCorrectionDialog> createState() =>
+      _ExpiryDateCorrectionDialogState();
+}
+
+class _ExpiryDateCorrectionDialogState
+    extends State<_ExpiryDateCorrectionDialog> {
+  late final TextEditingController _controller;
+  String? _errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialValue);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final parsed = _CorrectExpiryActionState._parseInputDate(_controller.text);
+    if (parsed == null) {
+      setState(() {
+        _errorText = '请输入 YYYY-MM-DD 格式的日期';
+      });
+      return;
+    }
+    Navigator.of(context).pop(parsed);
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: const Text('修正有效期'),
+        content: TextField(
+          key: const Key('medicine-expiry-date-input'),
+          controller: _controller,
+          keyboardType: TextInputType.datetime,
+          decoration: InputDecoration(
+            labelText: '有效期',
+            hintText: '例如 2027-06-30',
+            errorText: _errorText,
+          ),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: _save,
+            child: const Text('保存'),
+          ),
+        ],
+      );
 }
 
 class _DeleteBatchActionState extends State<_DeleteBatchAction> {

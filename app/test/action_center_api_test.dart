@@ -33,8 +33,11 @@ http.Response jsonResponse(int status, Object body) => http.Response(
     );
 
 void main() {
-  test('marks a medication occurrence as taken through the verified action', () async {
-    final client = RecordingClient([jsonResponse(200, {'status': 'ok'})]);
+  test('marks a medication occurrence as taken through the verified action',
+      () async {
+    final client = RecordingClient([
+      jsonResponse(200, {'status': 'ok'})
+    ]);
     final api = ActionCenterApi(baseUrl: 'https://api.invalid', client: client);
 
     await api.markMedicationTaken('occurrence-1');
@@ -49,8 +52,11 @@ void main() {
     expect(jsonDecode(client.requestBodies.single), {'action': 'taken'});
   });
 
-  test('handles an inventory batch expiry through the verified action', () async {
-    final client = RecordingClient([jsonResponse(200, {'status': 'ok'})]);
+  test('handles an inventory batch expiry through the verified action',
+      () async {
+    final client = RecordingClient([
+      jsonResponse(200, {'status': 'ok'})
+    ]);
     final api = ActionCenterApi(baseUrl: 'https://api.invalid', client: client);
 
     await api.handleExpiryBatch('batch-1');
@@ -63,7 +69,8 @@ void main() {
     expect(jsonDecode(client.requestBodies.single), {'action': 'handled'});
   });
 
-  test('throws a stable exception when a verified action is rejected', () async {
+  test('throws a stable exception when a verified action is rejected',
+      () async {
     final api = ActionCenterApi(
       baseUrl: 'https://api.invalid',
       client: RecordingClient([

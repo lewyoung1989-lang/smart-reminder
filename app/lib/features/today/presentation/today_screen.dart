@@ -198,7 +198,8 @@ class _TodayScreenState extends State<TodayScreen> {
               for (final item in decisions)
                 _DecisionRow(
                   item: item,
-                  onOpen: _openAttention,
+                  onOpen:
+                      widget.onOpenAttention == null ? null : _openAttention,
                 ),
             ],
           ),

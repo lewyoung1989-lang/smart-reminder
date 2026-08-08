@@ -39,6 +39,7 @@ class AppShell extends StatefulWidget {
     this.captureAvailability = MedicineCaptureAvailability.unavailable,
     this.onOpenSystemSettings,
     this.actionCenterActions,
+    this.onCorrectBatchExpiry,
     super.key,
   });
 
@@ -63,6 +64,8 @@ class AppShell extends StatefulWidget {
   final MedicineCaptureAvailability captureAvailability;
   final VoidCallback? onOpenSystemSettings;
   final ActionCenterActions? actionCenterActions;
+  final Future<void> Function(MedicineBatch batch, DateTime expiryDate)?
+      onCorrectBatchExpiry;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -215,6 +218,7 @@ class _AppShellState extends State<AppShell> {
           captureAvailability: widget.captureAvailability,
           onCapture: widget.onCaptureMedicine,
           onOpenSystemSettings: widget.onOpenSystemSettings,
+          onCorrectBatchExpiry: widget.onCorrectBatchExpiry,
           onOpenSettings: _openSettings,
         ),
       ),

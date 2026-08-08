@@ -297,17 +297,15 @@ class _SmartReminderAppState extends State<SmartReminderApp>
   }
 
   MedicineCaptureAvailability get _medicineCaptureAvailability =>
-      !_medicineOcrEnabled
-          ? MedicineCaptureAvailability.unavailable
-          : switch (_cameraPermissionState) {
-              CameraPermissionState.ready => MedicineCaptureAvailability.ready,
-              CameraPermissionState.denied =>
-                MedicineCaptureAvailability.denied,
-              CameraPermissionState.permanentlyDenied =>
-                MedicineCaptureAvailability.permanentlyDenied,
-              CameraPermissionState.unavailable =>
-                MedicineCaptureAvailability.unavailable,
-            };
+      switch (_cameraPermissionState) {
+        CameraPermissionState.permanentlyDenied =>
+          MedicineCaptureAvailability.permanentlyDenied,
+        CameraPermissionState.ready when _medicineOcrEnabled =>
+          MedicineCaptureAvailability.ready,
+        CameraPermissionState.denied when _medicineOcrEnabled =>
+          MedicineCaptureAvailability.denied,
+        _ => MedicineCaptureAvailability.unavailable,
+      };
 
   Future<void> _openReminderManager() async {
     final navigator = _navigatorKey.currentState;

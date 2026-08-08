@@ -8,7 +8,7 @@ from apps.workflows.models import NotificationOutbox
 from ..test_runtime_models import create_workflow_run
 
 
-NOW = datetime(2026, 8, 8, 9, 30, tzinfo=datetime_timezone.utc)
+NOW = datetime(2099, 8, 8, 9, 30, tzinfo=datetime_timezone.utc)
 
 
 class RecordingPublisher:

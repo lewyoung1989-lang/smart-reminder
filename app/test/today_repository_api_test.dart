@@ -30,7 +30,8 @@ http.Response jsonResponse(int status, Object body) => http.Response(
     );
 
 void main() {
-  test('loads action center decisions and upcoming timeline from backend', () async {
+  test('loads action center decisions and upcoming timeline from backend',
+      () async {
     final client = RecordingClient([
       jsonResponse(200, {
         'need_decision': {
@@ -98,10 +99,12 @@ void main() {
       snapshot.decisions.last.actionTarget?.resource,
       'medication_occurrence',
     );
-    expect(snapshot.decisions.last.dueAt, DateTime.parse('2026-08-08T08:00:00+08:00'));
+    expect(snapshot.decisions.last.dueAt,
+        DateTime.parse('2026-08-08T08:00:00+08:00'));
     expect(snapshot.timeline.single.id, 'departure-1');
     expect(snapshot.timeline.single.status, TimelineStatus.upcoming);
-    expect(snapshot.timeline.single.scheduledAt, DateTime.parse('2026-08-08T17:10:00+08:00'));
+    expect(snapshot.timeline.single.scheduledAt,
+        DateTime.parse('2026-08-08T17:10:00+08:00'));
   });
 
   test('throws a stable exception for action center server errors', () async {

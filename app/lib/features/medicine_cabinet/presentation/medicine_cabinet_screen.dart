@@ -285,9 +285,8 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
   }
 
   Future<void> Function(MedicineBatch batch, DateTime expiryDate)?
-      get _correctExpiryCallback => widget.onCorrectBatchExpiry == null
-          ? null
-          : _correctBatchExpiry;
+      get _correctExpiryCallback =>
+          widget.onCorrectBatchExpiry == null ? null : _correctBatchExpiry;
 
   Future<void> _capture() async {
     final capture = widget.onCapture;

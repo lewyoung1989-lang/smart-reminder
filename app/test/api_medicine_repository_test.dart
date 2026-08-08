@@ -187,6 +187,13 @@ class _InventorySource implements MedicineCabinetDataSource {
       );
 
   @override
+  Future<InventoryBatch> correctExpiryDate(
+    String batchId, {
+    required DateTime expiryDate,
+  }) =>
+      Future.error(UnsupportedError('unused'));
+
+  @override
   Future<InventoryBatchPage> listBatches({
     String query = '',
     Uri? pageUrl,
