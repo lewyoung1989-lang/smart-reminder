@@ -22,6 +22,7 @@ urlpatterns = [
         WorkflowDraftConfirmView.as_view(),
         name="workflow-draft-confirm",
     ),
+    path("api/v1/", include("apps.workflows.api.urls")),
     path("api/v1/auth/", include("apps.accounts.api.urls")),
     path(
         "api/v1/reminder-drafts",
