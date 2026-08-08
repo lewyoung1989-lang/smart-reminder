@@ -496,7 +496,9 @@ void main() {
         FakeTodayRepository.success(),
         surfaceSize: const Size(800, 1200),
         onOpenSettings: () => settingsCalls += 1,
-        onOpenAttention: (item) => openedAttention = item,
+        onOpenAttention: (item) async {
+          openedAttention = item;
+        },
         onOpenTimeline: (item) => openedTimeline = item,
       );
       await tester.pumpAndSettle();
@@ -508,6 +510,34 @@ void main() {
       expect(settingsCalls, 1);
       expect(openedAttention?.id, 'demo-car-wash');
       expect(openedTimeline?.id, 'morning-medication');
+    });
+
+    testWidgets('reloads today content after a decision action completes', (
+      tester,
+    ) async {
+      final repository = _SequenceTodayRepository([
+        _snapshotWithTitle('需要记录服药'),
+        TodaySnapshot(decisions: const [], timeline: const []),
+      ]);
+      final completedActions = <String>[];
+      await pumpTodayScreen(
+        tester,
+        repository,
+        surfaceSize: const Size(800, 1200),
+        onOpenAttention: (item) async {
+          completedActions.add(item.id);
+        },
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('需要记录服药'), findsOneWidget);
+      await tester.tap(find.widgetWithText(FilledButton, '确认'));
+      await tester.pumpAndSettle();
+
+      expect(completedActions, ['需要记录服药']);
+      expect(repository.calls, 2);
+      expect(find.text('需要记录服药'), findsNothing);
+      expect(find.text('今天没有待处理事项'), findsOneWidget);
     });
 
     testWidgets('does not overflow at narrow width and 200 percent text scale',
@@ -538,7 +568,7 @@ Future<void> pumpTodayScreen(
   ThemeData? theme,
   Key? screenKey,
   VoidCallback? onOpenSettings,
-  ValueChanged<AttentionItem>? onOpenAttention,
+  AttentionActionCallback? onOpenAttention,
   ValueChanged<TimelineItem>? onOpenTimeline,
 }) async {
   tester.view.devicePixelRatio = 1;
@@ -643,5 +673,19 @@ class _RetryTodayRepository implements TodayRepository {
     calls += 1;
     if (calls == 1) return Future<TodaySnapshot>.error(StateError('failed'));
     return Future<TodaySnapshot>.value(_snapshot());
+  }
+}
+
+class _SequenceTodayRepository implements TodayRepository {
+  _SequenceTodayRepository(this.snapshots);
+
+  final List<TodaySnapshot> snapshots;
+  var calls = 0;
+
+  @override
+  Future<TodaySnapshot> load() async {
+    final index = calls;
+    calls += 1;
+    return snapshots[index];
   }
 }

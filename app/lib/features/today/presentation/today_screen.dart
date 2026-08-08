@@ -11,6 +11,8 @@ import '../../../ui/components/app_status_banner.dart';
 import '../data/today_repository.dart';
 import '../domain/today_models.dart';
 
+typedef AttentionActionCallback = Future<void> Function(AttentionItem item);
+
 class TodayScreen extends StatefulWidget {
   const TodayScreen({
     required this.repository,
@@ -26,7 +28,7 @@ class TodayScreen extends StatefulWidget {
   final DateTime? now;
   final VoidCallback? onOpenSettings;
   final VoidCallback? onOpenReminderManager;
-  final ValueChanged<AttentionItem>? onOpenAttention;
+  final AttentionActionCallback? onOpenAttention;
   final ValueChanged<TimelineItem>? onOpenTimeline;
 
   @override
@@ -76,6 +78,13 @@ class _TodayScreenState extends State<TodayScreen> {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  Future<void> _openAttention(AttentionItem item) async {
+    final callback = widget.onOpenAttention;
+    if (callback == null) return;
+    await callback(item);
+    await _load();
   }
 
   @override
@@ -189,7 +198,7 @@ class _TodayScreenState extends State<TodayScreen> {
               for (final item in decisions)
                 _DecisionRow(
                   item: item,
-                  onOpen: widget.onOpenAttention,
+                  onOpen: _openAttention,
                 ),
             ],
           ),
@@ -270,7 +279,7 @@ class _DecisionRow extends StatelessWidget {
   const _DecisionRow({required this.item, this.onOpen});
 
   final AttentionItem item;
-  final ValueChanged<AttentionItem>? onOpen;
+  final AttentionActionCallback? onOpen;
 
   @override
   Widget build(BuildContext context) {

@@ -6,7 +6,9 @@ import 'package:smart_reminder_app/features/auth/domain/auth_models.dart';
 import 'package:smart_reminder_app/features/medicine_cabinet/data/medicine_repository.dart';
 import 'package:smart_reminder_app/features/medicine_cabinet/domain/medicine_models.dart';
 import 'package:smart_reminder_app/features/plans/data/plan_repository.dart';
+import 'package:smart_reminder_app/features/today/data/action_center_api.dart';
 import 'package:smart_reminder_app/features/today/data/today_repository.dart';
+import 'package:smart_reminder_app/features/today/domain/today_models.dart';
 
 void main() {
   testWidgets('uses redesigned destinations and opens account settings',
@@ -170,6 +172,59 @@ void main() {
     expect(logoutCalls, 1);
     expect(find.text('设置'), findsNothing);
   });
+
+  testWidgets('dispatches today medication decisions to verified actions',
+      (tester) async {
+    final todayRepository = _SequenceTodayRepository([
+      TodaySnapshot(
+        decisions: <AttentionItem>[
+          AttentionItem(
+            id: 'attention-1',
+            title: '服用布洛芬',
+            reason: '已到服药时间，请确认是否已服用',
+            dueAt: DateTime(2026, 8, 8, 8),
+            kind: AttentionKind.confirmation,
+            actionLabel: '记录',
+            actionTarget: const ActionTarget(
+              resource: 'medication_occurrence',
+              id: 'occurrence-1',
+            ),
+          ),
+        ],
+        timeline: const <TimelineItem>[],
+      ),
+      TodaySnapshot(decisions: const [], timeline: const []),
+    ]);
+    final actions = _RecordingActionCenterActions();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppShell(
+          todayRepository: todayRepository,
+          planRepository: const UnavailablePlanRepository(),
+          medicineRepository: _UnavailableMedicineRepository(),
+          user: const AuthUser(
+            id: 'user-1',
+            phoneMasked: '138****8000',
+            phoneVerified: true,
+          ),
+          themeMode: ThemeMode.system,
+          onThemeModeChanged: (_) {},
+          onChangePassword: (_, __, ___) async {},
+          onLogout: () async {},
+          actionCenterActions: actions,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FilledButton, '记录'));
+    await tester.pumpAndSettle();
+
+    expect(actions.takenOccurrences, ['occurrence-1']);
+    expect(todayRepository.calls, 2);
+    expect(find.text('服用布洛芬'), findsNothing);
+    expect(find.text('已记录服药'), findsOneWidget);
+  });
 }
 
 class _UnavailableMedicineRepository implements MedicineRepository {
@@ -181,4 +236,33 @@ class _UnavailableMedicineRepository implements MedicineRepository {
   @override
   Future<MedicineDetail> getById(String id) =>
       Future.error(StateError('No medicine available'));
+}
+
+class _SequenceTodayRepository implements TodayRepository {
+  _SequenceTodayRepository(this.snapshots);
+
+  final List<TodaySnapshot> snapshots;
+  var calls = 0;
+
+  @override
+  Future<TodaySnapshot> load() async {
+    final index = calls;
+    calls += 1;
+    return snapshots[index];
+  }
+}
+
+class _RecordingActionCenterActions implements ActionCenterActions {
+  final takenOccurrences = <String>[];
+  final handledBatches = <String>[];
+
+  @override
+  Future<void> markMedicationTaken(String occurrenceId) async {
+    takenOccurrences.add(occurrenceId);
+  }
+
+  @override
+  Future<void> handleExpiryBatch(String batchId) async {
+    handledBatches.add(batchId);
+  }
 }

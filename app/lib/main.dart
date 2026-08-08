@@ -25,6 +25,7 @@ import 'features/reminder_drafts/data/reminder_draft_api.dart';
 import 'features/reminder_drafts/presentation/reminder_composer_screen.dart';
 import 'features/reminders/data/reminder_api.dart';
 import 'features/reminders/presentation/reminder_home_screen.dart';
+import 'features/today/data/action_center_api.dart';
 import 'features/today/data/today_repository.dart';
 import 'features/voice_input/data/audio_recorder_gateway.dart';
 import 'features/voice_input/data/voice_transcription_api.dart';
@@ -78,6 +79,7 @@ class _SmartReminderAppState extends State<SmartReminderApp>
   late final ApiMedicineRepository _medicineRepository;
   late final MedicineOcrApi _medicineOcrApi;
   late final ApiTodayRepository _todayRepository;
+  late final ActionCenterApi _actionCenterApi;
   late final TokenStore _tokenStore;
   late final AuthApi _refreshApi;
   late final AuthenticatedClient _authenticatedClient;
@@ -144,6 +146,10 @@ class _SmartReminderAppState extends State<SmartReminderApp>
       client: _authenticatedClient,
     );
     _todayRepository = ApiTodayRepository(
+      baseUrl: widget.config.apiBaseUrl,
+      client: _authenticatedClient,
+    );
+    _actionCenterApi = ActionCenterApi(
       baseUrl: widget.config.apiBaseUrl,
       client: _authenticatedClient,
     );
@@ -217,6 +223,7 @@ class _SmartReminderAppState extends State<SmartReminderApp>
     _reminderDraftApi.close();
     _reminderApi.close();
     _todayRepository.close();
+    _actionCenterApi.close();
     _medicineCabinetApi.close();
     _medicineOcrApi.close();
     _authController.removeListener(_authChanged);
@@ -380,6 +387,7 @@ class _SmartReminderAppState extends State<SmartReminderApp>
             onCaptureMedicine: _openMedicineOcr,
             captureAvailability: _medicineCaptureAvailability,
             onOpenSystemSettings: _openCameraSettings,
+            actionCenterActions: _actionCenterApi,
           ),
       };
 }

@@ -13,7 +13,9 @@ import '../../features/quick_create/presentation/quick_create_sheet.dart';
 import '../../features/reminder_drafts/application/reminder_creation_service.dart';
 import '../../features/reminder_drafts/domain/reminder_draft.dart';
 import '../../features/reminder_drafts/presentation/reminder_draft_screen.dart';
+import '../../features/today/data/action_center_api.dart';
 import '../../features/today/data/today_repository.dart';
+import '../../features/today/domain/today_models.dart';
 import '../../features/today/presentation/today_screen.dart';
 import '../settings/settings_screen.dart';
 import '../theme/app_spacing.dart';
@@ -36,6 +38,7 @@ class AppShell extends StatefulWidget {
     this.onCaptureMedicine,
     this.captureAvailability = MedicineCaptureAvailability.unavailable,
     this.onOpenSystemSettings,
+    this.actionCenterActions,
     super.key,
   });
 
@@ -59,6 +62,7 @@ class AppShell extends StatefulWidget {
   final Future<bool> Function()? onCaptureMedicine;
   final MedicineCaptureAvailability captureAvailability;
   final VoidCallback? onOpenSystemSettings;
+  final ActionCenterActions? actionCenterActions;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -151,6 +155,37 @@ class _AppShellState extends State<AppShell> {
     }
   }
 
+  Future<void> _handleAttentionAction(AttentionItem item) async {
+    final actions = widget.actionCenterActions;
+    final target = item.actionTarget;
+    if (actions == null || target == null) {
+      _showSnackBar('这个动作暂时只能查看，稍后会接入处理入口');
+      return;
+    }
+
+    try {
+      if (target.resource == 'medication_occurrence') {
+        await actions.markMedicationTaken(target.id);
+        _showSnackBar('已记录服药');
+      } else if (target.resource == 'inventory_batch') {
+        await actions.handleExpiryBatch(target.id);
+        _showSnackBar('已处理有效期提醒');
+      } else {
+        _showSnackBar('暂不支持直接处理这个事项');
+      }
+    } catch (_) {
+      _showSnackBar('处理失败，请稍后重试');
+      rethrow;
+    }
+  }
+
+  void _showSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final compact =
@@ -162,6 +197,7 @@ class _AppShellState extends State<AppShell> {
           repository: widget.todayRepository,
           onOpenReminderManager: widget.onOpenReminderManager,
           onOpenSettings: _openSettings,
+          onOpenAttention: _handleAttentionAction,
         ),
       ),
       KeyedSubtree(
