@@ -8,6 +8,7 @@ from apps.medicines.services.expiry_alerts import refresh_expiry_alerts
 from apps.reminders.models import ReminderRule
 from apps.workflows.domain.schemas import WorkflowSpec
 from apps.workflows.models import NotificationOutbox, WorkflowRun
+from apps.workflows.services.smart_departure import build_departure_payload
 
 
 def _enqueue_outbox(outbox_id):
@@ -163,50 +164,8 @@ def _dispatch_medicine_expiry_rule(rule, workflow, now):
     return dispatched
 
 
-def _node_config(workflow, *, node_id, node_type):
-    for node in workflow.nodes:
-        if node.id == node_id and node.type == node_type:
-            return node.config
-    raise ValueError(f"workflow is missing {node_id}")
-
-
-def _smart_departure_payload(workflow):
-    trigger = _node_config(
-        workflow,
-        node_id="before-arrival",
-        node_type="trigger.before_arrival",
-    )
-    route = _node_config(
-        workflow,
-        node_id="route-eta",
-        node_type="source.route_eta",
-    )
-    arrival_time = datetime.fromisoformat(trigger["arrival_time"])
-    static_duration_minutes = 45
-    lead_time_minutes = int(trigger["lead_time_minutes"])
-    departure_at = arrival_time - timedelta(
-        minutes=static_duration_minutes + lead_time_minutes
-    )
-    return {
-        "kind": "smart_departure",
-        "arrival_time": arrival_time.isoformat(),
-        "destination_text": route["destination_text"],
-        "travel_mode": route["travel_mode"],
-        "departure_at": departure_at.astimezone(datetime_timezone.utc).isoformat(),
-        "route": {
-            "status": "fallback_static",
-            "duration_minutes": static_duration_minutes,
-            "source": "route.last_success_or_static",
-        },
-        "weather": {
-            "status": "unavailable",
-            "source": "weather.unavailable",
-        },
-    }
-
-
 def _dispatch_smart_departure_rule(rule, workflow, scheduled_for):
-    payload = _smart_departure_payload(workflow)
+    payload = build_departure_payload(workflow)
     run, _ = WorkflowRun.objects.get_or_create(
         workflow=rule,
         idempotency_key=f"rule:{rule.id}:{scheduled_for.isoformat()}:scheduled",
