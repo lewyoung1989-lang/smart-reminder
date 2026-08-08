@@ -13,9 +13,14 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.medicines.models import ExpiryAlertState, ExpiryBatchAction, InventoryBatch
+from apps.medicines.services.expiry_alerts import refresh_expiry_alerts
 
 from .pagination import InventoryBatchCursorPagination
-from .serializers import ExpiryBatchActionSerializer, InventoryBatchSerializer
+from .serializers import (
+    ExpiryBatchActionSerializer,
+    ExpiryDateCorrectionSerializer,
+    InventoryBatchSerializer,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -93,3 +98,63 @@ class InventoryBatchExpiryActionView(APIView):
         return Response(
             {"batch_id": str(batch.id), "action": action}, status=status.HTTP_200_OK
         )
+
+
+class InventoryBatchExpiryDateCorrectionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, pk):
+        serializer = ExpiryDateCorrectionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        changes = serializer.validated_data
+
+        with transaction.atomic():
+            try:
+                batch = (
+                    InventoryBatch.objects.select_for_update()
+                    .select_related("medicine")
+                    .get(id=pk, medicine__owner=request.user)
+                )
+            except InventoryBatch.DoesNotExist:
+                return Response(
+                    {"detail": "未找到库存批次"}, status=status.HTTP_404_NOT_FOUND
+                )
+
+            original = {
+                "expiry_date": batch.expiry_date,
+                "opened_at": batch.opened_at,
+                "opened_shelf_life_days": batch.opened_shelf_life_days,
+            }
+            for field, value in changes.items():
+                setattr(batch, field, value)
+
+            if batch.production_date and batch.expiry_date and batch.expiry_date < batch.production_date:
+                raise ValidationError({"expiry_date": ["有效期不能早于生产日期。"]})
+            batch.full_clean()
+
+            changed_fields = [
+                field for field, old_value in original.items() if getattr(batch, field) != old_value
+            ]
+            if changed_fields:
+                batch.save(update_fields=changed_fields)
+                refresh_expiry_alerts(batch=batch, today=timezone.localdate())
+                audit = ExpiryBatchAction(
+                    batch=batch,
+                    user=request.user,
+                    action=ExpiryBatchAction.Action.CORRECTED,
+                    change_json={
+                        field: {
+                            "old": _json_value(original[field]),
+                            "new": _json_value(getattr(batch, field)),
+                        }
+                        for field in changed_fields
+                    },
+                )
+                audit.full_clean()
+                audit.save()
+
+        return Response(InventoryBatchSerializer(batch).data, status=status.HTTP_200_OK)
+
+
+def _json_value(value):
+    return value.isoformat() if hasattr(value, "isoformat") else value

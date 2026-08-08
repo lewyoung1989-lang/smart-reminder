@@ -12,6 +12,21 @@ class ExpiryBatchActionSerializer(serializers.Serializer):
     action = serializers.ChoiceField(choices=ExpiryBatchAction.Action.choices)
 
 
+class ExpiryDateCorrectionSerializer(serializers.Serializer):
+    expiry_date = serializers.DateField(required=False, allow_null=True)
+    opened_at = serializers.DateField(required=False, allow_null=True)
+    opened_shelf_life_days = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        min_value=1,
+    )
+
+    def validate(self, attrs):
+        if not attrs:
+            raise serializers.ValidationError({"detail": "至少需要提交一个修正字段。"})
+        return attrs
+
+
 class InventoryBatchSerializer(serializers.ModelSerializer):
     medicine_name = serializers.CharField(source="medicine.name")
     specification = serializers.CharField(source="medicine.specification")

@@ -105,6 +105,7 @@ class ExpiryBatchAction(models.Model):
     class Action(models.TextChoices):
         HANDLED = "handled", "Handled"
         USED_UP = "used_up", "Used up"
+        CORRECTED = "corrected", "Corrected"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     batch = models.ForeignKey(
@@ -114,4 +115,5 @@ class ExpiryBatchAction(models.Model):
     )
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     action = models.CharField(max_length=16, choices=Action)
+    change_json = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
