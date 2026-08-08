@@ -50,6 +50,7 @@ class TrustGrant(models.Model):
     template_major_version = models.PositiveIntegerField()
     scope_json = models.JSONField(default=dict)
     status = models.CharField(max_length=32, choices=Status, default=Status.ACTIVE)
+    expires_at = models.DateTimeField(null=True, blank=True)
     revoked_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
