@@ -91,6 +91,7 @@ INSTALLED_APPS = [
     "apps.workflows.apps.WorkflowsConfig",
     "apps.voice",
     "apps.medicines.apps.MedicinesConfig",
+    "apps.medication.apps.MedicationConfig",
     "apps.ocr.apps.OCRConfig",
 ]
 
