@@ -15,7 +15,7 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
-  flutter_secure_storage: d33dac7ae2ea08509be337e775f6b59f1ff45f12
+  flutter_secure_storage: 1ed9476fba7e7a782b22888f956cce43e2c62f13
 
 PODFILE CHECKSUM: bf71101f258407b2a4a5543273bbbfc1157aed04
 
