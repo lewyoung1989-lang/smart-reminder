@@ -1,10 +1,11 @@
-from datetime import datetime, timedelta, timezone as datetime_timezone
+from datetime import date, datetime, timedelta, timezone as datetime_timezone
 from zoneinfo import ZoneInfo
 
 import pytest
 from django.conf import settings
 from django.utils import timezone
 
+from apps.medicines.models import ExpiryAlertState, InventoryBatch, MedicineItem
 from apps.reminders.models import ReminderRule
 from apps.workflows.domain.schemas import TaskSpec
 from apps.workflows.services.compiler import WorkflowCompiler
@@ -196,20 +197,69 @@ def test_daily_medication_workflow_dispatches_consecutive_occurrences(user, mock
 
 
 @pytest.mark.django_db
-def test_medicine_expiry_workflow_is_single_threshold_run(user, mocker):
+def test_medicine_expiry_workflow_reads_inventory_deadline_and_creates_outbox(
+    user, mocker
+):
     from apps.workflows.services.dispatcher import dispatch_due_workflows
 
+    medicine = MedicineItem.objects.create(owner=user, name="滴眼液")
+    batch = InventoryBatch.objects.create(
+        medicine=medicine,
+        expiry_date=NOW.date() + timedelta(days=30),
+    )
     rule = create_compiled_rule(
         user,
         suffix="daily-expiry",
-        slots={"medicine_id": "medicine-1", "threshold_days": 30},
+        slots={"medicine_id": str(medicine.id), "threshold_days": 30},
+    )
+    mocker.patch("apps.workflows.tasks.enqueue_outbox.delay")
+
+    dispatch_due_workflows(NOW, batch_size=10)
+
+    run = WorkflowRun.objects.get(workflow=rule)
+    outbox = NotificationOutbox.objects.get(workflow_run=run)
+    rule.refresh_from_db()
+    alert = ExpiryAlertState.objects.get(batch=batch, threshold_days=30)
+    assert alert.status == ExpiryAlertState.Status.ACTIVE
+    assert alert.threshold_days == 30
+    assert run.idempotency_key == (
+        f"rule:{rule.id}:batch:{batch.id}:deadline:{batch.expiry_date.isoformat()}:"
+        "threshold:30"
+    )
+    assert run.result_json == {
+        "kind": "medicine_expiry",
+        "batch_id": str(batch.id),
+        "medicine_id": str(medicine.id),
+        "deadline": batch.expiry_date.isoformat(),
+        "threshold_days": 30,
+    }
+    assert outbox.workflow_run == run
+    assert outbox.payload_json == run.result_json
+    assert rule.next_run_at is None
+
+
+@pytest.mark.django_db
+def test_medicine_expiry_workflow_recomputes_stale_due_time_from_inventory_deadline(
+    user, mocker
+):
+    from apps.workflows.services.dispatcher import dispatch_due_workflows
+
+    medicine = MedicineItem.objects.create(owner=user, name="滴眼液")
+    InventoryBatch.objects.create(medicine=medicine, expiry_date=date(2026, 12, 31))
+    rule = create_compiled_rule(
+        user,
+        suffix="future-expiry",
+        slots={"medicine_id": str(medicine.id), "threshold_days": 30},
+        next_run_at=NOW,
     )
     mocker.patch("apps.workflows.tasks.enqueue_outbox.delay")
 
     dispatch_due_workflows(NOW, batch_size=10)
 
     rule.refresh_from_db()
-    assert rule.next_run_at is None
+    assert WorkflowRun.objects.filter(workflow=rule).count() == 0
+    assert NotificationOutbox.objects.filter(workflow_run__workflow=rule).count() == 0
+    assert rule.next_run_at == datetime(2026, 12, 1, tzinfo=datetime_timezone.utc)
 
 
 @pytest.mark.django_db
