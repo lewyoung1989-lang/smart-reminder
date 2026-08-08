@@ -77,6 +77,7 @@ class _SmartReminderAppState extends State<SmartReminderApp>
   late final MedicineCabinetApi _medicineCabinetApi;
   late final ApiMedicineRepository _medicineRepository;
   late final MedicineOcrApi _medicineOcrApi;
+  late final ApiTodayRepository _todayRepository;
   late final TokenStore _tokenStore;
   late final AuthApi _refreshApi;
   late final AuthenticatedClient _authenticatedClient;
@@ -139,6 +140,10 @@ class _SmartReminderAppState extends State<SmartReminderApp>
     );
     _medicineRepository = ApiMedicineRepository(_medicineCabinetApi);
     _medicineOcrApi = MedicineOcrApi(
+      baseUrl: widget.config.apiBaseUrl,
+      client: _authenticatedClient,
+    );
+    _todayRepository = ApiTodayRepository(
       baseUrl: widget.config.apiBaseUrl,
       client: _authenticatedClient,
     );
@@ -211,6 +216,7 @@ class _SmartReminderAppState extends State<SmartReminderApp>
     _voiceApi.close();
     _reminderDraftApi.close();
     _reminderApi.close();
+    _todayRepository.close();
     _medicineCabinetApi.close();
     _medicineOcrApi.close();
     _authController.removeListener(_authChanged);
@@ -351,7 +357,7 @@ class _SmartReminderAppState extends State<SmartReminderApp>
             ),
           ),
         AuthStatus.authenticated => AppShell(
-            todayRepository: const UnavailableTodayRepository(),
+            todayRepository: _todayRepository,
             planRepository: const UnavailablePlanRepository(),
             medicineRepository: _medicineRepository,
             user: _authController.user!,
