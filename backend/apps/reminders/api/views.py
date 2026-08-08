@@ -174,7 +174,10 @@ class ReminderListView(APIView):
             )
 
         now = timezone.now()
-        queryset = ReminderRule.objects.filter(owner=request.user)
+        queryset = ReminderRule.objects.filter(
+            owner=request.user,
+            workflow_draft__isnull=True,
+        )
         if reminder_status == "pending":
             queryset = queryset.filter(
                 enabled=True,
@@ -217,6 +220,15 @@ class ReminderCancelView(APIView):
                 return Response(
                     {"detail": "未找到该提醒"},
                     status=status.HTTP_404_NOT_FOUND,
+                )
+
+            if rule.workflow_draft_id is not None:
+                return Response(
+                    {
+                        "code": "workflow_requires_workflow_api",
+                        "detail": "该工作流提醒不能通过旧提醒接口取消",
+                    },
+                    status=status.HTTP_409_CONFLICT,
                 )
 
             now = timezone.now()

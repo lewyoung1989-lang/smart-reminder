@@ -33,7 +33,7 @@ class ReminderRule(models.Model):
     schedule_json = models.JSONField()
     conditions_json = models.JSONField(default=dict)
     severity = models.CharField(max_length=32)
-    scheduled_at = models.DateTimeField(db_index=True)
+    scheduled_at = models.DateTimeField(db_index=True, null=True, blank=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
     enabled = models.BooleanField(default=True)
     template_key = models.CharField(max_length=128, null=True, blank=True)
@@ -48,5 +48,14 @@ class ReminderRule(models.Model):
         ReminderDraft,
         on_delete=models.PROTECT,
         related_name="confirmed_rule",
+        null=True,
+        blank=True,
+    )
+    workflow_draft = models.OneToOneField(
+        "workflows.WorkflowDraft",
+        on_delete=models.PROTECT,
+        related_name="confirmed_rule",
+        null=True,
+        blank=True,
     )
     created_at = models.DateTimeField(auto_now_add=True)

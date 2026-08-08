@@ -7,10 +7,21 @@ from apps.reminders.api.views import (
     ReminderListView,
     VoiceReminderDraftConfirmView,
 )
+from apps.workflows.api.views import WorkflowDraftConfirmView, WorkflowDraftListCreateView
 
 
 urlpatterns = [
     path("api/v1/health", health, name="health"),
+    path(
+        "api/v1/workflow-drafts",
+        WorkflowDraftListCreateView.as_view(),
+        name="workflow-draft-list",
+    ),
+    path(
+        "api/v1/workflow-drafts/<uuid:draft_id>/confirm",
+        WorkflowDraftConfirmView.as_view(),
+        name="workflow-draft-confirm",
+    ),
     path("api/v1/auth/", include("apps.accounts.api.urls")),
     path(
         "api/v1/reminder-drafts",
