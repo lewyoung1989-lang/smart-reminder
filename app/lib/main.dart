@@ -320,6 +320,8 @@ class _SmartReminderAppState extends State<SmartReminderApp>
           createReminder: (_) => ReminderComposerScreen(
             createDraft: _reminderDraftApi.createDraft,
             confirmDraft: _reminderDraftApi.confirmDraft,
+            confirmWorkflowDraft: _reminderDraftApi.confirmWorkflowDraft,
+            answerWorkflowDraft: _reminderDraftApi.answerWorkflowDraft,
             voiceInputController: _voiceInputController,
             notificationScheduler: widget.notificationScheduler,
           ),
@@ -379,6 +381,8 @@ class _SmartReminderAppState extends State<SmartReminderApp>
             onLogout: _authController.logout,
             onOpenReminderManager: _openReminderManager,
             createDraft: _reminderDraftApi.createDraft,
+            confirmWorkflowDraft: _reminderDraftApi.confirmWorkflowDraft,
+            answerWorkflowDraft: _reminderDraftApi.answerWorkflowDraft,
             reminderCreationService: _reminderCreationService,
             voiceInputController: _voiceInputController,
             onDeleteBatch: (batch) => _medicineCabinetApi.deleteBatch(batch.id),

@@ -2,31 +2,39 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:smart_reminder_app/features/quick_create/domain/quick_create_draft.dart';
 import 'package:smart_reminder_app/features/reminder_drafts/domain/reminder_draft.dart';
 import 'package:smart_reminder_app/features/reminder_drafts/presentation/reminder_composer_screen.dart';
 
 void main() {
-  ReminderDraft testDraft({List<String> ambiguities = const []}) {
-    return ReminderDraft(
-      id: 'draft-1',
-      title: '喝水',
-      scheduledAt: DateTime(2026, 8, 4, 10, 1),
-      timezone: 'Asia/Shanghai',
-      severity: ReminderSeverity.notification,
-      weatherMessage: null,
-      ambiguities: ambiguities,
-      parserSource: 'local',
+  QuickCreateDraft testDraft({List<String> ambiguities = const []}) {
+    return QuickCreateDraft.reminder(
+      reminder: ReminderDraft(
+        id: 'draft-1',
+        title: '喝水',
+        scheduledAt: DateTime(2026, 8, 4, 10, 1),
+        timezone: 'Asia/Shanghai',
+        severity: ReminderSeverity.notification,
+        weatherMessage: null,
+        ambiguities: ambiguities,
+        parserSource: 'local',
+      ),
     );
   }
 
   Widget testApp({
-    required Future<ReminderDraft> Function(String) createDraft,
+    required Future<QuickCreateDraft> Function(String) createDraft,
     Future<String> Function(String)? confirmDraft,
+    Future<String> Function(String)? confirmWorkflowDraft,
+    Future<WorkflowDraft> Function(String draftId, String answer)?
+        answerWorkflowDraft,
   }) {
     return MaterialApp(
       home: ReminderComposerScreen(
         createDraft: createDraft,
         confirmDraft: confirmDraft ?? (_) async => 'reminder-1',
+        confirmWorkflowDraft: confirmWorkflowDraft,
+        answerWorkflowDraft: answerWorkflowDraft,
         now: DateTime(2026, 8, 4, 10),
       ),
     );
@@ -57,7 +65,7 @@ void main() {
   });
 
   testWidgets('submit shows a stable loading state', (tester) async {
-    final completer = Completer<ReminderDraft>();
+    final completer = Completer<QuickCreateDraft>();
     await tester.pumpWidget(
       testApp(createDraft: (_) => completer.future),
     );
@@ -108,10 +116,18 @@ void main() {
     expect(find.text('缺少提醒时间'), findsOneWidget);
   });
 
-  testWidgets('Modify restores the original expression to quick create', (
+  testWidgets('Modify edits the expression on the confirmation page', (
     tester,
   ) async {
-    await tester.pumpWidget(testApp(createDraft: (_) async => testDraft()));
+    String? reparseText;
+    await tester.pumpWidget(
+      testApp(
+        createDraft: (text) async {
+          reparseText = text;
+          return testDraft();
+        },
+      ),
+    );
 
     await tester.enterText(find.byType(TextField), '明天九点提醒我喝水');
     await tester.pump();
@@ -120,12 +136,152 @@ void main() {
     await tester.tap(find.widgetWithText(OutlinedButton, '修改'));
     await tester.pumpAndSettle();
 
-    expect(
-      tester
-          .widget<TextField>(find.byKey(const Key('quick-create-input')))
-          .controller!
-          .text,
-      '明天九点提醒我喝水',
+    final input = find.byKey(const Key('reminder-reparse-input'));
+    expect(input, findsOneWidget);
+    expect(tester.widget<TextField>(input).controller!.text, '明天九点提醒我喝水');
+
+    await tester.enterText(input, '明天十点提醒我喝水');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('reminder-reparse-submit')));
+    await tester.pumpAndSettle();
+
+    expect(reparseText, '明天十点提醒我喝水');
+    expect(find.text('确认计划'), findsOneWidget);
+    expect(find.text('明天十点提醒我喝水'), findsOneWidget);
+  });
+
+  WorkflowDraft workflowDraft({
+    List<String> ambiguities = const [],
+    String policyDecision = 'needs_confirmation',
+  }) {
+    return WorkflowDraft(
+      id: 'workflow-draft-1',
+      title: '提醒草稿',
+      templateHint: 'medication_cycle',
+      slots: const {
+        'medicine_name': '降压药',
+        'frequency': 'daily',
+        'time_of_day': '09:00',
+      },
+      ambiguities: ambiguities,
+      policyDecision: policyDecision,
+      riskLevel: 'R2',
+      policyQuestion: null,
     );
+  }
+
+  testWidgets('workflow draft with clarification cannot be confirmed', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      testApp(
+        createDraft: (_) async => QuickCreateDraft.workflow(
+          workflow: workflowDraft(
+            ambiguities: const ['请补充药品剂量和服药周期'],
+            policyDecision: 'needs_clarification',
+          ),
+        ),
+      ),
+    );
+
+    await tester.enterText(find.byType(TextField), '每天早上9点吃药');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, '继续'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('周期用药'), findsWidgets);
+    expect(find.textContaining('请补充药品剂量和服药周期'), findsOneWidget);
+    final confirm = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, '确认'),
+    );
+    expect(confirm.onPressed, isNull);
+  });
+
+  testWidgets('confirmable workflow draft confirms through workflow API', (
+    tester,
+  ) async {
+    String? confirmedId;
+    await tester.pumpWidget(
+      testApp(
+        createDraft: (_) async => QuickCreateDraft.workflow(
+          workflow: workflowDraft(),
+        ),
+        confirmWorkflowDraft: (id) async {
+          confirmedId = id;
+          return 'rule-1';
+        },
+      ),
+    );
+
+    await tester.enterText(find.byType(TextField), '每天早上9点吃药');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, '继续'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('降压药'), findsOneWidget);
+    expect(find.text('每天'), findsOneWidget);
+    expect(find.text('R2（每次确认）'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, '确认'));
+    await tester.pumpAndSettle();
+
+    expect(confirmedId, 'workflow-draft-1');
+  });
+
+  testWidgets('answering a clarification refreshes the workflow draft', (
+    tester,
+  ) async {
+    String? answeredId;
+    String? answerText;
+    String? confirmedId;
+    await tester.pumpWidget(
+      testApp(
+        createDraft: (_) async => QuickCreateDraft.workflow(
+          workflow: workflowDraft(
+            ambiguities: const ['请补充药品剂量和服药周期'],
+            policyDecision: 'needs_clarification',
+          ),
+        ),
+        answerWorkflowDraft: (id, answer) async {
+          answeredId = id;
+          answerText = answer;
+          return workflowDraft();
+        },
+        confirmWorkflowDraft: (id) async {
+          confirmedId = id;
+          return 'rule-1';
+        },
+      ),
+    );
+
+    await tester.enterText(find.byType(TextField), '以后每天9点我吃药');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, '继续'));
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.byType(ListView), const Offset(0, -400));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('workflow-answer-input')), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const Key('workflow-answer-input')),
+      '吃阿莫西林1片',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('workflow-answer-submit')));
+    await tester.pumpAndSettle();
+
+    expect(answeredId, 'workflow-draft-1');
+    expect(answerText, '吃阿莫西林1片');
+    expect(find.textContaining('请补充药品剂量和服药周期'), findsNothing);
+    expect(find.byKey(const Key('workflow-answer-input')), findsNothing);
+    final confirm = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, '确认'),
+    );
+    expect(confirm.onPressed, isNotNull);
+
+    await tester.tap(find.widgetWithText(FilledButton, '确认'));
+    await tester.pumpAndSettle();
+
+    expect(confirmedId, 'workflow-draft-1');
   });
 }

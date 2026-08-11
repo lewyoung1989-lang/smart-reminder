@@ -10,6 +10,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.reminders.api.serializers import (
+    AnswerWorkflowDraftSerializer,
     ConfirmWorkflowDraftSerializer,
     CreateWorkflowDraftSerializer,
 )
@@ -95,6 +96,17 @@ def _response_for_draft(draft: WorkflowDraft) -> Response:
     )
 
 
+def _payload_for_draft(draft: WorkflowDraft) -> dict:
+    return {
+        "id": str(draft.id),
+        "status": draft.status,
+        "expires_at": draft.expires_at.isoformat(),
+        "task": draft.task_spec_json,
+        "workflow": draft.workflow_spec_json,
+        "policy": draft.policy_json,
+    }
+
+
 class WorkflowDraftListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -121,12 +133,117 @@ class WorkflowDraftListCreateView(APIView):
 
         draft = WorkflowDraft.objects.create(
             user=request.user,
+            source_text=serializer.validated_data["text"],
             task_spec_json=task.model_dump(mode="json"),
             workflow_spec_json=workflow_json,
             policy_json=policy_json,
             expires_at=now + timedelta(minutes=30),
         )
         return _response_for_draft(draft)
+
+
+class WorkflowDraftAnswerView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, draft_id):
+        serializer = AnswerWorkflowDraftSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        answer = serializer.validated_data["answer"]
+
+        with transaction.atomic():
+            try:
+                draft = WorkflowDraft.objects.select_for_update().get(
+                    id=draft_id, user=request.user
+                )
+            except WorkflowDraft.DoesNotExist:
+                return Response(
+                    {"detail": "未找到该工作流草稿"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            if draft.status == WorkflowDraft.Status.CONFIRMED:
+                return Response(
+                    {"code": "workflow_draft_confirmed"},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            now = timezone.now()
+            if draft.expires_at <= now:
+                draft.status = WorkflowDraft.Status.EXPIRED
+                draft.save(update_fields=["status"])
+                return Response(
+                    {
+                        "code": "workflow_draft_expired",
+                        "detail": "工作流草稿已过期",
+                    },
+                    status=status.HTTP_410_GONE,
+                )
+
+            if draft.clarification_rounds >= 2:
+                # The design allows at most three clarification rounds in a
+                # row; the initial draft already asked the first question.
+                return Response(
+                    {
+                        "code": "workflow_clarification_exhausted",
+                        "detail": "追问轮次已用完，请返回修改后重新创建",
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            merged_text = (
+                f"{draft.source_text}，{answer}" if draft.source_text else answer
+            )
+            task = WorkflowTaskParser().parse(
+                merged_text, now=now, timezone="Asia/Shanghai"
+            )
+            if task.template_hint is None:
+                return Response(
+                    {
+                        "code": "workflow_answer_invalid",
+                        "detail": "回答无法与原请求合并，请返回修改后重新创建",
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            if task.ambiguities:
+                draft.source_text = merged_text
+                draft.task_spec_json = task.model_dump(mode="json")
+                draft.workflow_spec_json = {}
+                draft.policy_json = _clarification_policy(task)
+                draft.clarification_rounds += 1
+                draft.save(
+                    update_fields=[
+                        "source_text",
+                        "task_spec_json",
+                        "workflow_spec_json",
+                        "policy_json",
+                        "clarification_rounds",
+                    ]
+                )
+                return Response(_payload_for_draft(draft), status=status.HTTP_200_OK)
+
+            try:
+                workflow = WorkflowCompiler().compile(task)
+            except WorkflowCompileError:
+                return Response(
+                    {"code": "workflow_needs_clarification"},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            draft.task_spec_json = task.model_dump(mode="json")
+            draft.workflow_spec_json = workflow.model_dump(mode="json")
+            draft.policy_json = _policy_json(
+                evaluate(request.user, task, workflow, now, WORKFLOW_SCOPE)
+            )
+            draft.status = WorkflowDraft.Status.PENDING_CONFIRMATION
+            draft.save(
+                update_fields=[
+                    "task_spec_json",
+                    "workflow_spec_json",
+                    "policy_json",
+                    "status",
+                ]
+            )
+            return Response(_payload_for_draft(draft), status=status.HTTP_200_OK)
 
 
 class WorkflowDraftConfirmView(APIView):

@@ -8,7 +8,7 @@ class VoiceDraftScreen extends StatelessWidget {
     required this.transcript,
     required this.draft,
     required this.onConfirm,
-    this.onEdit,
+    this.onReparse,
     this.now,
     super.key,
   });
@@ -16,7 +16,7 @@ class VoiceDraftScreen extends StatelessWidget {
   final String transcript;
   final ReminderDraft draft;
   final Future<void> Function() onConfirm;
-  final VoidCallback? onEdit;
+  final Future<void> Function(String text)? onReparse;
   final DateTime? now;
 
   @override
@@ -25,7 +25,7 @@ class VoiceDraftScreen extends StatelessWidget {
       sourceText: transcript,
       draft: draft,
       onConfirm: onConfirm,
-      onEdit: onEdit ?? () => Navigator.maybePop(context),
+      onReparse: onReparse ?? (_) async => Navigator.maybePop(context),
       now: now,
     );
   }

@@ -7,9 +7,11 @@ import '../../features/medicine_cabinet/domain/medicine_models.dart';
 import '../../features/medicine_cabinet/presentation/medicine_cabinet_screen.dart';
 import '../../features/plans/data/plan_repository.dart';
 import '../../features/plans/presentation/plans_screen.dart';
+import '../../features/quick_create/domain/quick_create_draft.dart';
 import '../../features/quick_create/domain/quick_create_result.dart';
 import '../../features/quick_create/domain/voice_input_controller.dart';
 import '../../features/quick_create/presentation/quick_create_sheet.dart';
+import '../../features/quick_create/presentation/workflow_draft_screen.dart';
 import '../../features/reminder_drafts/application/reminder_creation_service.dart';
 import '../../features/reminder_drafts/domain/reminder_draft.dart';
 import '../../features/reminder_drafts/presentation/reminder_draft_screen.dart';
@@ -32,6 +34,8 @@ class AppShell extends StatefulWidget {
     required this.onLogout,
     this.onOpenReminderManager,
     this.createDraft,
+    this.confirmWorkflowDraft,
+    this.answerWorkflowDraft,
     this.reminderCreationService,
     this.voiceInputController,
     this.onDeleteBatch,
@@ -56,7 +60,10 @@ class AppShell extends StatefulWidget {
   ) onChangePassword;
   final Future<void> Function() onLogout;
   final VoidCallback? onOpenReminderManager;
-  final Future<ReminderDraft> Function(String text)? createDraft;
+  final Future<QuickCreateDraft> Function(String text)? createDraft;
+  final Future<String> Function(String draftId)? confirmWorkflowDraft;
+  final Future<WorkflowDraft> Function(String draftId, String answer)?
+      answerWorkflowDraft;
   final ReminderCreationService? reminderCreationService;
   final VoiceInputController? voiceInputController;
   final Future<void> Function(MedicineBatch batch)? onDeleteBatch;
@@ -92,7 +99,7 @@ class _AppShellState extends State<AppShell> {
     );
   }
 
-  Future<void> _openQuickCreate() async {
+  Future<void> _openQuickCreate({String? initialText}) async {
     final createDraft = widget.createDraft;
     final service = widget.reminderCreationService;
     if (createDraft == null || service == null) return;
@@ -102,6 +109,7 @@ class _AppShellState extends State<AppShell> {
       backgroundColor: Colors.transparent,
       builder: (sheetContext) => QuickCreateSheet(
         createDraft: createDraft,
+        initialText: initialText,
         voiceInputController: widget.voiceInputController,
         onParsed: (value) => Navigator.of(sheetContext).pop(value),
         onCancel: () => Navigator.of(sheetContext).pop(),
@@ -110,20 +118,75 @@ class _AppShellState extends State<AppShell> {
     if (mounted && result != null) await _showDraft(result, service);
   }
 
+  Future<void> _reparseDraft(
+    ReminderCreationService service,
+    String text,
+  ) async {
+    final createDraft = widget.createDraft;
+    if (createDraft == null) {
+      throw StateError('quick create is unavailable');
+    }
+    final draft = await createDraft(text);
+    if (!mounted) return;
+    Navigator.of(context).pop();
+    await _showDraft(
+      QuickCreateResult(sourceText: text, draft: draft),
+      service,
+    );
+  }
+
   Future<void> _showDraft(
     QuickCreateResult result,
     ReminderCreationService service,
   ) async {
+    final draft = result.draft;
+    if (draft.isWorkflow) {
+      final workflow = draft.workflow!;
+      final answerWorkflowDraft = widget.answerWorkflowDraft;
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => WorkflowDraftScreen(
+            sourceText: result.sourceText,
+            draft: workflow,
+            onReparse: (text) => _reparseDraft(service, text),
+            onConfirm: _confirmWorkflowDraft,
+            onAnswer: answerWorkflowDraft == null
+                ? null
+                : (answer) => answerWorkflowDraft(workflow.id, answer),
+          ),
+        ),
+      );
+      return;
+    }
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => ReminderDraftScreen(
           sourceText: result.sourceText,
-          draft: result.draft,
-          onEdit: () => Navigator.of(context).pop(),
-          onConfirm: () => _confirmDraft(result.draft, service),
+          draft: draft.reminder!,
+          onReparse: (text) => _reparseDraft(service, text),
+          onConfirm: () => _confirmDraft(draft.reminder!, service),
         ),
       ),
     );
+  }
+
+  Future<void> _confirmWorkflowDraft(WorkflowDraft draft) async {
+    final confirm = widget.confirmWorkflowDraft;
+    if (confirm == null || !draft.canConfirm) return;
+    try {
+      await confirm(draft.id);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('计划已确认')),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('确认失败，请稍后重试')),
+        );
+      }
+    }
   }
 
   Future<void> _confirmDraft(

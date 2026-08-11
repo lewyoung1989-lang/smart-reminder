@@ -167,7 +167,7 @@ DateTime _parseActionCenterTime(Object? value) {
   if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(value)) {
     return DateTime.parse('${value}T00:00:00');
   }
-  return DateTime.parse(value);
+  return DateTime.parse(value).toLocal();
 }
 
 AttentionKind _attentionKind(String kind, String status) {

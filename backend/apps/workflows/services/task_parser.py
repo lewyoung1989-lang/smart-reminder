@@ -10,9 +10,17 @@ from apps.workflows.domain.schemas import TaskSpec
 
 
 _URL_PATTERN = re.compile(r"[a-z][a-z0-9+.-]*://", re.IGNORECASE)
-_DOSE_PATTERN = re.compile(r"\d+(?:\.\d+)?\s*(?:mg|g|ml|毫克|克|片|粒)", re.IGNORECASE)
+_DOSE_PATTERN = re.compile(
+    r"(?:\d+(?:\.\d+)?|[零〇一二三四五六七八九十两]+)\s*(?:mg|g|ml|毫克|克|片|粒)",
+    re.IGNORECASE,
+)
 _MEDICINE_PATTERN = re.compile(
     r"(?:吃药|服药|吃)\s*(?:[:：]\s*)?(?P<name>[\u4e00-\u9fffA-Za-z][\u4e00-\u9fffA-Za-z()（）-]{0,30})"
+)
+_MEDICINE_FALLBACK_STOP = re.compile(
+    r"(?:吃药|服药|服用|提醒|长期|连续|每天|每日|一天|一次|一周|以后|今后|之后|开始"
+    r"|早上|上午|中午|下午|晚上|睡前|饭前|饭后|记得|帮我|帮忙|需要|想要"
+    r"|请|补充|的|我|是|要|想|从|药[品物]?)"
 )
 _MEDICINE_ID_PATTERN = re.compile(r"\b(?P<id>[A-Za-z][A-Za-z0-9_]*-\d+)\b")
 _THRESHOLD_PATTERN = re.compile(r"提前\s*(?P<days>\d{1,3})\s*天")
@@ -35,6 +43,33 @@ _DIGITS = {
     "八": 8,
     "九": 9,
 }
+_GENERIC_MEDICINE_NAMES = {"药", "药品", "药物"}
+_MEDICINE_NAME_MARKERS = (
+    "药",
+    "片",
+    "丸",
+    "散",
+    "膏",
+    "胶囊",
+    "口服液",
+    "滴眼液",
+    "维生素",
+    "头孢",
+    "阿莫西林",
+    "布洛芬",
+)
+_MEDICINE_NAME_SUFFIXES = (
+    "芬",
+    "林",
+    "素",
+    "敏",
+    "唑",
+    "酮",
+    "平",
+    "宁",
+    "定",
+    "沙星",
+)
 
 
 class WorkflowTaskParser:
@@ -47,13 +82,13 @@ class WorkflowTaskParser:
                 return _clarification("目的地不能包含网址，请提供地点名称")
             return _clarification("请勿在请求中包含网址")
 
-        medication = self._parse_medication(text)
-        if medication is not None:
-            return medication
-
         expiry = self._parse_expiry(text)
         if expiry is not None:
             return expiry
+
+        medication = self._parse_medication(text)
+        if medication is not None:
+            return medication
 
         departure = self._parse_departure(text, now=now, timezone=timezone)
         if departure is not None:
@@ -63,30 +98,64 @@ class WorkflowTaskParser:
 
     @staticmethod
     def _parse_medication(text: str) -> TaskSpec | None:
-        medication_match = _MEDICINE_PATTERN.search(text)
-        medication_request = medication_match is not None or any(
-            marker in text for marker in ("吃药", "服药")
+        medication_matches = list(_MEDICINE_PATTERN.finditer(text))
+        medicine_name = next(
+            (
+                match.group("name")
+                for match in medication_matches
+                if match.group("name") not in _GENERIC_MEDICINE_NAMES
+            ),
+            None,
+        )
+        if medicine_name is None:
+            medicine_name = _fallback_medicine_name(text)
+        explicit_medication_request = any(
+            marker in text for marker in ("吃药", "服药", "服用", "药")
+        )
+        medication_request = explicit_medication_request or (
+            bool(medication_matches) and looks_like_medicine_name(medicine_name)
         )
         if not medication_request:
             return None
-
         dose_match = _DOSE_PATTERN.search(text)
-        frequency = "daily" if "每天" in text or "每日" in text else None
-        if medication_match is None or dose_match is None or frequency is None:
-            return _clarification("请补充药品剂量和服药周期")
+        frequency = "daily" if any(
+            marker in text for marker in ("每天", "每日", "长期", "连续")
+        ) else None
         time_of_day = _parse_time_of_day(text)
+
+        slots: dict[str, str] = {}
+        if medicine_name is not None:
+            slots["medicine_name"] = medicine_name
+        if dose_match is not None:
+            slots["dose_text"] = dose_match.group(0).replace(" ", "")
+        if frequency is not None:
+            slots["frequency"] = frequency
+        if time_of_day is not None:
+            slots["time_of_day"] = time_of_day
+
+        if dose_match is None or frequency is None:
+            return _clarification(
+                "请补充药品剂量和服药周期",
+                template_hint="medication_cycle",
+                slots=slots,
+            )
         if time_of_day is None:
-            return _clarification("请补充服药时间")
+            return _clarification(
+                "请补充服药时间",
+                template_hint="medication_cycle",
+                slots=slots,
+            )
+        if medicine_name is None:
+            return _clarification(
+                "请补充药品名称",
+                template_hint="medication_cycle",
+                slots=slots,
+            )
 
         return TaskSpec(
             template_hint="medication_cycle",
             title="用药提醒",
-            slots={
-                "medicine_name": medication_match.group("name"),
-                "dose_text": dose_match.group(0).replace(" ", ""),
-                "frequency": frequency,
-                "time_of_day": time_of_day,
-            },
+            slots=slots,
             requested_capabilities=[
                 "medicine.schedule",
                 "notification.important",
@@ -100,7 +169,7 @@ class WorkflowTaskParser:
 
         medicine_id_match = _MEDICINE_ID_PATTERN.search(text)
         if medicine_id_match is None:
-            return _clarification("请提供明确的药品ID")
+            return _clarification("请提供明确的药品ID", template_hint="medicine_expiry")
 
         threshold_match = _THRESHOLD_PATTERN.search(text)
         threshold_days = int(threshold_match.group("days")) if threshold_match else 30
@@ -132,12 +201,23 @@ class WorkflowTaskParser:
             else None
         )
         if destination is not None and _URL_PATTERN.search(destination):
-            return _clarification("目的地不能包含网址，请提供地点名称")
+            return _clarification("目的地不能包含网址，请提供地点名称", template_hint="smart_departure")
 
         arrival_time = _parse_arrival_time(text, now=now, timezone=timezone)
         travel_mode = _travel_mode(text)
         if destination is None or arrival_time is None or travel_mode is None:
-            return _clarification("请补充到达时间、目的地和出行方式")
+            partial: dict[str, str] = {}
+            if destination is not None:
+                partial["destination_text"] = destination
+            if arrival_time is not None:
+                partial["arrival_time"] = arrival_time.isoformat()
+            if travel_mode is not None:
+                partial["travel_mode"] = travel_mode
+            return _clarification(
+                "请补充到达时间、目的地和出行方式",
+                template_hint="smart_departure",
+                slots=partial,
+            )
 
         slots: dict[str, str] = {
             "arrival_time": arrival_time.isoformat(),
@@ -158,8 +238,52 @@ class WorkflowTaskParser:
         )
 
 
-def _clarification(question: str) -> TaskSpec:
-    return TaskSpec(title="提醒草稿", ambiguities=[question])
+def _fallback_medicine_name(text: str) -> str | None:
+    """Extract a bare medicine name when no 「吃/服」verb phrase matches.
+
+    追问回复常只给药名（如「阿莫西林」或「阿莫西林1片」），先去掉剂量与
+    时间表达，再切掉周期/动词等高频词，剩下的中文词即视为药名。
+    """
+    stripped = _DOSE_PATTERN.sub(" ", text)
+    stripped = _TIME_PATTERN.sub(" ", stripped)
+    tokens: list[str] = []
+    remainder = stripped
+    while remainder:
+        stop_match = _MEDICINE_FALLBACK_STOP.search(remainder)
+        chunk, remainder = (
+            (remainder[: stop_match.start()], remainder[stop_match.end():])
+            if stop_match
+            else (remainder, "")
+        )
+        tokens.extend(re.findall(r"[\u4e00-\u9fffA-Za-z()（）-]+", chunk))
+    return next(
+        (token for token in tokens if token not in _GENERIC_MEDICINE_NAMES),
+        None,
+    )
+
+
+def looks_like_medicine_name(value: object) -> bool:
+    if not isinstance(value, str):
+        return False
+    name = value.strip()
+    if not name or name in _GENERIC_MEDICINE_NAMES:
+        return False
+    return any(marker in name for marker in _MEDICINE_NAME_MARKERS) or any(
+        name.endswith(suffix) for suffix in _MEDICINE_NAME_SUFFIXES
+    )
+
+
+def _clarification(
+    question: str,
+    template_hint: str | None = None,
+    slots: dict[str, str] | None = None,
+) -> TaskSpec:
+    return TaskSpec(
+        title="提醒草稿",
+        template_hint=template_hint,
+        slots=slots or {},
+        ambiguities=[question],
+    )
 
 
 def _parse_arrival_time(
@@ -180,6 +304,8 @@ def _parse_arrival_time(
         if minute_group
         else 0
     )
+    if hour is not None:
+        hour = _normalize_hour_for_period(text, time_match, hour)
     if hour is None or minute is None or not 0 <= hour <= 23 or not 0 <= minute <= 59:
         return None
 
@@ -211,9 +337,21 @@ def _parse_time_of_day(text: str) -> str | None:
         if minute_group
         else 0
     )
+    if hour is not None:
+        hour = _normalize_hour_for_period(text, time_match, hour)
     if hour is None or minute is None or not 0 <= hour <= 23 or not 0 <= minute <= 59:
         return None
     return f"{hour:02d}:{minute:02d}"
+
+
+def _normalize_hour_for_period(text: str, time_match: re.Match[str], hour: int) -> int:
+    prefix = text[max(0, time_match.start() - 4) : time_match.start()]
+    if any(marker in prefix for marker in ("下午", "晚上", "傍晚", "晚间", "夜里")):
+        if 1 <= hour <= 11:
+            return hour + 12
+    if "中午" in prefix and 1 <= hour <= 2:
+        return hour + 12
+    return hour
 
 
 def _chinese_number(value: str) -> int | None:

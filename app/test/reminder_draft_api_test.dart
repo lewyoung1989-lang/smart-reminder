@@ -41,8 +41,8 @@ void main() {
         'http://192.168.1.10:8000/api/v1/reminder-drafts');
     expect(recorded.headers['Authorization'], isNull);
     expect(jsonDecode(recorded.body), {'text': '1分钟后提醒我喝水'});
-    expect(draft.title, '喝水');
-    expect(draft.parserSource, 'local');
+    expect(draft.reminder!.title, '喝水');
+    expect(draft.reminder!.parserSource, 'local');
   });
 
   test('confirm draft returns the idempotent reminder id', () async {

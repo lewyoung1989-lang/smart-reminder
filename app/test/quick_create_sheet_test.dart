@@ -2,21 +2,24 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:smart_reminder_app/features/quick_create/domain/quick_create_draft.dart';
 import 'package:smart_reminder_app/features/quick_create/domain/quick_create_result.dart';
 import 'package:smart_reminder_app/features/quick_create/domain/voice_input_controller.dart';
 import 'package:smart_reminder_app/features/quick_create/presentation/quick_create_sheet.dart';
 import 'package:smart_reminder_app/features/reminder_drafts/domain/reminder_draft.dart';
 
 void main() {
-  final draft = ReminderDraft(
-    id: 'draft-1',
-    title: '喝水',
-    scheduledAt: DateTime(2026, 8, 4, 10, 1),
-    timezone: 'Asia/Shanghai',
-    severity: ReminderSeverity.notification,
-    weatherMessage: null,
-    ambiguities: const [],
-    parserSource: 'local',
+  final draft = QuickCreateDraft.reminder(
+    reminder: ReminderDraft(
+      id: 'draft-1',
+      title: '喝水',
+      scheduledAt: DateTime(2026, 8, 4, 10, 1),
+      timezone: 'Asia/Shanghai',
+      severity: ReminderSeverity.notification,
+      weatherMessage: null,
+      ambiguities: const [],
+      parserSource: 'local',
+    ),
   );
 
   Widget app(
@@ -35,7 +38,7 @@ void main() {
   testWidgets('text stays visible while parsing and returns a typed result', (
     tester,
   ) async {
-    final completer = Completer<ReminderDraft>();
+    final completer = Completer<QuickCreateDraft>();
     QuickCreateResult? result;
     await tester.pumpWidget(
       app(

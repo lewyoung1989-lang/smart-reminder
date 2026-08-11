@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
@@ -13,6 +15,14 @@ from apps.reminders.domain.intent_parser import ReminderIntentParser
 from apps.reminders.models import ReminderDraft, ReminderRule
 from apps.reminders.providers.deepseek import DeepSeekReminderIntentProvider
 from apps.reminders.services.draft_service import create_reminder_draft
+from apps.workflows.domain.schemas import TaskSpec
+from apps.workflows.models import WorkflowDraft
+from apps.workflows.services.compiler import WorkflowCompileError, WorkflowCompiler
+from apps.workflows.services.policy import evaluate as evaluate_workflow_policy
+from apps.workflows.services.task_parser import (
+    WorkflowTaskParser,
+    looks_like_medicine_name,
+)
 
 from .serializers import (
     CreateTextReminderDraftSerializer,
@@ -67,11 +77,95 @@ def _create_draft_response(*, request, text: str) -> Response:
     draft = created.draft
     return Response(
         {
+            "draft_type": "reminder",
             "id": str(draft.id),
             "status": draft.status,
             "expires_at": draft.expires_at.isoformat(),
             "parser_source": created.parser_source,
             "draft": draft.draft_json,
+        },
+        status=status.HTTP_201_CREATED,
+    )
+
+
+WORKFLOW_ROUTING_SCOPE = {"owner": "self"}
+
+
+def _clarification_policy_json(task: TaskSpec) -> dict:
+    return {
+        "decision": "needs_clarification",
+        "risk_level": "R2",
+        "capability_signature": "",
+        "trust_expiry": None,
+        "question": task.ambiguities[0] if task.ambiguities else None,
+        "scope": WORKFLOW_ROUTING_SCOPE,
+    }
+
+
+def _workflow_draft_response(*, request, text: str) -> Response | None:
+    """Route text with a workflow template intent to the workflow draft flow.
+
+    Returns None when the text does not match any registered workflow
+    template, so the caller can fall back to one-time reminder parsing.
+    """
+    now = timezone.now()
+    task = WorkflowTaskParser().parse(text, now=now, timezone="Asia/Shanghai")
+    if task.template_hint is None:
+        return None
+    if task.template_hint == "smart_departure" and task.ambiguities:
+        # Incomplete departure expressions fall back to one-time reminder
+        # parsing instead of blocking on workflow clarifications.
+        return None
+    if task.template_hint == "medication_cycle" and not any(
+        marker in text for marker in ("吃药", "服药", "服用", "药")
+    ):
+        # Expressions like “吃火锅” must not be hijacked by the medication
+        # workflow; keep them on the one-time reminder flow unless the
+        # matched medicine name or the text itself mentions medicine.
+        medicine_name = task.slots.get("medicine_name")
+        if not looks_like_medicine_name(medicine_name):
+            return None
+
+    if task.ambiguities:
+        workflow_json = {}
+        policy_json = _clarification_policy_json(task)
+    else:
+        try:
+            workflow = WorkflowCompiler().compile(task)
+        except WorkflowCompileError:
+            return None
+        decision = evaluate_workflow_policy(
+            request.user, task, workflow, now, WORKFLOW_ROUTING_SCOPE
+        )
+        policy_json = {
+            "decision": decision.decision,
+            "risk_level": decision.risk_level,
+            "capability_signature": decision.capability_signature,
+            "trust_expiry": decision.trust_expiry.isoformat()
+            if decision.trust_expiry is not None
+            else None,
+            "question": decision.question,
+            "scope": WORKFLOW_ROUTING_SCOPE,
+        }
+        workflow_json = workflow.model_dump(mode="json")
+
+    draft = WorkflowDraft.objects.create(
+        user=request.user,
+        source_text=text,
+        task_spec_json=task.model_dump(mode="json"),
+        workflow_spec_json=workflow_json,
+        policy_json=policy_json,
+        expires_at=now + timedelta(minutes=30),
+    )
+    return Response(
+        {
+            "draft_type": "workflow",
+            "id": str(draft.id),
+            "status": draft.status,
+            "expires_at": draft.expires_at.isoformat(),
+            "task": draft.task_spec_json,
+            "workflow": draft.workflow_spec_json,
+            "policy": draft.policy_json,
         },
         status=status.HTTP_201_CREATED,
     )
@@ -83,10 +177,11 @@ class ReminderDraftListCreateView(APIView):
     def post(self, request):
         serializer = CreateTextReminderDraftSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        return _create_draft_response(
-            request=request,
-            text=serializer.validated_data["text"],
-        )
+        text = serializer.validated_data["text"]
+        workflow_response = _workflow_draft_response(request=request, text=text)
+        if workflow_response is not None:
+            return workflow_response
+        return _create_draft_response(request=request, text=text)
 
 
 class VoiceReminderDraftListCreateView(APIView):

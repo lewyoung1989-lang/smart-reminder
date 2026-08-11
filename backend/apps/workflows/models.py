@@ -83,6 +83,8 @@ class WorkflowDraft(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    source_text = models.TextField(default="")
+    clarification_rounds = models.PositiveSmallIntegerField(default=0)
     task_spec_json = models.JSONField()
     workflow_spec_json = models.JSONField()
     policy_json = models.JSONField()

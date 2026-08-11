@@ -44,6 +44,22 @@ class ConfirmWorkflowDraftSerializer(serializers.Serializer):
         return attrs
 
 
+class AnswerWorkflowDraftSerializer(serializers.Serializer):
+    answer = serializers.CharField(
+        allow_blank=False,
+        max_length=500,
+        trim_whitespace=True,
+    )
+
+    def validate(self, attrs):
+        unexpected_fields = set(self.initial_data) - {"answer"}
+        if unexpected_fields:
+            raise serializers.ValidationError(
+                {field: "不支持该字段" for field in unexpected_fields}
+            )
+        return attrs
+
+
 class ReminderRuleSerializer(serializers.ModelSerializer):
     status = serializers.SerializerMethodField()
 

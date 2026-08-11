@@ -72,23 +72,110 @@ def test_parses_tomorrow_public_transit_departure():
 def test_returns_clarification_when_medication_dose_is_missing():
     task = parse("每天吃阿莫西林")
 
-    assert task.template_hint is None
-    assert task.slots == {}
+    assert task.template_hint == "medication_cycle"
+    assert task.slots == {"medicine_name": "阿莫西林", "frequency": "daily"}
     assert task.ambiguities == ["请补充药品剂量和服药周期"]
+
+
+def test_branded_medicine_without_yao_is_treated_as_medication():
+    task = parse("我每天晚上10点吃布洛芬")
+
+    assert task.template_hint == "medication_cycle"
+    assert task.slots == {
+        "medicine_name": "布洛芬",
+        "frequency": "daily",
+        "time_of_day": "22:00",
+    }
+    assert task.ambiguities == ["请补充药品剂量和服药周期"]
+
+
+def test_daily_eating_without_medicine_is_not_a_medication_workflow():
+    task = parse("我每天晚上10点吃火锅")
+
+    assert task.template_hint is None
+    assert task.ambiguities == ["请说明要创建哪种提醒"]
 
 
 def test_returns_clarification_when_medication_time_is_missing():
     task = parse("每天吃阿莫西林 0.5g")
 
-    assert task.template_hint is None
-    assert task.slots == {}
+    assert task.template_hint == "medication_cycle"
+    assert task.slots == {
+        "medicine_name": "阿莫西林",
+        "dose_text": "0.5g",
+        "frequency": "daily",
+    }
     assert task.ambiguities == ["请补充服药时间"]
+
+
+def test_clarification_keeps_parsed_frequency_and_time_when_dose_is_missing():
+    task = parse("以后每天9点我吃药")
+
+    assert task.template_hint == "medication_cycle"
+    assert task.slots == {"frequency": "daily", "time_of_day": "09:00"}
+    assert task.ambiguities == ["请补充药品剂量和服药周期"]
+
+
+def test_generic_medicine_name_is_treated_as_missing():
+    task = parse("每天早上8点吃药1片，长期服用")
+
+    assert task.template_hint == "medication_cycle"
+    assert task.slots == {
+        "dose_text": "1片",
+        "frequency": "daily",
+        "time_of_day": "08:00",
+    }
+    assert task.ambiguities == ["请补充药品名称"]
+
+
+def test_chinese_numeral_dose_is_accepted():
+    task = parse("每天9点吃阿莫西林一片")
+
+    assert task.template_hint == "medication_cycle"
+    assert task.slots["dose_text"] == "一片"
+    assert task.ambiguities == []
+
+
+def test_bare_medicine_name_answer_is_extracted_without_a_verb():
+    task = parse("以后每天9点我吃药，布洛芬缓释胶囊")
+
+    assert task.template_hint == "medication_cycle"
+    assert task.slots["medicine_name"] == "布洛芬缓释胶囊"
+    assert task.ambiguities == ["请补充药品剂量和服药周期"]
+
+
+def test_bare_medicine_name_with_dose_completes_the_merged_answer():
+    task = parse("以后每天9点我吃药，阿莫西林1片")
+
+    assert task.template_hint == "medication_cycle"
+    assert task.slots == {
+        "medicine_name": "阿莫西林",
+        "dose_text": "1片",
+        "frequency": "daily",
+        "time_of_day": "09:00",
+    }
+    assert task.ambiguities == []
+
+
+def test_dose_only_answer_still_asks_for_the_medicine_name():
+    task = parse("以后每天9点我吃药，1片，长期服用")
+
+    assert task.template_hint == "medication_cycle"
+    assert "medicine_name" not in task.slots
+    assert task.ambiguities == ["请补充药品名称"]
+
+
+def test_medicine_name_ending_with_yao_is_kept_whole():
+    task = parse("每天早上9点吃降压药1片，连续吃30天")
+
+    assert task.slots["medicine_name"] == "降压药"
+    assert task.ambiguities == []
 
 
 def test_returns_clarification_when_expiry_medicine_id_is_missing():
     task = parse("提醒我检查有效期")
 
-    assert task.template_hint is None
+    assert task.template_hint == "medicine_expiry"
     assert task.slots == {}
     assert task.ambiguities == ["请提供明确的药品ID"]
 
@@ -131,8 +218,11 @@ def test_non_http_url_scheme_is_not_copied_into_slots():
 def test_invalid_chinese_time_returns_clarification_instead_of_raising():
     task = parse("明天一两点到虹桥火车站，坐公交出门")
 
-    assert task.template_hint is None
-    assert task.slots == {}
+    assert task.template_hint == "smart_departure"
+    assert task.slots == {
+        "destination_text": "虹桥火车站",
+        "travel_mode": "public_transit",
+    }
     assert task.ambiguities == ["请补充到达时间、目的地和出行方式"]
 
 

@@ -29,7 +29,7 @@ void main() {
           sourceText: '1分钟后提醒我喝水',
           draft: value,
           onConfirm: onConfirm,
-          onEdit: () {},
+          onReparse: (_) async {},
           now: DateTime(2026, 8, 4, 10),
         ),
       );

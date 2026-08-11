@@ -79,7 +79,7 @@ void main() {
           body: QuickCreateSheet(
             createDraft: api.createDraft,
             onParsed: (result) {
-              expect(result.draft.id, 'draft-1');
+              expect(result.draft.reminder!.id, 'draft-1');
               expect(creationService, isA<ReminderCreationService>());
             },
           ),

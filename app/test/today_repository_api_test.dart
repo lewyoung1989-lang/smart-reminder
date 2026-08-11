@@ -69,7 +69,7 @@ void main() {
               'title': '去虹桥火车站',
               'kind': 'workflow',
               'status': 'scheduled',
-              'occurred_at': '2026-08-08T17:10:00+08:00',
+              'occurred_at': '2026-08-08T09:10:00+00:00',
             },
           ],
         },
@@ -100,11 +100,11 @@ void main() {
       'medication_occurrence',
     );
     expect(snapshot.decisions.last.dueAt,
-        DateTime.parse('2026-08-08T08:00:00+08:00'));
+        DateTime.parse('2026-08-08T08:00:00+08:00').toLocal());
     expect(snapshot.timeline.single.id, 'departure-1');
     expect(snapshot.timeline.single.status, TimelineStatus.upcoming);
     expect(snapshot.timeline.single.scheduledAt,
-        DateTime.parse('2026-08-08T17:10:00+08:00'));
+        DateTime.parse('2026-08-08T09:10:00+00:00').toLocal());
   });
 
   test('throws a stable exception for action center server errors', () async {

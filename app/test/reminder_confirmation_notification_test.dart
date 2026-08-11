@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:smart_reminder_app/features/quick_create/domain/quick_create_draft.dart';
 import 'package:smart_reminder_app/features/reminder_drafts/application/reminder_creation_service.dart';
 import 'package:smart_reminder_app/features/reminder_drafts/domain/reminder_draft.dart';
 import 'package:smart_reminder_app/features/reminder_drafts/presentation/reminder_composer_screen.dart';
@@ -12,15 +13,17 @@ import 'package:smart_reminder_app/platform/notifications/reminder_notification_
 import 'support/test_fixtures.dart';
 
 void main() {
-  final draft = ReminderDraft(
-    id: 'draft-1',
-    title: '喝水',
-    scheduledAt: DateTime(2026, 8, 4, 10, 1),
-    timezone: 'Asia/Shanghai',
-    severity: ReminderSeverity.notification,
-    weatherMessage: null,
-    ambiguities: const [],
-    parserSource: 'local',
+  final draft = QuickCreateDraft.reminder(
+    reminder: ReminderDraft(
+      id: 'draft-1',
+      title: '喝水',
+      scheduledAt: DateTime(2026, 8, 4, 10, 1),
+      timezone: 'Asia/Shanghai',
+      severity: ReminderSeverity.notification,
+      weatherMessage: null,
+      ambiguities: const [],
+      parserSource: 'local',
+    ),
   );
 
   Future<void> openDraftAndConfirm(WidgetTester tester) async {

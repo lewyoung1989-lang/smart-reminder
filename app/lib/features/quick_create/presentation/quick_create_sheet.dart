@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../../reminder_drafts/domain/reminder_draft.dart';
+import '../domain/quick_create_draft.dart';
 import '../domain/quick_create_result.dart';
 import '../domain/voice_input_controller.dart';
 
@@ -17,7 +17,7 @@ class QuickCreateSheet extends StatefulWidget {
     super.key,
   });
 
-  final Future<ReminderDraft> Function(String text) createDraft;
+  final Future<QuickCreateDraft> Function(String text) createDraft;
   final ValueChanged<QuickCreateResult>? onParsed;
   final VoidCallback? onCancel;
   final VoiceInputController? voiceInputController;
