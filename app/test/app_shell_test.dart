@@ -144,6 +144,56 @@ void main() {
     expect(find.byType(NavigationBar), findsNothing);
   });
 
+  testWidgets('hides quick create on periodic plans only', (tester) async {
+    final creationService = ReminderCreationService(
+      confirmDraft: (_) async => 'reminder-1',
+      notificationScheduler: _ThrowingNotificationScheduler(),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppShell(
+          todayRepository: const UnavailableTodayRepository(),
+          planRepository: const UnavailablePlanRepository(),
+          medicineRepository: _UnavailableMedicineRepository(),
+          user: const AuthUser(
+            id: 'user-1',
+            phoneMasked: '138****8000',
+            phoneVerified: true,
+          ),
+          themeMode: ThemeMode.system,
+          onThemeModeChanged: (_) {},
+          onChangePassword: (_, __, ___) async {},
+          onLogout: () async {},
+          createDraft: (_) async => QuickCreateDraft.reminder(
+            reminder: ReminderDraft(
+              id: 'draft-1',
+              title: '喝水',
+              scheduledAt: DateTime(2026, 8, 8, 18, 40),
+              timezone: 'Asia/Shanghai',
+              severity: ReminderSeverity.notification,
+              weatherMessage: null,
+              ambiguities: const [],
+            ),
+          ),
+          reminderCreationService: creationService,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('quick-create-bar')), findsOneWidget);
+
+    await tester.tap(find.text('周期'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('quick-create-bar')), findsNothing);
+
+    await tester.tap(find.text('药箱'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('quick-create-bar')), findsOneWidget);
+  });
+
   testWidgets('logout from settings returns to the shell root', (tester) async {
     var logoutCalls = 0;
     await tester.pumpWidget(

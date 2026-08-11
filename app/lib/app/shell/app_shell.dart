@@ -288,6 +288,7 @@ class _AppShellState extends State<AppShell> {
       ),
     ];
     final content = IndexedStack(index: _selectedIndex, children: tabs);
+    final showQuickCreate = _selectedIndex != 1;
     final quickCreate = _QuickCreateBar(
       enabled:
           widget.createDraft != null && widget.reminderCreationService != null,
@@ -300,7 +301,7 @@ class _AppShellState extends State<AppShell> {
         body: Column(
           children: [
             Expanded(child: content),
-            quickCreate,
+            if (showQuickCreate) quickCreate,
             NavigationBar(
               selectedIndex: _selectedIndex,
               onDestinationSelected: _selectDestination,
@@ -325,7 +326,7 @@ class _AppShellState extends State<AppShell> {
                     destinations: _railDestinations,
                   ),
                 ),
-                quickCreate,
+                if (showQuickCreate) quickCreate,
               ],
             ),
           ),
