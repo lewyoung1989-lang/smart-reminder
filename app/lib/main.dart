@@ -19,7 +19,7 @@ import 'features/medicine_cabinet/data/medicine_cabinet_api.dart';
 import 'features/medicine_cabinet/domain/medicine_models.dart';
 import 'features/medicine_ocr/data/medicine_ocr_api.dart';
 import 'features/medicine_ocr/presentation/medicine_ocr_screen.dart';
-import 'features/plans/data/plan_repository.dart';
+import 'features/plans/data/api_plan_repository.dart';
 import 'features/reminder_drafts/application/reminder_creation_service.dart';
 import 'features/reminder_drafts/data/reminder_draft_api.dart';
 import 'features/reminder_drafts/presentation/reminder_composer_screen.dart';
@@ -79,6 +79,7 @@ class _SmartReminderAppState extends State<SmartReminderApp>
   late final ApiMedicineRepository _medicineRepository;
   late final MedicineOcrApi _medicineOcrApi;
   late final ApiTodayRepository _todayRepository;
+  late final ApiPlanRepository _planRepository;
   late final ActionCenterApi _actionCenterApi;
   late final TokenStore _tokenStore;
   late final AuthApi _refreshApi;
@@ -146,6 +147,10 @@ class _SmartReminderAppState extends State<SmartReminderApp>
       client: _authenticatedClient,
     );
     _todayRepository = ApiTodayRepository(
+      baseUrl: widget.config.apiBaseUrl,
+      client: _authenticatedClient,
+    );
+    _planRepository = ApiPlanRepository(
       baseUrl: widget.config.apiBaseUrl,
       client: _authenticatedClient,
     );
@@ -223,6 +228,7 @@ class _SmartReminderAppState extends State<SmartReminderApp>
     _reminderDraftApi.close();
     _reminderApi.close();
     _todayRepository.close();
+    _planRepository.close();
     _actionCenterApi.close();
     _medicineCabinetApi.close();
     _medicineOcrApi.close();
@@ -365,7 +371,7 @@ class _SmartReminderAppState extends State<SmartReminderApp>
           ),
         AuthStatus.authenticated => AppShell(
             todayRepository: _todayRepository,
-            planRepository: const UnavailablePlanRepository(),
+            planRepository: _planRepository,
             medicineRepository: _medicineRepository,
             user: _authController.user!,
             themeMode: _themeMode,

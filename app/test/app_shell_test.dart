@@ -40,7 +40,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('今天'), findsWidgets);
-    expect(find.text('计划'), findsOneWidget);
+    expect(find.text('周期'), findsOneWidget);
     expect(find.text('药箱'), findsOneWidget);
     expect(find.text('提醒'), findsNothing);
 

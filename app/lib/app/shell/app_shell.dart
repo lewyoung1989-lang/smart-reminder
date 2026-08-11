@@ -268,7 +268,7 @@ class _AppShellState extends State<AppShell> {
         ),
       ),
       KeyedSubtree(
-        key: const PageStorageKey<String>('plans-tab'),
+        key: const PageStorageKey<String>('periodic-plans-tab'),
         child: PlansScreen(
           repository: widget.planRepository,
           onOpenSettings: _openSettings,
@@ -341,7 +341,7 @@ class _AppShellState extends State<AppShell> {
       icon: Icon(LucideIcons.calendarClock),
       label: '今天',
     ),
-    NavigationDestination(icon: Icon(LucideIcons.bell), label: '计划'),
+    NavigationDestination(icon: Icon(LucideIcons.repeat2), label: '周期'),
     NavigationDestination(icon: Icon(LucideIcons.pill), label: '药箱'),
   ];
 
@@ -350,7 +350,10 @@ class _AppShellState extends State<AppShell> {
       icon: Icon(LucideIcons.calendarClock),
       label: Text('今天'),
     ),
-    NavigationRailDestination(icon: Icon(LucideIcons.bell), label: Text('计划')),
+    NavigationRailDestination(
+      icon: Icon(LucideIcons.repeat2),
+      label: Text('周期'),
+    ),
     NavigationRailDestination(icon: Icon(LucideIcons.pill), label: Text('药箱')),
   ];
 }

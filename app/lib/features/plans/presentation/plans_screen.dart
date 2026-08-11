@@ -278,7 +278,7 @@ class _PlansScreenState extends State<PlansScreen> {
           ),
           sliver: SliverToBoxAdapter(
             child: AppPageHeader(
-              title: '计划',
+              title: '周期计划',
               largeTitle: true,
               actions: <Widget>[
                 IconButton(
@@ -368,7 +368,7 @@ class _PlansScreenState extends State<PlansScreen> {
     }
     if (visible.isEmpty) {
       slivers.addAll(_stateSlivers(const AppContentState.empty(
-        title: '没有符合条件的计划',
+        title: '没有符合条件的周期计划',
         message: '调整状态或类型筛选后再查看',
       )));
       return slivers;
