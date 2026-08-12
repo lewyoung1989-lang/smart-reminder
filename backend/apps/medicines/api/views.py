@@ -1,6 +1,7 @@
 import logging
 from datetime import date
 
+from django.conf import settings
 from django.db import transaction
 from django.db.models import DateField, Q, Value
 from django.db.models.functions import Coalesce
@@ -13,6 +14,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.medicines.models import ExpiryAlertState, ExpiryBatchAction, InventoryBatch
+from apps.medicines.providers import (
+    DeepSeekMedicineDescriptionError,
+    DeepSeekMedicineDescriptionProvider,
+)
 from apps.medicines.services.expiry_alerts import refresh_expiry_alerts
 
 from .pagination import InventoryBatchCursorPagination
@@ -21,10 +26,42 @@ from .serializers import (
     ExpiryDateCorrectionSerializer,
     InventoryBatchCreateSerializer,
     InventoryBatchSerializer,
+    MedicineDescriptionParseSerializer,
 )
 
 
 logger = logging.getLogger(__name__)
+
+
+class MedicineDescriptionParseView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = MedicineDescriptionParseSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        if not settings.DEEPSEEK_API_KEY:
+            return Response(
+                {"detail": "智能解析暂不可用"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        provider = DeepSeekMedicineDescriptionProvider(
+            api_key=settings.DEEPSEEK_API_KEY,
+            base_url=settings.DEEPSEEK_BASE_URL,
+            model=settings.DEEPSEEK_MODEL,
+            timeout_seconds=settings.DEEPSEEK_TIMEOUT_SECONDS,
+        )
+        try:
+            draft = provider.parse(
+                serializer.validated_data["text"],
+                today=timezone.localdate(),
+            )
+        except DeepSeekMedicineDescriptionError:
+            logger.warning("medicine_description_parse_failed")
+            return Response(
+                {"detail": "智能解析失败，请稍后重试"},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        return Response(draft.model_dump(mode="json"), status=status.HTTP_200_OK)
 
 
 class InventoryBatchListView(ListAPIView):

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../domain/inventory_batch.dart';
+import '../domain/medicine_description_draft.dart';
 
 typedef InventoryBatchLoader = Future<InventoryBatchPage> Function({
   String query,
@@ -43,6 +44,23 @@ class MedicineCabinetApi implements MedicineCabinetDataSource {
   final Uri _baseUri;
   final http.Client _client;
   final bool _ownsClient;
+
+  Future<MedicineDescriptionDraft> parseDescription(String text) async {
+    final response = await _client.post(
+      _baseUri.resolve('/api/v1/inventory-batches/parse-description'),
+      headers: {
+        ..._headers,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'text': text.trim()}),
+    );
+    if (response.statusCode != 200) {
+      throw MedicineCabinetApiException(response.statusCode, response.body);
+    }
+    return MedicineDescriptionDraft.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
+  }
 
   @override
   Future<InventoryBatchPage> listBatches({

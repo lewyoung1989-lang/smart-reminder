@@ -5,10 +5,16 @@ from .views import (
     InventoryBatchExpiryActionView,
     InventoryBatchExpiryDateCorrectionView,
     InventoryBatchListView,
+    MedicineDescriptionParseView,
 )
 
 
 urlpatterns = [
+    path(
+        "inventory-batches/parse-description",
+        MedicineDescriptionParseView.as_view(),
+        name="inventory-batch-parse-description",
+    ),
     path(
         "inventory-batches",
         InventoryBatchListView.as_view(),

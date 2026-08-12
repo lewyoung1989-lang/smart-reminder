@@ -61,6 +61,71 @@ def test_inventory_batch_create_requires_authentication(api_client):
     assert response.headers["WWW-Authenticate"] == "Bearer"
 
 
+def test_description_parse_requires_authentication(api_client):
+    response = api_client.post(
+        "/api/v1/inventory-batches/parse-description",
+        {"text": "两盒布洛芬"},
+        format="json",
+    )
+
+    assert response.status_code == 401
+
+
+@pytest.mark.django_db
+def test_description_parse_returns_model_draft_without_creating_inventory(
+    api_client,
+    user,
+    settings,
+    mocker,
+):
+    settings.DEEPSEEK_API_KEY = "test-key"
+    draft = mocker.Mock()
+    draft.model_dump.return_value = {
+        "medicine_name": "布洛芬胶囊",
+        "specification": "0.3g*20粒",
+        "batch_number": None,
+        "production_date": None,
+        "expiry_date": "2027-01-01",
+        "quantity": 2,
+        "ambiguities": [],
+    }
+    parse = mocker.patch(
+        "apps.medicines.api.views.DeepSeekMedicineDescriptionProvider.parse",
+        return_value=draft,
+    )
+    api_client.force_authenticate(user)
+
+    response = api_client.post(
+        "/api/v1/inventory-batches/parse-description",
+        {"text": "家里还有两盒布洛芬胶囊，明年元旦到期"},
+        format="json",
+    )
+
+    assert response.status_code == 200
+    assert response.json()["medicine_name"] == "布洛芬胶囊"
+    parse.assert_called_once()
+    assert InventoryBatch.objects.count() == 0
+    assert MedicineItem.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_description_parse_reports_unavailable_without_model_key(
+    api_client,
+    user,
+    settings,
+):
+    settings.DEEPSEEK_API_KEY = ""
+    api_client.force_authenticate(user)
+
+    response = api_client.post(
+        "/api/v1/inventory-batches/parse-description",
+        {"text": "两盒布洛芬"},
+        format="json",
+    )
+
+    assert response.status_code == 503
+
+
 @pytest.mark.django_db
 def test_inventory_batch_create_adds_owned_medicine_and_refreshes_expiry_alert(
     api_client,

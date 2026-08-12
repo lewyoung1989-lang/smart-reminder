@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../features/auth/domain/auth_models.dart';
 import '../../features/medicine_cabinet/data/medicine_repository.dart';
 import '../../features/medicine_cabinet/domain/medicine_models.dart';
+import '../../features/medicine_cabinet/domain/medicine_description_draft.dart';
 import '../../features/medicine_cabinet/presentation/medicine_cabinet_screen.dart';
 import '../../features/plans/data/plan_repository.dart';
 import '../../features/plans/presentation/plans_screen.dart';
@@ -45,6 +46,7 @@ class AppShell extends StatefulWidget {
     this.actionCenterActions,
     this.onCorrectBatchExpiry,
     this.onCreateBatch,
+    this.onParseMedicineDescription,
     super.key,
   });
 
@@ -75,6 +77,8 @@ class AppShell extends StatefulWidget {
   final Future<void> Function(MedicineBatch batch, DateTime expiryDate)?
       onCorrectBatchExpiry;
   final Future<void> Function(MedicineBatchInput input)? onCreateBatch;
+  final Future<MedicineDescriptionDraft> Function(String text)?
+      onParseMedicineDescription;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -286,6 +290,7 @@ class _AppShellState extends State<AppShell> {
           onOpenSystemSettings: widget.onOpenSystemSettings,
           onCorrectBatchExpiry: widget.onCorrectBatchExpiry,
           onCreateBatch: widget.onCreateBatch,
+          onParseDescription: widget.onParseMedicineDescription,
           voiceInputController: widget.voiceInputController,
           onOpenSettings: _openSettings,
         ),

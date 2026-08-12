@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:smart_reminder_app/features/medicine_cabinet/data/medicine_repository.dart';
 import 'package:smart_reminder_app/features/medicine_cabinet/domain/medicine_models.dart';
+import 'package:smart_reminder_app/features/medicine_cabinet/domain/medicine_description_draft.dart';
 import 'package:smart_reminder_app/features/medicine_cabinet/presentation/medicine_cabinet_screen.dart';
 import 'package:smart_reminder_app/features/quick_create/domain/voice_input_controller.dart';
 import 'package:smart_reminder_app/ui/components/app_list_row.dart';
@@ -151,6 +152,12 @@ void main() {
         home: MedicineCabinetScreen(
           repository: repository,
           onCreateBatch: (input) async => created.add(input),
+          onParseDescription: (_) async => MedicineDescriptionDraft(
+            medicineName: '布洛芬胶囊',
+            specification: '0.3g',
+            quantity: 2,
+            expiryDate: DateTime(2027, 1, 1),
+          ),
         ),
       ),
     );
@@ -163,6 +170,8 @@ void main() {
       '录入布洛芬胶囊 0.3g 2盒，有效期到2027年1月1日',
     );
     await tester.pump();
+    await tester.tap(find.byKey(const Key('medicine-entry-parse')));
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const Key('medicine-entry-save')));
     await tester.tap(find.byKey(const Key('medicine-entry-save')));
     await tester.pumpAndSettle();
@@ -187,6 +196,12 @@ void main() {
           repository: repository,
           voiceInputController: voice,
           onCreateBatch: (input) async => created.add(input),
+          onParseDescription: (_) async => MedicineDescriptionDraft(
+            medicineName: '维生素C',
+            specification: '100mg',
+            quantity: 3,
+            expiryDate: DateTime(2027, 6, 30),
+          ),
         ),
       ),
     );

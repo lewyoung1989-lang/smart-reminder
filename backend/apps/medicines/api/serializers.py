@@ -72,6 +72,14 @@ class InventoryBatchCreateSerializer(serializers.Serializer):
         return batch
 
 
+class MedicineDescriptionParseSerializer(serializers.Serializer):
+    text = serializers.CharField(
+        max_length=500,
+        trim_whitespace=True,
+        allow_blank=False,
+    )
+
+
 class InventoryBatchSerializer(serializers.ModelSerializer):
     medicine_name = serializers.CharField(source="medicine.name")
     specification = serializers.CharField(source="medicine.specification")

@@ -34,6 +34,40 @@ http.Response jsonResponse(int status, Object body) => http.Response(
     );
 
 void main() {
+  test('parses a medicine description through the model draft endpoint',
+      () async {
+    final client = RecordingClient([
+      jsonResponse(200, {
+        'medicine_name': '布洛芬胶囊',
+        'specification': '0.3g*20粒',
+        'batch_number': null,
+        'production_date': null,
+        'expiry_date': '2027-01-01',
+        'quantity': 2,
+        'ambiguities': ['批号未提供'],
+      }),
+    ]);
+    final api = MedicineCabinetApi(
+      baseUrl: 'https://api.invalid',
+      client: client,
+    );
+
+    final draft = await api.parseDescription(' 两盒布洛芬，明年元旦到期 ');
+
+    expect(client.requests.single.method, 'POST');
+    expect(
+      client.requests.single.url.path,
+      '/api/v1/inventory-batches/parse-description',
+    );
+    expect(jsonDecode(client.requestBodies.single), {
+      'text': '两盒布洛芬，明年元旦到期',
+    });
+    expect(draft.medicineName, '布洛芬胶囊');
+    expect(draft.quantity, 2);
+    expect(draft.expiryDate, DateTime(2027, 1, 1));
+    expect(draft.ambiguities, ['批号未提供']);
+  });
+
   test('lists searched inventory and parses expiry state', () async {
     final client = RecordingClient([
       jsonResponse(200, {

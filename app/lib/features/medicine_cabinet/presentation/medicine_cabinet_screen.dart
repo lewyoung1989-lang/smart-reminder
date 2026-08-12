@@ -16,6 +16,7 @@ import '../data/api_medicine_repository.dart';
 import '../data/medicine_cabinet_api.dart';
 import '../data/medicine_repository.dart';
 import '../domain/medicine_models.dart';
+import '../domain/medicine_description_draft.dart';
 import 'medicine_detail_screen.dart';
 
 class MedicineCabinetScreen extends StatefulWidget {
@@ -31,6 +32,7 @@ class MedicineCabinetScreen extends StatefulWidget {
     this.onOpenSettings,
     this.onCorrectBatchExpiry,
     this.onCreateBatch,
+    this.onParseDescription,
     this.voiceInputController,
     super.key,
   }) : assert(
@@ -50,6 +52,8 @@ class MedicineCabinetScreen extends StatefulWidget {
   final Future<void> Function(MedicineBatch batch, DateTime expiryDate)?
       onCorrectBatchExpiry;
   final Future<void> Function(MedicineBatchInput input)? onCreateBatch;
+  final Future<MedicineDescriptionDraft> Function(String text)?
+      onParseDescription;
   final VoiceInputController? voiceInputController;
 
   @override
@@ -340,6 +344,7 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
             await _capture();
           },
           onCreate: _createBatch,
+          onParseDescription: widget.onParseDescription,
           onCancel: () => Navigator.of(sheetContext).pop(false),
         ),
       );
@@ -674,6 +679,7 @@ class MedicineBatchEntrySheet extends StatefulWidget {
     this.voiceInputController,
     this.onCapture,
     this.onCreate,
+    this.onParseDescription,
     this.onCancel,
     super.key,
   });
@@ -684,6 +690,8 @@ class MedicineBatchEntrySheet extends StatefulWidget {
   final VoiceInputController? voiceInputController;
   final Future<void> Function()? onCapture;
   final Future<bool> Function(MedicineBatchInput input)? onCreate;
+  final Future<MedicineDescriptionDraft> Function(String text)?
+      onParseDescription;
   final VoidCallback? onCancel;
 
   @override
@@ -700,9 +708,12 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
   final _expiryDateController = TextEditingController();
   final _quantityController = TextEditingController(text: '1');
   bool _isSaving = false;
+  bool _isParsing = false;
   bool _isVoiceActionInFlight = false;
   String? _error;
   String? _voiceActionError;
+  String? _parseError;
+  List<String> _ambiguities = const [];
 
   VoiceInputController? get _voice => widget.voiceInputController;
 
@@ -710,7 +721,6 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
   void initState() {
     super.initState();
     _voice?.addListener(_onVoiceStateChanged);
-    _descriptionController.addListener(_prefillFromDescription);
   }
 
   @override
@@ -728,9 +738,7 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
     if (voice?.phase == VoiceInputPhase.recording) {
       unawaited(_cancelVoiceOnDispose(voice!));
     }
-    _descriptionController
-      ..removeListener(_prefillFromDescription)
-      ..dispose();
+    _descriptionController.dispose();
     _nameController.dispose();
     _specificationController.dispose();
     _batchNumberController.dispose();
@@ -752,29 +760,44 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
     if (mounted) setState(() {});
   }
 
-  void _prefillFromDescription() {
-    final parsed = _parseMedicineText(_descriptionController.text);
-    if (parsed.medicineName != null && _nameController.text.trim().isEmpty) {
-      _nameController.text = parsed.medicineName!;
+  Future<void> _parseDescription() async {
+    final parse = widget.onParseDescription;
+    final text = _descriptionController.text.trim();
+    if (parse == null || _isParsing || text.isEmpty) {
+      if (text.isEmpty) setState(() => _parseError = '请先输入或说出药品描述');
+      return;
     }
-    if (parsed.specification != null &&
-        _specificationController.text.trim().isEmpty) {
-      _specificationController.text = parsed.specification!;
-    }
-    if (parsed.batchNumber != null &&
-        _batchNumberController.text.trim().isEmpty) {
-      _batchNumberController.text = parsed.batchNumber!;
-    }
-    if (parsed.productionDate != null &&
-        _productionDateController.text.trim().isEmpty) {
-      _productionDateController.text = _formatDate(parsed.productionDate!);
-    }
-    if (parsed.expiryDate != null &&
-        _expiryDateController.text.trim().isEmpty) {
-      _expiryDateController.text = _formatDate(parsed.expiryDate!);
-    }
-    if (parsed.quantity != null && _quantityController.text.trim() == '1') {
-      _quantityController.text = parsed.quantity!.toString();
+    setState(() {
+      _isParsing = true;
+      _parseError = null;
+      _ambiguities = const [];
+    });
+    try {
+      final draft = await parse(text);
+      if (!mounted) return;
+      if (draft.medicineName != null) {
+        _nameController.text = draft.medicineName!;
+      }
+      if (draft.specification != null) {
+        _specificationController.text = draft.specification!;
+      }
+      if (draft.batchNumber != null) {
+        _batchNumberController.text = draft.batchNumber!;
+      }
+      if (draft.productionDate != null) {
+        _productionDateController.text = _formatDate(draft.productionDate!);
+      }
+      if (draft.expiryDate != null) {
+        _expiryDateController.text = _formatDate(draft.expiryDate!);
+      }
+      if (draft.quantity != null) {
+        _quantityController.text = draft.quantity!.toString();
+      }
+      setState(() => _ambiguities = draft.ambiguities);
+    } catch (_) {
+      if (mounted) setState(() => _parseError = '智能解析失败，请稍后重试');
+    } finally {
+      if (mounted) setState(() => _isParsing = false);
     }
   }
 
@@ -808,6 +831,7 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
         }
         _descriptionController.text = transcript.trim();
         setState(() => _error = null);
+        await _parseDescription();
       }
     } catch (_) {
       if (mounted) setState(() => _voiceActionError = '语音输入失败，请重试');
@@ -964,6 +988,46 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
                         ),
                       ),
                       const SizedBox(height: 8),
+                      SizedBox(
+                        height: 48,
+                        child: FilledButton.icon(
+                          key: const Key('medicine-entry-parse'),
+                          onPressed: widget.onParseDescription != null &&
+                                  !_isParsing &&
+                                  !_isSaving
+                              ? _parseDescription
+                              : null,
+                          icon: _isParsing
+                              ? const SizedBox.square(
+                                  dimension: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(LucideIcons.sparkles),
+                          label: Text(_isParsing ? '正在智能解析' : '智能解析'),
+                        ),
+                      ),
+                      if (_parseError != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          _parseError!,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                      ],
+                      if (_ambiguities.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          '请确认：${_ambiguities.join('；')}',
+                          style: TextStyle(
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 8),
                       _VoiceStatus(
                         voice: _voice,
                         phase: phase,
@@ -979,6 +1043,7 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
                             child: OutlinedButton.icon(
                               key: const Key('medicine-entry-voice'),
                               onPressed: _isSaving ||
+                                      _isParsing ||
                                       _isVoiceActionInFlight ||
                                       phase == VoiceInputPhase.transcribing ||
                                       phase == VoiceInputPhase.failure
@@ -1256,77 +1321,6 @@ DateTime? _parseDateInput(String value) {
   } catch (_) {
     return null;
   }
-}
-
-_ParsedMedicineText _parseMedicineText(String value) {
-  final text = value.trim();
-  if (text.isEmpty) return const _ParsedMedicineText();
-  final specification = RegExp(
-    r'\d+(?:\.\d+)?\s*(?:mg|g|ml|毫克|克|毫升)(?:\s*[*xX×]\s*\d+\s*(?:片|粒|袋|支|瓶|盒))?',
-    caseSensitive: false,
-  ).firstMatch(text)?.group(0)?.replaceAll(RegExp(r'\s+'), '');
-  final batchNumber = RegExp(
-    r'(?:批号|产品批号|LOT)\s*[:：]?\s*([A-Za-z0-9-]{3,30})',
-    caseSensitive: false,
-  ).firstMatch(text)?.group(1);
-  final quantityMatch =
-      RegExp(r'(\d{1,4})\s*(?:盒|瓶|板|支|袋|件|片|粒)').firstMatch(text);
-  final expiryDate = _dateAfterLabel(
-    text,
-    RegExp(r'有效期(?:至|到)?|过期(?:至|到)?|EXP', caseSensitive: false),
-  );
-  final productionDate = _dateAfterLabel(
-    text,
-    RegExp(r'生产日期|生产日|MFG', caseSensitive: false),
-  );
-  return _ParsedMedicineText(
-    medicineName: _guessMedicineName(text, specification),
-    specification: specification,
-    batchNumber: batchNumber,
-    productionDate: productionDate,
-    expiryDate: expiryDate,
-    quantity:
-        quantityMatch == null ? null : int.tryParse(quantityMatch.group(1)!),
-  );
-}
-
-DateTime? _dateAfterLabel(String text, RegExp label) {
-  final match = label.firstMatch(text);
-  if (match == null) return null;
-  return _parseDateInput(text.substring(match.end).trim());
-}
-
-String? _guessMedicineName(String text, String? specification) {
-  var normalized =
-      text.replaceAll(RegExp(r'^(录入|添加|新增|买了|有|药箱里有)\s*'), '').trim();
-  if (specification != null && normalized.contains(specification)) {
-    normalized = normalized.substring(0, normalized.indexOf(specification));
-  }
-  normalized = normalized
-      .replaceAll(
-          RegExp(r'(有效期|过期|生产日期|生产日|批号|LOT).*', caseSensitive: false), '')
-      .replaceAll(RegExp(r'\d{1,4}\s*(盒|瓶|板|支|袋|件|片|粒).*'), '')
-      .trim();
-  if (normalized.isEmpty) return null;
-  return normalized.length > 40 ? normalized.substring(0, 40) : normalized;
-}
-
-class _ParsedMedicineText {
-  const _ParsedMedicineText({
-    this.medicineName,
-    this.specification,
-    this.batchNumber,
-    this.productionDate,
-    this.expiryDate,
-    this.quantity,
-  });
-
-  final String? medicineName;
-  final String? specification;
-  final String? batchNumber;
-  final DateTime? productionDate;
-  final DateTime? expiryDate;
-  final int? quantity;
 }
 
 extension on List<MedicineSummary> {

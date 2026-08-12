@@ -418,6 +418,7 @@ class _SmartReminderAppState extends State<SmartReminderApp>
                 quantity: input.quantity,
               );
             },
+            onParseMedicineDescription: _medicineCabinetApi.parseDescription,
             onCaptureMedicine: _openMedicineOcr,
             captureAvailability: _medicineCaptureAvailability,
             onOpenSystemSettings: _openCameraSettings,
