@@ -1,0 +1,5 @@
+"CFBundleDisplayName" = "智能提醒";
+"CFBundleName" = "智能提醒";
+"NSCameraUsageDescription" = "用于拍摄药盒和有效期，识别结果需由你确认后才会加入药箱。";
+"NSMicrophoneUsageDescription" = "用于将你说出的提醒内容转换为可编辑文字。";
+"NSLocalNetworkUsageDescription" = "连接同一局域网内的开发服务，用于测试提醒与语音草稿。";
