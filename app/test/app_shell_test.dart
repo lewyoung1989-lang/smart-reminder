@@ -144,7 +144,7 @@ void main() {
     expect(find.byType(NavigationBar), findsNothing);
   });
 
-  testWidgets('hides quick create on periodic plans only', (tester) async {
+  testWidgets('shows quick create only on today', (tester) async {
     final creationService = ReminderCreationService(
       confirmDraft: (_) async => 'reminder-1',
       notificationScheduler: _ThrowingNotificationScheduler(),
@@ -191,7 +191,7 @@ void main() {
     await tester.tap(find.text('药箱'));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('quick-create-bar')), findsOneWidget);
+    expect(find.byKey(const Key('quick-create-bar')), findsNothing);
   });
 
   testWidgets('logout from settings returns to the shell root', (tester) async {

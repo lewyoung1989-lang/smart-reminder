@@ -292,7 +292,7 @@ class _AppShellState extends State<AppShell> {
       ),
     ];
     final content = IndexedStack(index: _selectedIndex, children: tabs);
-    final showQuickCreate = _selectedIndex != 1;
+    final showQuickCreate = _selectedIndex == 0;
     final quickCreate = _QuickCreateBar(
       enabled:
           widget.createDraft != null && widget.reminderCreationService != null,
