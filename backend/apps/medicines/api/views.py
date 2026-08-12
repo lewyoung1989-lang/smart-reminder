@@ -19,6 +19,7 @@ from .pagination import InventoryBatchCursorPagination
 from .serializers import (
     ExpiryBatchActionSerializer,
     ExpiryDateCorrectionSerializer,
+    InventoryBatchCreateSerializer,
     InventoryBatchSerializer,
 )
 
@@ -51,6 +52,18 @@ class InventoryBatchListView(ListAPIView):
                 Value(date.max, output_field=DateField()),
                 output_field=DateField(),
             )
+        )
+
+    def post(self, request):
+        serializer = InventoryBatchCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        with transaction.atomic():
+            batch = serializer.create_for_user(request.user)
+            refresh_expiry_alerts(batch=batch, today=timezone.localdate())
+        logger.info("inventory_batch_created batch_id=%s", batch.id)
+        return Response(
+            InventoryBatchSerializer(batch).data,
+            status=status.HTTP_201_CREATED,
         )
 
 

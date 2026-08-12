@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:smart_reminder_app/features/medicine_cabinet/data/medicine_repository.dart';
 import 'package:smart_reminder_app/features/medicine_cabinet/domain/medicine_models.dart';
 import 'package:smart_reminder_app/features/medicine_cabinet/presentation/medicine_cabinet_screen.dart';
+import 'package:smart_reminder_app/features/quick_create/domain/voice_input_controller.dart';
 import 'package:smart_reminder_app/ui/components/app_list_row.dart';
 
 void main() {
@@ -128,13 +129,84 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('拍照录入'));
+    await tester.tap(find.text('录入'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('medicine-entry-capture')));
     await tester.pumpAndSettle();
     expect(repository.loadCalls, 1);
 
-    await tester.tap(find.text('拍照录入'));
+    await tester.tap(find.text('录入'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('medicine-entry-capture')));
     await tester.pumpAndSettle();
     expect(repository.loadCalls, 2);
+  });
+
+  testWidgets('creates a batch from text entry and reloads the cabinet',
+      (tester) async {
+    final repository = _Repository();
+    final created = <MedicineBatchInput>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MedicineCabinetScreen(
+          repository: repository,
+          onCreateBatch: (input) async => created.add(input),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('录入'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('medicine-entry-description')),
+      '录入布洛芬胶囊 0.3g 2盒，有效期到2027年1月1日',
+    );
+    await tester.pump();
+    await tester.ensureVisible(find.byKey(const Key('medicine-entry-save')));
+    await tester.tap(find.byKey(const Key('medicine-entry-save')));
+    await tester.pumpAndSettle();
+
+    expect(created.single.medicineName, '布洛芬胶囊');
+    expect(created.single.specification, '0.3g');
+    expect(created.single.quantity, 2);
+    expect(created.single.expiryDate, DateTime(2027, 1, 1));
+    expect(repository.loadCalls, 2);
+    expect(find.text('药品已录入'), findsOneWidget);
+  });
+
+  testWidgets('uses voice transcript to prefill medicine entry',
+      (tester) async {
+    final voice = _FakeVoiceInputController()
+      ..transcript = '录入维生素C 100mg 3瓶，有效期到2027-06-30';
+    final repository = _Repository();
+    final created = <MedicineBatchInput>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MedicineCabinetScreen(
+          repository: repository,
+          voiceInputController: voice,
+          onCreateBatch: (input) async => created.add(input),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('录入'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('medicine-entry-voice')));
+    await tester.pumpAndSettle();
+    expect(find.text('停止录音'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('medicine-entry-voice')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('medicine-entry-save')));
+    await tester.tap(find.byKey(const Key('medicine-entry-save')));
+    await tester.pumpAndSettle();
+
+    expect(created.single.medicineName, '维生素C');
+    expect(created.single.specification, '100mg');
+    expect(created.single.quantity, 3);
+    expect(created.single.expiryDate, DateTime(2027, 6, 30));
   });
 }
 
@@ -185,4 +257,39 @@ class _Repository implements MedicineRepository {
       loadedBatchCount: 1,
     );
   }
+}
+
+class _FakeVoiceInputController extends VoiceInputController {
+  VoiceInputPhase _phase = VoiceInputPhase.idle;
+  String? transcript;
+
+  @override
+  VoiceInputPhase get phase => _phase;
+
+  @override
+  Duration get elapsed => const Duration(seconds: 3);
+
+  @override
+  String? get errorMessage => null;
+
+  void _setPhase(VoiceInputPhase value) {
+    _phase = value;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> start() async => _setPhase(VoiceInputPhase.recording);
+
+  @override
+  Future<String?> stopAndTranscribe() async {
+    _setPhase(VoiceInputPhase.transcribing);
+    _setPhase(VoiceInputPhase.idle);
+    return transcript;
+  }
+
+  @override
+  Future<void> retry() async => _setPhase(VoiceInputPhase.idle);
+
+  @override
+  Future<void> cancel() async => _setPhase(VoiceInputPhase.idle);
 }

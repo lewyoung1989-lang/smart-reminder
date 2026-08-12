@@ -115,6 +115,17 @@ class _LoaderDataSource implements MedicineCabinetDataSource {
   final InventoryBatchLoader _loader;
 
   @override
+  Future<InventoryBatch> createBatch({
+    required String medicineName,
+    String specification = '',
+    String batchNumber = '',
+    DateTime? productionDate,
+    DateTime? expiryDate,
+    int quantity = 1,
+  }) =>
+      Future.error(UnsupportedError('Batch creation is not configured.'));
+
+  @override
   Future<void> deleteBatch(String batchId) =>
       Future.error(UnsupportedError('Batch deletion is not configured.'));
 

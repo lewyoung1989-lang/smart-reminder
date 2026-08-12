@@ -182,6 +182,17 @@ class _InventorySource implements MedicineCabinetDataSource {
   Uri? lastPageUrl;
 
   @override
+  Future<InventoryBatch> createBatch({
+    required String medicineName,
+    String specification = '',
+    String batchNumber = '',
+    DateTime? productionDate,
+    DateTime? expiryDate,
+    int quantity = 1,
+  }) =>
+      Future.error(UnsupportedError('unused'));
+
+  @override
   Future<void> deleteBatch(String batchId) => Future.error(
         UnsupportedError('unused'),
       );

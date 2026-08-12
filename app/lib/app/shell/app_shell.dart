@@ -44,6 +44,7 @@ class AppShell extends StatefulWidget {
     this.onOpenSystemSettings,
     this.actionCenterActions,
     this.onCorrectBatchExpiry,
+    this.onCreateBatch,
     super.key,
   });
 
@@ -73,6 +74,7 @@ class AppShell extends StatefulWidget {
   final ActionCenterActions? actionCenterActions;
   final Future<void> Function(MedicineBatch batch, DateTime expiryDate)?
       onCorrectBatchExpiry;
+  final Future<void> Function(MedicineBatchInput input)? onCreateBatch;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -283,6 +285,8 @@ class _AppShellState extends State<AppShell> {
           onCapture: widget.onCaptureMedicine,
           onOpenSystemSettings: widget.onOpenSystemSettings,
           onCorrectBatchExpiry: widget.onCorrectBatchExpiry,
+          onCreateBatch: widget.onCreateBatch,
+          voiceInputController: widget.voiceInputController,
           onOpenSettings: _openSettings,
         ),
       ),

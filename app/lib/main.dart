@@ -398,6 +398,16 @@ class _SmartReminderAppState extends State<SmartReminderApp>
                 expiryDate: expiryDate,
               );
             },
+            onCreateBatch: (input) async {
+              await _medicineCabinetApi.createBatch(
+                medicineName: input.medicineName,
+                specification: input.specification,
+                batchNumber: input.batchNumber,
+                productionDate: input.productionDate,
+                expiryDate: input.expiryDate,
+                quantity: input.quantity,
+              );
+            },
             onCaptureMedicine: _openMedicineOcr,
             captureAvailability: _medicineCaptureAvailability,
             onOpenSystemSettings: _openCameraSettings,

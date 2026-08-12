@@ -138,6 +138,53 @@ void main() {
     expect(client.requests.single.headers['Authorization'], isNull);
   });
 
+  test('creates one inventory batch through the shared client', () async {
+    final client = RecordingClient([
+      jsonResponse(201, {
+        'id': 'batch-1',
+        'medicine_id': 'medicine-1',
+        'medicine_name': '布洛芬胶囊',
+        'specification': '0.3g*20粒',
+        'batch_number': 'LOT-88',
+        'production_date': '2026-01-01',
+        'expiry_date': '2027-01-01',
+        'quantity': 2,
+        'expiry_status': 'valid',
+        'days_until_expiry': 150,
+      }),
+    ]);
+    final api = MedicineCabinetApi(
+      baseUrl: 'https://api.invalid',
+      client: client,
+    );
+
+    final batch = await api.createBatch(
+      medicineName: ' 布洛芬胶囊 ',
+      specification: ' 0.3g*20粒 ',
+      batchNumber: ' LOT-88 ',
+      productionDate: DateTime(2026, 1, 1),
+      expiryDate: DateTime(2027, 1, 1),
+      quantity: 2,
+    );
+
+    expect(client.requests.single.method, 'POST');
+    expect(
+      client.requests.single.url.toString(),
+      'https://api.invalid/api/v1/inventory-batches',
+    );
+    expect(client.requests.single.headers['Accept'], 'application/json');
+    expect(client.requests.single.headers['Content-Type'], 'application/json');
+    expect(jsonDecode(client.requestBodies.single), {
+      'medicine_name': '布洛芬胶囊',
+      'specification': '0.3g*20粒',
+      'batch_number': 'LOT-88',
+      'production_date': '2026-01-01',
+      'expiry_date': '2027-01-01',
+      'quantity': 2,
+    });
+    expect(batch.medicineName, '布洛芬胶囊');
+  });
+
   test('throws a stable exception when batch deletion fails', () async {
     final api = MedicineCabinetApi(
       baseUrl: 'https://api.invalid',

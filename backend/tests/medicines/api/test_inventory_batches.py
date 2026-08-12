@@ -51,6 +51,103 @@ def test_inventory_batch_delete_requires_authentication(api_client, user):
 
 
 @pytest.mark.django_db
+def test_inventory_batch_create_requires_authentication(api_client):
+    response = api_client.post(
+        "/api/v1/inventory-batches",
+        {"medicine_name": "布洛芬"},
+    )
+
+    assert response.status_code == 401
+    assert response.headers["WWW-Authenticate"] == "Bearer"
+
+
+@pytest.mark.django_db
+def test_inventory_batch_create_adds_owned_medicine_and_refreshes_expiry_alert(
+    api_client,
+    user,
+    mocker,
+    caplog,
+):
+    refresh = mocker.patch("apps.medicines.api.views.refresh_expiry_alerts")
+    mocker.patch(
+        "apps.medicines.api.views.timezone.localdate",
+        return_value=TODAY,
+    )
+    api_client.force_authenticate(user)
+    caplog.set_level(logging.INFO, logger="apps.medicines.api.views")
+
+    response = api_client.post(
+        "/api/v1/inventory-batches",
+        {
+            "medicine_name": "布洛芬胶囊",
+            "specification": "0.3g*20粒",
+            "batch_number": "LOT-88",
+            "production_date": "2026-01-01",
+            "expiry_date": "2027-01-01",
+            "quantity": 2,
+        },
+        format="json",
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["medicine_name"] == "布洛芬胶囊"
+    assert payload["specification"] == "0.3g*20粒"
+    assert payload["batch_number"] == "LOT-88"
+    assert payload["quantity"] == 2
+    medicine = MedicineItem.objects.get(owner=user)
+    assert medicine.name == "布洛芬胶囊"
+    batch = InventoryBatch.objects.get(medicine=medicine)
+    assert str(batch.id) == payload["id"]
+    refresh.assert_called_once_with(batch=batch, today=TODAY)
+    assert f"batch_id={batch.id}" in caplog.text
+    assert "布洛芬胶囊" not in caplog.text
+
+
+@pytest.mark.django_db
+def test_inventory_batch_create_reuses_same_owned_medicine(api_client, user):
+    medicine = MedicineItem.objects.create(
+        owner=user,
+        name="维生素C",
+        specification="100mg",
+    )
+    api_client.force_authenticate(user)
+
+    response = api_client.post(
+        "/api/v1/inventory-batches",
+        {
+            "medicine_name": "维生素C",
+            "specification": "100mg",
+            "quantity": 3,
+        },
+        format="json",
+    )
+
+    assert response.status_code == 201
+    assert MedicineItem.objects.count() == 1
+    assert InventoryBatch.objects.get().medicine_id == medicine.id
+
+
+@pytest.mark.django_db
+def test_inventory_batch_create_rejects_invalid_dates(api_client, user):
+    api_client.force_authenticate(user)
+
+    response = api_client.post(
+        "/api/v1/inventory-batches",
+        {
+            "medicine_name": "布洛芬",
+            "production_date": "2027-01-01",
+            "expiry_date": "2026-01-01",
+        },
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert response.json()["expiry_date"] == ["有效期不能早于生产日期。"]
+    assert InventoryBatch.objects.count() == 0
+
+
+@pytest.mark.django_db
 def test_inventory_batch_delete_removes_only_owned_batch(
     api_client,
     user,

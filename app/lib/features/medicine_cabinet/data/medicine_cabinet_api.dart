@@ -15,6 +15,15 @@ abstract interface class MedicineCabinetDataSource {
     Uri? pageUrl,
   });
 
+  Future<InventoryBatch> createBatch({
+    required String medicineName,
+    String specification = '',
+    String batchNumber = '',
+    DateTime? productionDate,
+    DateTime? expiryDate,
+    int quantity = 1,
+  });
+
   Future<void> deleteBatch(String batchId);
 
   Future<InventoryBatch> correctExpiryDate(
@@ -70,6 +79,39 @@ class MedicineCabinetApi implements MedicineCabinetDataSource {
           )
           .toList(growable: false),
       nextPage: next == null ? null : Uri.parse(next),
+    );
+  }
+
+  @override
+  Future<InventoryBatch> createBatch({
+    required String medicineName,
+    String specification = '',
+    String batchNumber = '',
+    DateTime? productionDate,
+    DateTime? expiryDate,
+    int quantity = 1,
+  }) async {
+    final response = await _client.post(
+      _baseUri.resolve('/api/v1/inventory-batches'),
+      headers: {
+        ..._headers,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'medicine_name': medicineName.trim(),
+        'specification': specification.trim(),
+        'batch_number': batchNumber.trim(),
+        'production_date':
+            productionDate == null ? null : _formatDate(productionDate),
+        'expiry_date': expiryDate == null ? null : _formatDate(expiryDate),
+        'quantity': quantity,
+      }),
+    );
+    if (response.statusCode != 201) {
+      throw MedicineCabinetApiException(response.statusCode, response.body);
+    }
+    return InventoryBatch.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
     );
   }
 
