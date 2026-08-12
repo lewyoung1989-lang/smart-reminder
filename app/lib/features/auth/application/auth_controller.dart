@@ -9,12 +9,17 @@ import '../domain/auth_models.dart';
 enum AuthStatus { booting, unauthenticated, authenticated, connectionError }
 
 class AuthController extends ChangeNotifier {
-  AuthController({required TokenStore tokenStore, required AuthGateway gateway})
-      : _tokenStore = tokenStore,
-        _gateway = gateway;
+  AuthController({
+    required TokenStore tokenStore,
+    required AuthGateway gateway,
+    Duration restoreTimeout = const Duration(seconds: 8),
+  })  : _tokenStore = tokenStore,
+        _gateway = gateway,
+        _restoreTimeout = restoreTimeout;
 
   final TokenStore _tokenStore;
   final AuthGateway _gateway;
+  final Duration _restoreTimeout;
 
   AuthStatus _status = AuthStatus.booting;
   AuthUser? _user;
@@ -30,13 +35,13 @@ class AuthController extends ChangeNotifier {
   Future<void> restore() async {
     _setStatus(AuthStatus.booting);
     try {
-      final tokens = await _tokenStore.read();
+      final tokens = await _tokenStore.read().timeout(_restoreTimeout);
       if (tokens == null) {
         _user = null;
         _setStatus(AuthStatus.unauthenticated);
         return;
       }
-      _user = await _gateway.me();
+      _user = await _gateway.me().timeout(_restoreTimeout);
       _setStatus(AuthStatus.authenticated);
     } on SessionExpiredException {
       await _tokenStore.clear();

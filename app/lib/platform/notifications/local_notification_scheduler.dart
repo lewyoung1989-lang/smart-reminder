@@ -28,6 +28,13 @@ class LocalNotificationScheduler implements ReminderNotificationScheduler {
   final LocalNotificationGateway gateway;
   final DateTime Function() _now;
 
+  Future<void> initializeGateway() async {
+    final gateway = this.gateway;
+    if (gateway is FlutterLocalNotificationGateway) {
+      await gateway.initialize();
+    }
+  }
+
   @override
   Future<void> schedule({
     required String reminderId,

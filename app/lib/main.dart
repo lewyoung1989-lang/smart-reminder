@@ -38,7 +38,6 @@ import 'platform/permissions/camera_permission_gateway.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final notificationGateway = FlutterLocalNotificationGateway();
-  await notificationGateway.initialize();
   runApp(
     SmartReminderApp(
       config: AppConfig.fromEnvironment(),
@@ -98,6 +97,7 @@ class _SmartReminderAppState extends State<SmartReminderApp>
   @override
   void initState() {
     super.initState();
+    unawaited(_initializeNotifications());
     _tokenStore =
         widget.tokenStore ?? SecureTokenStore(FlutterSecureKeyValueStore());
     _cameraPermissionGateway = widget.cameraPermissionGateway ??
@@ -175,6 +175,16 @@ class _SmartReminderAppState extends State<SmartReminderApp>
     unawaited(_refreshCameraPermission());
     if (_authController.status == AuthStatus.authenticated) {
       unawaited(_refreshMedicineOcrCapability());
+    }
+  }
+
+  Future<void> _initializeNotifications() async {
+    final scheduler = widget.notificationScheduler;
+    if (scheduler is! LocalNotificationScheduler) return;
+    try {
+      await scheduler.initializeGateway();
+    } catch (_) {
+      // 通知初始化失败不应阻塞首屏；真正创建提醒时还会再次请求权限并给出错误。
     }
   }
 
