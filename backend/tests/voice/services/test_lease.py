@@ -1,4 +1,4 @@
-from apps.voice.services.lease import RedisLeaseManager
+from apps.voice.services.lease import InMemoryLeaseManager, RedisLeaseManager
 
 
 class FakeRedis:
@@ -79,3 +79,26 @@ def test_release_is_idempotent():
     lease.release()
 
     assert len(redis.eval_calls) == 1
+
+
+def test_in_memory_lease_is_non_blocking_and_reusable_after_release():
+    manager = InMemoryLeaseManager()
+    lease = manager.acquire("voice:asr:global")
+
+    assert lease is not None
+    assert manager.acquire("voice:asr:global") is None
+
+    lease.release()
+
+    assert manager.acquire("voice:asr:global") is not None
+
+
+def test_in_memory_release_is_idempotent():
+    manager = InMemoryLeaseManager()
+    lease = manager.acquire("voice:asr:global")
+
+    lease.release()
+    lease.release()
+
+    replacement = manager.acquire("voice:asr:global")
+    assert replacement is not None

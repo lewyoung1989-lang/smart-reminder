@@ -19,7 +19,7 @@ from apps.voice.domain.results import (
     EmptyTranscriptError,
 )
 from apps.voice.providers.funasr import FunAsrProvider
-from apps.voice.services.lease import RedisLeaseManager
+from apps.voice.services.lease import InMemoryLeaseManager, RedisLeaseManager
 from apps.voice.services.transcription import AsrBusyError, TranscriptionService
 
 from .serializers import VoiceTranscriptionSerializer
@@ -28,16 +28,21 @@ from .throttles import VoiceTranscriptionIpThrottle, VoiceTranscriptionUserThrot
 
 @lru_cache(maxsize=1)
 def build_transcription_service():
+    lease_manager = (
+        InMemoryLeaseManager()
+        if settings.ASR_LEASE_PROVIDER == "memory"
+        else RedisLeaseManager.from_url(
+            settings.ASR_REDIS_URL,
+            ttl_seconds=settings.ASR_LEASE_TTL_SECONDS,
+        )
+    )
     return TranscriptionService(
         provider=FunAsrProvider(
             base_url=settings.ASR_BASE_URL,
             model=settings.ASR_MODEL,
             timeout_seconds=settings.ASR_TIMEOUT_SECONDS,
         ),
-        lease_manager=RedisLeaseManager.from_url(
-            settings.ASR_REDIS_URL,
-            ttl_seconds=settings.ASR_LEASE_TTL_SECONDS,
-        ),
+        lease_manager=lease_manager,
     )
 
 

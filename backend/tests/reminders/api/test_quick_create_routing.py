@@ -3,6 +3,8 @@
 import pytest
 
 from apps.reminders.models import ReminderDraft
+from apps.reminders.domain.natural_language import NaturalLanguageDraft
+from apps.workflows.domain.schemas import TaskSpec
 from apps.workflows.models import WorkflowDraft
 
 
@@ -67,6 +69,44 @@ def test_one_time_reminder_stays_on_reminder_flow(api_client, user):
     assert payload["parser_source"] == "local"
     assert WorkflowDraft.objects.count() == 0
     assert ReminderDraft.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_quick_create_uses_model_workflow_task_before_rule_routing(
+    api_client, user, settings, mocker
+):
+    settings.DEEPSEEK_API_KEY = "test-key"
+    mocker.patch(
+        "apps.reminders.api.views.DeepSeekNaturalLanguageProvider.parse",
+        return_value=NaturalLanguageDraft(
+            draft_type="workflow",
+            workflow=TaskSpec(
+                template_hint="medication_cycle",
+                title="用药提醒",
+                slots={
+                    "medicine_name": "测试药品A",
+                    "dose_text": "1片",
+                    "frequency": "daily",
+                    "time_of_day": "20:00",
+                },
+                requested_capabilities=[
+                    "medicine.schedule",
+                    "notification.important",
+                ],
+            ),
+        ),
+    )
+    api_client.force_authenticate(user)
+
+    response = api_client.post(
+        CREATE_URL,
+        {"text": "以后晚上使用测试药品A"},
+        format="json",
+    )
+
+    assert response.status_code == 201
+    assert response.json()["draft_type"] == "workflow"
+    assert response.json()["workflow"]["template_key"] == "medication_cycle"
 
 
 @pytest.mark.django_db

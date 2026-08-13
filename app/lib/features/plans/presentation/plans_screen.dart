@@ -11,6 +11,7 @@ import '../../../ui/components/app_segmented_control.dart';
 import '../../../ui/components/app_status_banner.dart';
 import '../data/plan_repository.dart';
 import '../domain/plan_models.dart';
+import '../../../platform/notifications/local_notification_scheduler.dart';
 import 'plan_detail_screen.dart';
 
 class PlansScreen extends StatefulWidget {
@@ -18,12 +19,16 @@ class PlansScreen extends StatefulWidget {
     required this.repository,
     this.onOpenSettings,
     this.onOpenPlan,
+    this.notificationScheduler,
+    this.onEditPlan,
     super.key,
   });
 
   final PlanRepository repository;
   final VoidCallback? onOpenSettings;
   final ValueChanged<PlanSummary>? onOpenPlan;
+  final PlanNotificationScheduler? notificationScheduler;
+  final ValueChanged<String>? onEditPlan;
 
   @override
   State<PlansScreen> createState() => _PlansScreenState();
@@ -174,13 +179,125 @@ class _PlansScreenState extends State<PlansScreen> {
       final detail = await widget.repository.getById(plan.id);
       if (!mounted) return;
       await Navigator.of(context).push<void>(
-        MaterialPageRoute(builder: (_) => PlanDetailScreen(detail: detail)),
+        MaterialPageRoute(
+          builder: (_) => _detailScreen(detail, compact: true),
+        ),
       );
+      if (mounted) await _load();
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('计划详情加载失败，请稍后重试')),
       );
+    }
+  }
+
+  PlanDetailScreen _detailScreen(PlanDetail detail, {required bool compact}) {
+    final actions = widget.repository is PlanActions
+        ? widget.repository as PlanActions
+        : null;
+    return PlanDetailScreen(
+      detail: detail,
+      onPause: actions == null
+          ? null
+          : () => _pausePlan(actions, detail, compact: compact),
+      onResume: actions == null
+          ? null
+          : () => _resumePlan(actions, detail, compact: compact),
+      onDelete: actions == null
+          ? null
+          : () => _deletePlan(actions, detail, compact: compact),
+      onEdit: widget.onEditPlan == null || detail.sourceText.trim().isEmpty
+          ? null
+          : () => _editPlan(detail, compact: compact),
+    );
+  }
+
+  Future<void> _pausePlan(
+    PlanActions actions,
+    PlanDetail detail, {
+    required bool compact,
+  }) async {
+    await actions.pause(detail.summary.id);
+    await _cancelPlanNotification(
+      detail.summary.id,
+      failureMessage: '计划已暂停，但手机通知取消失败',
+    );
+    await _finishMutation(compact: compact, message: '计划已暂停');
+  }
+
+  Future<void> _resumePlan(
+    PlanActions actions,
+    PlanDetail detail, {
+    required bool compact,
+  }) async {
+    final updated = await actions.resume(detail.summary.id);
+    final scheduled = await _schedulePlanNotification(updated);
+    await _finishMutation(
+      compact: compact,
+      message: scheduled ? '计划已恢复，手机通知已安排' : '计划已恢复，但手机通知未安排',
+    );
+  }
+
+  Future<void> _deletePlan(
+    PlanActions actions,
+    PlanDetail detail, {
+    required bool compact,
+  }) async {
+    await actions.delete(detail.summary.id);
+    await _cancelPlanNotification(
+      detail.summary.id,
+      failureMessage: '计划已删除，但手机通知取消失败',
+    );
+    _selectedPlanId = null;
+    await _finishMutation(compact: compact, message: '计划已删除');
+  }
+
+  void _editPlan(PlanDetail detail, {required bool compact}) {
+    if (compact) Navigator.of(context).pop();
+    widget.onEditPlan?.call(detail.sourceText);
+  }
+
+  Future<bool> _schedulePlanNotification(PlanDetail detail) async {
+    final scheduler = widget.notificationScheduler;
+    final schedule = detail.notificationSchedule;
+    if (scheduler == null || schedule == null) return false;
+    try {
+      await scheduler.cancelPlan(planId: detail.summary.id);
+      await scheduler.schedulePlan(
+        planId: detail.summary.id,
+        schedule: schedule,
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _cancelPlanNotification(
+    String planId, {
+    required String failureMessage,
+  }) async {
+    try {
+      await widget.notificationScheduler?.cancelPlan(planId: planId);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(failureMessage)),
+        );
+      }
+    }
+  }
+
+  Future<void> _finishMutation({
+    required bool compact,
+    required String message,
+  }) async {
+    if (compact && mounted) Navigator.of(context).pop();
+    if (mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+      await _load();
     }
   }
 
@@ -403,7 +520,7 @@ class _PlansScreenState extends State<PlansScreen> {
 
   Widget _detailPane() {
     final detail = _selectedDetail;
-    if (detail != null) return PlanDetailScreen(detail: detail);
+    if (detail != null) return _detailScreen(detail, compact: false);
     if (_isDetailLoading) {
       return const Padding(
         padding: EdgeInsets.all(AppSpacing.lg),

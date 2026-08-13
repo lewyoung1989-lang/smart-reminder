@@ -83,7 +83,14 @@ void main() {
       await tester.tap(find.text('删除计划'));
       await tester.pumpAndSettle();
       expect(find.text('删除这个计划？'), findsOneWidget);
-      await tester.tap(find.widgetWithText(FilledButton, '删除'));
+      final deleteButton = tester.widget<TextButton>(
+        find.widgetWithText(TextButton, '删除'),
+      );
+      expect(
+        deleteButton.style?.foregroundColor?.resolve(<WidgetState>{}),
+        AppTheme.light().colorScheme.error,
+      );
+      await tester.tap(find.widgetWithText(TextButton, '删除'));
       await tester.pumpAndSettle();
       expect(deletes, 1);
     });

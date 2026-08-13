@@ -81,9 +81,22 @@ void main() {
         'destination': null,
         'queried_sources': [],
         'reminder_label': '每天 20:00 通知提醒',
-        'executions': [],
+        'executions': [
+          {
+            'started_at': '2026-08-11T12:00:00+00:00',
+            'status': 'pending',
+            'message': '等待执行',
+          },
+        ],
         'is_degraded': false,
         'degradation_message': null,
+        'source_text': '每天晚上八点吃布洛芬一片',
+        'notification_schedule': {
+          'scheduled_at': '2026-08-11T12:00:00+00:00',
+          'repeat': 'daily',
+          'title': '用药提醒',
+          'timezone': 'Asia/Shanghai',
+        },
       }),
     ]);
     final repository = ApiPlanRepository(
@@ -96,7 +109,47 @@ void main() {
     expect(client.requests.single.url.path, '/api/v1/plans/plan-1');
     expect(detail.summary.title, '用药提醒');
     expect(detail.reminderLabel, '每天 20:00 通知提醒');
-    expect(detail.executions, isEmpty);
+    expect(detail.executions.single.status, PlanExecutionStatus.pending);
+    expect(detail.sourceText, '每天晚上八点吃布洛芬一片');
+    expect(detail.notificationSchedule?.repeat, PlanRepeat.daily);
+    expect(detail.notificationSchedule?.timezone, 'Asia/Shanghai');
+  });
+
+  test('pauses resumes and deletes a periodic plan', () async {
+    Map<String, Object?> detail(String status) => {
+          'summary': {
+            'id': 'plan-1',
+            'title': '用药提醒',
+            'subtitle': '布洛芬 · 1片',
+            'next_run_at': '2026-08-11T12:00:00+00:00',
+            'status': status,
+            'kind': 'medication',
+          },
+          'queried_sources': <String>[],
+          'reminder_label': '每天 20:00 通知提醒',
+          'executions': <Object>[],
+        };
+    final client = RecordingClient([
+      jsonResponse(200, detail('paused')),
+      jsonResponse(200, detail('active')),
+      http.Response('', 204),
+    ]);
+    final repository = ApiPlanRepository(
+      baseUrl: 'https://api.invalid',
+      client: client,
+    );
+
+    expect(
+        (await repository.pause('plan-1')).summary.status, PlanStatus.paused);
+    expect(
+        (await repository.resume('plan-1')).summary.status, PlanStatus.active);
+    await repository.delete('plan-1');
+
+    expect(client.requests.map((request) => request.method),
+        ['POST', 'POST', 'DELETE']);
+    expect(client.requests[0].url.path, '/api/v1/plans/plan-1/pause');
+    expect(client.requests[1].url.path, '/api/v1/plans/plan-1/resume');
+    expect(client.requests[2].url.path, '/api/v1/plans/plan-1');
   });
 
   test('throws a stable exception for server errors', () async {

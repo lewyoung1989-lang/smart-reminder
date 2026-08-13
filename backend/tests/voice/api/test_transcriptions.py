@@ -7,7 +7,7 @@ import pytest
 from redis.exceptions import RedisError
 from rest_framework.test import APIClient, APIRequestFactory, force_authenticate
 
-from apps.voice.api.views import VoiceTranscriptionView
+from apps.voice.api.views import VoiceTranscriptionView, build_transcription_service
 from apps.voice.domain.audio import AudioValidationError, WavMetadata
 from apps.voice.domain.results import (
     AsrResponseError,
@@ -17,6 +17,7 @@ from apps.voice.domain.results import (
     EmptyTranscriptError,
 )
 from apps.voice.services.transcription import AsrBusyError, TranscriptionOutcome
+from apps.voice.services.lease import InMemoryLeaseManager
 
 
 URL = "/api/v1/voice/transcriptions"
@@ -52,6 +53,16 @@ def install_service(monkeypatch, service):
         "apps.voice.api.views.build_transcription_service",
         lambda: service,
     )
+
+
+def test_builds_memory_lease_service_for_local_debug(settings):
+    settings.ASR_LEASE_PROVIDER = "memory"
+    build_transcription_service.cache_clear()
+
+    service = build_transcription_service()
+
+    assert isinstance(service.lease_manager, InMemoryLeaseManager)
+    build_transcription_service.cache_clear()
 
 
 def test_requires_authentication(api_client):

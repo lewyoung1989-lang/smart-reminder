@@ -340,6 +340,11 @@ class _SmartReminderAppState extends State<SmartReminderApp>
             answerWorkflowDraft: _reminderDraftApi.answerWorkflowDraft,
             voiceInputController: _voiceInputController,
             notificationScheduler: widget.notificationScheduler,
+            planNotificationScheduler:
+                widget.notificationScheduler is PlanNotificationScheduler
+                    ? widget.notificationScheduler as PlanNotificationScheduler
+                    : null,
+            loadPlan: _planRepository.getById,
           ),
         ),
       ),
@@ -382,6 +387,10 @@ class _SmartReminderAppState extends State<SmartReminderApp>
         AuthStatus.authenticated => AppShell(
             todayRepository: _todayRepository,
             planRepository: _planRepository,
+            planNotificationScheduler:
+                widget.notificationScheduler is PlanNotificationScheduler
+                    ? widget.notificationScheduler as PlanNotificationScheduler
+                    : null,
             medicineRepository: _medicineRepository,
             user: _authController.user!,
             themeMode: _themeMode,

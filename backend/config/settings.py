@@ -211,6 +211,11 @@ DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
 DEEPSEEK_TIMEOUT_SECONDS = float(os.environ.get("DEEPSEEK_TIMEOUT_SECONDS", "8"))
 
 ASR_PROVIDER = os.environ.get("ASR_PROVIDER", "funasr")
+ASR_LEASE_PROVIDER = os.environ.get("ASR_LEASE_PROVIDER", "redis")
+if ASR_LEASE_PROVIDER not in {"redis", "memory"}:
+    raise ImproperlyConfigured("ASR_LEASE_PROVIDER must be redis or memory")
+if ASR_LEASE_PROVIDER == "memory" and not DEBUG:
+    raise ImproperlyConfigured("ASR memory leases are only allowed when DEBUG=True")
 ASR_BASE_URL = os.environ.get("ASR_BASE_URL", "http://localhost:18001")
 ASR_MODEL = os.environ.get("ASR_MODEL", "paraformer-zh")
 ASR_TIMEOUT_SECONDS = float(os.environ.get("ASR_TIMEOUT_SECONDS", "20"))

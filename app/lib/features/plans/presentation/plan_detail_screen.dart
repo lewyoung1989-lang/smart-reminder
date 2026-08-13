@@ -161,8 +161,11 @@ class PlanDetailScreen extends StatelessWidget {
                 onPressed: () => Navigator.of(dialogContext).pop(false),
                 child: const Text('取消'),
               ),
-              FilledButton(
+              TextButton(
                 onPressed: () => Navigator.of(dialogContext).pop(true),
+                style: TextButton.styleFrom(
+                  foregroundColor: Theme.of(context).colorScheme.error,
+                ),
                 child: const Text('删除'),
               ),
             ],
@@ -306,9 +309,12 @@ String _kindLabel(PlanKind kind) => switch (kind) {
     };
 
 String _executionLabel(PlanExecutionStatus status) => switch (status) {
+      PlanExecutionStatus.pending => '待执行',
+      PlanExecutionStatus.running => '执行中',
       PlanExecutionStatus.completed => '已完成',
       PlanExecutionStatus.degraded => '已降级',
       PlanExecutionStatus.failed => '失败',
+      PlanExecutionStatus.cancelled => '已取消',
     };
 
 String _formatDateTime(DateTime value) {

@@ -1,15 +1,18 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:smart_reminder_app/features/reminder_drafts/domain/reminder_draft.dart';
+import 'package:smart_reminder_app/features/plans/domain/plan_models.dart';
 import 'package:smart_reminder_app/platform/notifications/local_notification_scheduler.dart';
 import 'package:smart_reminder_app/platform/notifications/reminder_notification_scheduler.dart';
 import 'package:timezone/timezone.dart' as tz;
 
-class RecordingNotificationGateway implements LocalNotificationGateway {
+class RecordingNotificationGateway
+    implements LocalNotificationGateway, DailyLocalNotificationGateway {
   bool permissionGranted = true;
   Object? permissionError;
   int permissionRequestCount = 0;
   final scheduled = <({int id, String title, tz.TZDateTime date})>[];
   final cancelled = <int>[];
+  final daily = <({int id, String title, tz.TZDateTime date})>[];
 
   @override
   Future<bool> requestPermissions() async {
@@ -25,6 +28,15 @@ class RecordingNotificationGateway implements LocalNotificationGateway {
     required tz.TZDateTime scheduledDate,
   }) async {
     scheduled.add((id: id, title: title, date: scheduledDate));
+  }
+
+  @override
+  Future<void> scheduleDaily({
+    required int id,
+    required String title,
+    required tz.TZDateTime firstDate,
+  }) async {
+    daily.add((id: id, title: title, date: firstDate));
   }
 
   @override
@@ -130,5 +142,28 @@ void main() {
 
     expect(gateway.cancelled.single, gateway.scheduled.single.id);
     expect(gateway.permissionRequestCount, 1);
+  });
+
+  test('schedules a daily plan with a stable plan notification id', () async {
+    final gateway = RecordingNotificationGateway();
+    final scheduler = LocalNotificationScheduler(
+      gateway: gateway,
+      now: () => now,
+    );
+
+    await scheduler.schedulePlan(
+      planId: 'plan-1',
+      schedule: PlanNotificationSchedule(
+        scheduledAt: DateTime(2026, 8, 4, 20),
+        repeat: PlanRepeat.daily,
+        title: '用药提醒',
+        timezone: 'Asia/Shanghai',
+      ),
+    );
+    await scheduler.cancelPlan(planId: 'plan-1');
+
+    expect(gateway.daily.single.title, '用药提醒');
+    expect(gateway.daily.single.date.hour, 20);
+    expect(gateway.cancelled.single, gateway.daily.single.id);
   });
 }

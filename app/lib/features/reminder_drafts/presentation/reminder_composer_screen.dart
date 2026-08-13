@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../platform/notifications/reminder_notification_scheduler.dart';
+import '../../../platform/notifications/local_notification_scheduler.dart';
+import '../../plans/domain/plan_models.dart';
 import '../../quick_create/domain/quick_create_draft.dart';
 import '../../quick_create/domain/quick_create_result.dart';
 import '../../quick_create/domain/voice_input_controller.dart';
@@ -20,6 +22,8 @@ class ReminderComposerScreen extends StatefulWidget {
     this.reminderCreationService,
     this.voiceInputController,
     this.now,
+    this.planNotificationScheduler,
+    this.loadPlan,
     super.key,
   }) : assert(confirmDraft != null || reminderCreationService != null);
 
@@ -32,6 +36,8 @@ class ReminderComposerScreen extends StatefulWidget {
   final ReminderCreationService? reminderCreationService;
   final VoiceInputController? voiceInputController;
   final DateTime? now;
+  final PlanNotificationScheduler? planNotificationScheduler;
+  final Future<PlanDetail> Function(String id)? loadPlan;
 
   @override
   State<ReminderComposerScreen> createState() => _ReminderComposerScreenState();
@@ -113,21 +119,41 @@ class _ReminderComposerScreenState extends State<ReminderComposerScreen> {
     final confirm = widget.confirmWorkflowDraft;
     if (confirm == null || !workflow.canConfirm) return;
     try {
-      await confirm(workflow.id);
+      final planId = await confirm(workflow.id);
+      final scheduled = await _schedulePlan(planId);
       if (!mounted) return;
       final navigator = Navigator.of(context);
       if (navigator.canPop()) {
-        navigator.pop();
+        navigator.pop(scheduled);
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('计划已确认')),
+        SnackBar(
+          content: Text(
+            scheduled ? '计划已确认，手机通知已安排' : '计划已确认，但手机通知未安排',
+          ),
+        ),
       );
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('确认失败，请稍后重试')),
       );
+    }
+  }
+
+  Future<bool> _schedulePlan(String planId) async {
+    final scheduler = widget.planNotificationScheduler;
+    final load = widget.loadPlan;
+    if (scheduler == null || load == null) return false;
+    try {
+      final plan = await load(planId);
+      final schedule = plan.notificationSchedule;
+      if (schedule == null) return false;
+      await scheduler.schedulePlan(planId: planId, schedule: schedule);
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -153,8 +179,7 @@ class _ReminderComposerScreenState extends State<ReminderComposerScreen> {
           draft: draft.workflow!,
           onConfirm: _confirmWorkflow,
           onReparse: _reparse,
-          onAnswer:
-              widget.answerWorkflowDraft != null ? _answerWorkflow : null,
+          onAnswer: widget.answerWorkflowDraft != null ? _answerWorkflow : null,
         );
       }
       return ReminderDraftScreen(

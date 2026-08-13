@@ -5,6 +5,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.reminders.models import ReminderRule
+from apps.workflows.models import WorkflowRun
+from apps.workflows.domain.schemas import WorkflowSpec
+
+from .views import _initial_next_run_at
 
 
 def _workflow_rules(user):
@@ -13,6 +17,7 @@ def _workflow_rules(user):
             owner=user,
             workflow_draft__isnull=False,
             template_key__isnull=False,
+            cancelled_at__isnull=True,
         )
         .select_related("workflow_draft")
         .order_by("enabled", "next_run_at", "-created_at")
@@ -31,16 +36,90 @@ def _summary(rule: ReminderRule) -> dict:
 
 
 def _detail(rule: ReminderRule) -> dict:
+    executions = [
+        _execution(run)
+        for run in rule.workflow_runs.order_by("-started_at", "-id")[:20]
+    ]
+    latest_result = executions[0] if executions else None
     return {
         "summary": _summary(rule),
         "arrival_label": _arrival_label(rule),
         "destination": _slots(rule).get("destination_text"),
         "queried_sources": _queried_sources(rule),
         "reminder_label": _reminder_label(rule),
-        "executions": [],
-        "is_degraded": False,
-        "degradation_message": None,
+        "executions": executions,
+        "is_degraded": (
+            latest_result is not None and latest_result["status"] == "degraded"
+        ),
+        "degradation_message": (
+            latest_result["message"]
+            if latest_result is not None and latest_result["status"] == "degraded"
+            else None
+        ),
+        "notification_schedule": _notification_schedule(rule),
+        "source_text": getattr(rule.workflow_draft, "source_text", ""),
     }
+
+
+def _execution(run: WorkflowRun) -> dict:
+    result = run.result_json if isinstance(run.result_json, dict) else {}
+    degraded = _result_is_degraded(result)
+    status_value = _execution_status(run, degraded)
+    return {
+        "started_at": (
+            run.started_at or run.scheduled_for or run.workflow.created_at
+        ).isoformat(),
+        "status": status_value,
+        "message": _execution_message(status_value),
+    }
+
+
+def _execution_status(run: WorkflowRun, degraded: bool) -> str:
+    if run.status == WorkflowRun.Status.SUCCEEDED:
+        return "degraded" if degraded else "completed"
+    return {
+        WorkflowRun.Status.PENDING: "pending",
+        WorkflowRun.Status.RUNNING: "running",
+        WorkflowRun.Status.CANCELLED: "cancelled",
+    }.get(run.status, "failed")
+
+
+def _result_is_degraded(result: dict) -> bool:
+    route = result.get("route") if isinstance(result.get("route"), dict) else {}
+    weather = result.get("weather") if isinstance(result.get("weather"), dict) else {}
+    return route.get("status") == "fallback_static" or weather.get("status") == "unavailable"
+
+
+def _execution_message(status_value: str) -> str:
+    return {
+        "pending": "等待执行",
+        "running": "正在执行",
+        "completed": "计划已按时执行",
+        "degraded": "外部信息不可用，已按降级策略继续提醒",
+        "cancelled": "本次执行已取消",
+        "failed": "执行失败，系统将按策略重试",
+    }[status_value]
+
+
+def _notification_schedule(rule: ReminderRule) -> dict | None:
+    slots = _slots(rule)
+    if rule.template_key == "medication_cycle":
+        time_of_day = slots.get("time_of_day")
+        if isinstance(time_of_day, str) and rule.next_run_at is not None:
+            return {
+                "scheduled_at": rule.next_run_at.isoformat(),
+                "repeat": "daily",
+                "title": rule.title,
+                "timezone": rule.timezone,
+            }
+    if rule.next_run_at is not None:
+        return {
+            "scheduled_at": rule.next_run_at.isoformat(),
+            "repeat": "none",
+            "title": rule.title,
+            "timezone": rule.timezone,
+        }
+    return None
 
 
 def _slots(rule: ReminderRule) -> dict:
@@ -142,5 +221,66 @@ class PlanDetailView(APIView):
         try:
             rule = _workflow_rules(request.user).get(id=plan_id)
         except ReminderRule.DoesNotExist:
+            return Response(
+                {"detail": "未找到该周期计划"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(_detail(rule), status=status.HTTP_200_OK)
+
+    def delete(self, request, plan_id):
+        try:
+            rule = _workflow_rules(request.user).get(id=plan_id)
+        except ReminderRule.DoesNotExist:
+            return Response(
+                {"detail": "未找到该周期计划"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        rule.enabled = False
+        rule.cancelled_at = timezone.now()
+        rule.paused_reason = "user_deleted"
+        rule.revision = (rule.revision or 0) + 1
+        rule.save(update_fields=["enabled", "cancelled_at", "paused_reason", "revision"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class PlanPauseView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, plan_id):
+        try:
+            rule = _workflow_rules(request.user).get(id=plan_id)
+        except ReminderRule.DoesNotExist:
+            return Response(
+                {"detail": "未找到该周期计划"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        rule.enabled = False
+        rule.paused_reason = "user_paused"
+        rule.revision = (rule.revision or 0) + 1
+        rule.save(update_fields=["enabled", "paused_reason", "revision"])
+        return Response(_detail(rule), status=status.HTTP_200_OK)
+
+
+class PlanResumeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, plan_id):
+        try:
+            rule = _workflow_rules(request.user).get(id=plan_id)
+        except ReminderRule.DoesNotExist:
             return Response({"detail": "未找到该周期计划"}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            workflow = WorkflowSpec.model_validate(rule.workflow_spec_json)
+            rule.next_run_at = _initial_next_run_at(workflow, timezone.now())
+        except (ValueError, TypeError):
+            return Response(
+                {"code": "plan_invalid", "detail": "计划配置已失效，请重新创建"},
+                status=status.HTTP_409_CONFLICT,
+            )
+        rule.enabled = True
+        rule.paused_reason = None
+        rule.revision = (rule.revision or 0) + 1
+        rule.save(
+            update_fields=["enabled", "paused_reason", "next_run_at", "revision"]
+        )
         return Response(_detail(rule), status=status.HTTP_200_OK)

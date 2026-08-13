@@ -2,7 +2,30 @@ enum PlanStatus { active, pending, paused }
 
 enum PlanKind { medication, departure, reminder }
 
-enum PlanExecutionStatus { completed, degraded, failed }
+enum PlanExecutionStatus {
+  pending,
+  running,
+  completed,
+  degraded,
+  failed,
+  cancelled,
+}
+
+enum PlanRepeat { none, daily }
+
+class PlanNotificationSchedule {
+  const PlanNotificationSchedule({
+    required this.scheduledAt,
+    required this.repeat,
+    required this.title,
+    required this.timezone,
+  });
+
+  final DateTime scheduledAt;
+  final PlanRepeat repeat;
+  final String title;
+  final String timezone;
+}
 
 class PlanSummary {
   const PlanSummary({
@@ -44,6 +67,8 @@ class PlanDetail {
     required List<PlanExecution> executions,
     this.isDegraded = false,
     this.degradationMessage,
+    this.sourceText = '',
+    this.notificationSchedule,
   })  : queriedSources = List.unmodifiable(queriedSources),
         executions = List.unmodifiable(executions);
 
@@ -55,6 +80,8 @@ class PlanDetail {
   final List<PlanExecution> executions;
   final bool isDegraded;
   final String? degradationMessage;
+  final String sourceText;
+  final PlanNotificationSchedule? notificationSchedule;
 }
 
 class PlanCollection {

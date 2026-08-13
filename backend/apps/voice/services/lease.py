@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from threading import Lock
 from uuid import uuid4
 
 from redis import Redis
@@ -61,3 +62,41 @@ class RedisLeaseManager:
             key=key,
             owner_token=owner_token,
         )
+
+
+@dataclass
+class InMemoryLease:
+    manager: "InMemoryLeaseManager"
+    key: str
+    _released: bool = field(default=False, init=False)
+
+    def release(self):
+        if self._released:
+            return
+        self._released = True
+        self.manager.release(self.key)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.release()
+
+
+class InMemoryLeaseManager:
+    """仅供本地单进程调试；生产必须使用 Redis 跨进程租约。"""
+
+    def __init__(self):
+        self._guard = Lock()
+        self._keys = set()
+
+    def acquire(self, key):
+        with self._guard:
+            if key in self._keys:
+                return None
+            self._keys.add(key)
+        return InMemoryLease(self, key)
+
+    def release(self, key):
+        with self._guard:
+            self._keys.discard(key)

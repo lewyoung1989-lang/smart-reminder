@@ -2,6 +2,8 @@
 .idea/
 .env
 .venv/
+.venv-funasr/
+.models/
 .tools/
 .worktrees/
 .superpowers/

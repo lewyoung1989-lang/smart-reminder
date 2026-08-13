@@ -313,6 +313,7 @@ def test_api_receives_complete_asr_production_environment():
         "OCR_ENABLED": "${OCR_ENABLED:-false}",
         "ASR_PROVIDER": "${ASR_PROVIDER:-funasr}",
         "ASR_BASE_URL": "${ASR_BASE_URL:-http://funasr:8000}",
+        "ASR_LEASE_PROVIDER": "${ASR_LEASE_PROVIDER:-redis}",
         "ASR_MODEL": "${ASR_MODEL:-paraformer-zh}",
         "ASR_TIMEOUT_SECONDS": "${ASR_TIMEOUT_SECONDS:-20}",
         "ASR_MAX_AUDIO_BYTES": "${ASR_MAX_AUDIO_BYTES:-4194304}",

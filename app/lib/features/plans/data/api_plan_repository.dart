@@ -5,7 +5,7 @@ import 'package:http/http.dart' as http;
 import '../domain/plan_models.dart';
 import 'plan_repository.dart';
 
-class ApiPlanRepository implements PlanRepository {
+class ApiPlanRepository implements PlanRepository, PlanActions {
   ApiPlanRepository({
     required String baseUrl,
     http.Client? client,
@@ -45,7 +45,39 @@ class ApiPlanRepository implements PlanRepository {
     if (response.statusCode != 200) {
       throw PlanApiException(response.statusCode, response.body);
     }
-    final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    return _detail(jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  @override
+  Future<PlanDetail> pause(String id) => _postAction(id, 'pause');
+
+  @override
+  Future<PlanDetail> resume(String id) => _postAction(id, 'resume');
+
+  Future<PlanDetail> _postAction(String id, String action) async {
+    final response = await _client.post(
+      _baseUri.resolve('/api/v1/plans/$id/$action'),
+      headers: _headers,
+    );
+    if (response.statusCode != 200) {
+      throw PlanApiException(response.statusCode, response.body);
+    }
+    return _detail(jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  @override
+  Future<void> delete(String id) async {
+    final response = await _client.delete(
+      _baseUri.resolve('/api/v1/plans/$id'),
+      headers: _headers,
+    );
+    if (response.statusCode != 204) {
+      throw PlanApiException(response.statusCode, response.body);
+    }
+  }
+
+  PlanDetail _detail(Map<String, dynamic> payload) {
+    final notification = payload['notification_schedule'];
     return PlanDetail(
       summary: _summary(payload['summary'] as Map<String, dynamic>),
       arrivalLabel: payload['arrival_label'] as String?,
@@ -59,6 +91,18 @@ class ApiPlanRepository implements PlanRepository {
           .toList(growable: false),
       isDegraded: payload['is_degraded'] == true,
       degradationMessage: payload['degradation_message'] as String?,
+      sourceText: payload['source_text'] as String? ?? '',
+      notificationSchedule: notification is Map<String, dynamic>
+          ? PlanNotificationSchedule(
+              scheduledAt:
+                  DateTime.parse(notification['scheduled_at'] as String),
+              repeat: notification['repeat'] == 'daily'
+                  ? PlanRepeat.daily
+                  : PlanRepeat.none,
+              title: notification['title'] as String,
+              timezone: notification['timezone'] as String,
+            )
+          : null,
     );
   }
 
@@ -91,9 +135,12 @@ PlanSummary _summary(Map<String, dynamic> json) => PlanSummary(
 PlanExecution _execution(Map<String, dynamic> json) => PlanExecution(
       startedAt: DateTime.parse(json['started_at'] as String).toLocal(),
       status: switch (json['status']) {
+        'pending' => PlanExecutionStatus.pending,
+        'running' => PlanExecutionStatus.running,
         'completed' => PlanExecutionStatus.completed,
         'degraded' => PlanExecutionStatus.degraded,
         'failed' => PlanExecutionStatus.failed,
+        'cancelled' => PlanExecutionStatus.cancelled,
         final value =>
           throw FormatException('Unsupported plan execution status: $value'),
       },

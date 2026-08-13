@@ -3,6 +3,7 @@ import 'package:timezone/data/latest.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../../features/reminder_drafts/domain/reminder_draft.dart';
+import '../../features/plans/domain/plan_models.dart';
 import 'reminder_notification_scheduler.dart';
 
 abstract interface class LocalNotificationGateway {
@@ -17,7 +18,25 @@ abstract interface class LocalNotificationGateway {
   Future<void> cancel({required int id});
 }
 
-class LocalNotificationScheduler implements ReminderNotificationScheduler {
+abstract interface class DailyLocalNotificationGateway {
+  Future<void> scheduleDaily({
+    required int id,
+    required String title,
+    required tz.TZDateTime firstDate,
+  });
+}
+
+abstract interface class PlanNotificationScheduler {
+  Future<void> schedulePlan({
+    required String planId,
+    required PlanNotificationSchedule schedule,
+  });
+
+  Future<void> cancelPlan({required String planId});
+}
+
+class LocalNotificationScheduler
+    implements ReminderNotificationScheduler, PlanNotificationScheduler {
   LocalNotificationScheduler({
     required this.gateway,
     DateTime Function()? now,
@@ -90,6 +109,50 @@ class LocalNotificationScheduler implements ReminderNotificationScheduler {
     }
   }
 
+  @override
+  Future<void> schedulePlan({
+    required String planId,
+    required PlanNotificationSchedule schedule,
+  }) async {
+    if (!schedule.scheduledAt.isAfter(_now())) {
+      throw const InvalidNotificationSchedule();
+    }
+    final permissionGranted = await gateway.requestPermissions();
+    if (!permissionGranted) throw const NotificationPermissionDenied();
+    late final tz.Location location;
+    try {
+      location = tz.getLocation(schedule.timezone);
+    } catch (_) {
+      throw const InvalidNotificationSchedule();
+    }
+    final date = tz.TZDateTime.from(schedule.scheduledAt, location);
+    try {
+      if (schedule.repeat == PlanRepeat.daily) {
+        final dailyGateway = gateway;
+        if (dailyGateway is! DailyLocalNotificationGateway) {
+          throw const NotificationSchedulingFailed();
+        }
+        await (dailyGateway as DailyLocalNotificationGateway).scheduleDaily(
+          id: _stableNotificationId('plan:$planId'),
+          title: schedule.title,
+          firstDate: date,
+        );
+      } else {
+        await gateway.schedule(
+          id: _stableNotificationId('plan:$planId'),
+          title: schedule.title,
+          scheduledDate: date,
+        );
+      }
+    } catch (_) {
+      throw const NotificationSchedulingFailed();
+    }
+  }
+
+  @override
+  Future<void> cancelPlan({required String planId}) =>
+      cancel(reminderId: 'plan:$planId');
+
   static int _stableNotificationId(String reminderId) {
     var hash = 0;
     for (final codeUnit in reminderId.codeUnits) {
@@ -99,7 +162,8 @@ class LocalNotificationScheduler implements ReminderNotificationScheduler {
   }
 }
 
-class FlutterLocalNotificationGateway implements LocalNotificationGateway {
+class FlutterLocalNotificationGateway
+    implements LocalNotificationGateway, DailyLocalNotificationGateway {
   FlutterLocalNotificationGateway({FlutterLocalNotificationsPlugin? plugin})
       : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
 
@@ -146,6 +210,31 @@ class FlutterLocalNotificationGateway implements LocalNotificationGateway {
       ),
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       payload: 'reminder:$id',
+    );
+  }
+
+  @override
+  Future<void> scheduleDaily({
+    required int id,
+    required String title,
+    required tz.TZDateTime firstDate,
+  }) async {
+    await _plugin.zonedSchedule(
+      id: id,
+      title: title,
+      body: '用药时间到了',
+      scheduledDate: firstDate,
+      notificationDetails: const NotificationDetails(
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+          threadIdentifier: 'smart-reminder-plans',
+        ),
+      ),
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      matchDateTimeComponents: DateTimeComponents.time,
+      payload: 'plan:$id',
     );
   }
 

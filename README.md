@@ -2,13 +2,14 @@
 
 面向个人与家庭的智能提醒 App。当前 MVP 已支持：
 
-- 输入中文文字生成结构化提醒草稿。
-- “今天/明天几点”和“几分钟后”等简单表达由本地规则解析。
-- 复杂单次提醒在配置后交给 DeepSeek JSON 模式解析。
+- 输入中文文字或语音生成结构化提醒草稿。
+- 配置 DeepSeek 后，自然语言统一由模型优先判断为单次提醒或已注册工作流；模型不可用时回退本地规则。
+- 模型只生成严格校验的提醒数据或 `TaskSpec`，工作流节点仍由系统注册模板编译，模型不能生成 URL、代码、数据库动作或权限字段。
 - 所有解析结果必须由用户确认，确认前不会创建正式提醒。
-- 确认后在 iPhone 安排一次本地通知。
+- 确认后在 iPhone 安排单次或每日周期本地通知。
 - 在 iPhone 录制最长 20 秒的语音，通过私有 FunASR 服务转成可编辑文字。
-- 服务端不保存原始输入，只保存 SHA-256 和结构化草稿。
+- 周期计划支持查看执行记录、暂停、恢复、删除和基于原描述重新创建。
+- 服务端不保存原始音频；单次提醒保存输入摘要，周期计划为支持审计和重新解析会保存用户提交的文字描述。
 
 药盒 OCR 当前使用自建 RapidOCR，候选结果必须人工核对后才会写入药箱。AlarmKit 强闹钟和天气预检查仍在后续阶段。
 
@@ -38,7 +39,7 @@ DEEPSEEK_MODEL=deepseek-v4-flash
 DEEPSEEK_TIMEOUT_SECONDS=8
 ```
 
-修改后重启 Django。简单表达不会调用模型；例如“下周一上午十点提醒我体检”会在本地规则无法确定时调用 DeepSeek。草稿页会显示“本地规则”“DeepSeek”或“本地规则（模型不可用）”。
+修改后重启 Django。配置密钥后，文字输入和语音转写文本都会先由模型选择单次提醒或已注册工作流；模型调用失败、超时或输出未通过校验时，才回退本地确定性规则。当前只允许 `medication_cycle`、`medicine_expiry` 和 `smart_departure` 三种注册工作流，天气与路线真实 Provider 尚未接入。
 
 模型输出始终经过 Pydantic 严格字段校验。非创建意图、额外权限字段、错误时区和过去时间会被拒绝；DeepSeek Key、完整输入和完整模型响应不写日志。
 
@@ -84,6 +85,28 @@ docker compose exec funasr python -c \
 
 FunASR 不映射宿主机端口，只能由 Compose 私有网络中的 Django API 调用。音频、转写文本和上游原始响应不会写入数据库或日志；上传对象和 iPhone 临时 WAV 在请求结束后清理。上线前需另外确认目标模型权重许可证、普通话样本准确率和目标 CPU 的 p95 延迟。
 
+没有 Docker 时，可以使用项目专用 Python 3.11 和 FunASR 虚拟环境直接启动本机服务。当前开发机已准备好对应环境，执行：
+
+```bash
+./scripts/run-funasr-local.sh
+```
+
+脚本只监听 `127.0.0.1:18001`，模型缓存在 Git 忽略的 `.models/funasr/`，虚拟环境位于 Git 忽略的 `.venv-funasr/`。本地 `.env` 使用：
+
+```dotenv
+DJANGO_DEBUG=true
+ASR_BASE_URL=http://127.0.0.1:18001
+ASR_LEASE_PROVIDER=memory
+ASR_THROTTLE_REDIS_URL=
+```
+
+`memory` 租约仅允许本地单进程调试；`DJANGO_DEBUG=false` 时配置会被拒绝。Docker 和生产环境必须使用 `ASR_LEASE_PROVIDER=redis`。启动 Django 后可分别检查：
+
+```bash
+curl http://127.0.0.1:18001/health
+curl http://127.0.0.1:8000/api/v1/health
+```
+
 腾讯云亲友内测以 4 vCPU / 4 GB、单进程和单并发为首发候选，生产默认 `OCR_ENABLED=false`。关闭时，已认证用户访问所有 `/api/v1/ocr/*` 入口统一返回 `503 {"code":"ocr_disabled"}`，未认证请求仍先执行认证并返回 `401`。语音请求的生产总预算只允许 `8 <= ASR_TIMEOUT_SECONDS <= 20` 秒，Gunicorn 为 `30` 秒、Nginx 为 `35` 秒。HTTPX 把总预算分成连接 2 秒、连接池 1 秒、上传 4 秒和读取 `总预算-7` 秒，响应完成后还会用单调时钟拒绝已超总预算的结果；分阶段超时不是任意分块读取的数学硬截止，因此仍保留外层余量。发布脚本复用匹配固定模型 revision 的缓存 marker；marker 缺失或过期时先停止旧 FunASR，再用同等 CPU、内存和线程上限初始化模型。部署开始会保存旧 API 与 FunASR 镜像，候选 API 必须先通过 PostgreSQL、Redis 和 FunASR 依赖预检，Nginx 配置也会在切换前用一次性容器验证；发生失败时统一先恢复 FunASR，再恢复已替换的 API/Worker。4 GB 是否有足够余量仍以服务器真实模型的 RSS、峰值内存、swap 和 OOM 记录为准，详见 `deploy/tencent/README.md`。
 
 当前 Compose 的 API 端口用于本地直连，IP 限流只使用连接来源 `REMOTE_ADDR`，不会信任客户端伪造的转发头。生产环境接入 Nginx 时，必须由 Nginx 覆盖 `X-Forwarded-For` 为单一客户端 IP，并把 Nginx 到 Django 的固定来源 IP 写入 `ASR_TRUSTED_PROXY_IPS`；未在白名单中的来源仍忽略转发头。
@@ -128,6 +151,11 @@ cd app
 | POST | `/api/v1/auth/password/change` | 修改密码并撤销旧会话 |
 | POST | `/api/v1/reminder-drafts` | 解析文字并创建短期草稿 |
 | POST | `/api/v1/reminder-drafts/{id}/confirm` | 人工确认并创建正式提醒 |
+| GET | `/api/v1/plans` | 查询周期计划 |
+| GET | `/api/v1/plans/{id}` | 查询计划详情、执行记录和通知安排 |
+| POST | `/api/v1/plans/{id}/pause` | 暂停周期计划 |
+| POST | `/api/v1/plans/{id}/resume` | 恢复周期计划并重算下次执行时间 |
+| DELETE | `/api/v1/plans/{id}` | 软删除周期计划并保留审计记录 |
 | POST | `/api/v1/voice/transcriptions` | 上传短 PCM WAV 并返回 FunASR 转写文字 |
 | POST | `/api/v1/voice/reminder-drafts` | 兼容上一阶段的转写草稿路径 |
 | POST | `/api/v1/voice/reminder-drafts/{id}/confirm` | 兼容上一阶段的确认路径 |

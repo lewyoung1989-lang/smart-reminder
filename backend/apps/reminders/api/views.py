@@ -14,7 +14,12 @@ from apps.reminders.domain.schemas import ReminderDraftData
 from apps.reminders.domain.intent_parser import ReminderIntentParser
 from apps.reminders.models import ReminderDraft, ReminderRule
 from apps.reminders.providers.deepseek import DeepSeekReminderIntentProvider
-from apps.reminders.services.draft_service import create_reminder_draft
+from apps.reminders.providers.natural_language import DeepSeekNaturalLanguageProvider
+from apps.reminders.providers.deepseek import DeepSeekResponseError
+from apps.reminders.services.draft_service import (
+    create_reminder_draft,
+    persist_reminder_draft,
+)
 from apps.workflows.domain.schemas import TaskSpec
 from apps.workflows.models import WorkflowDraft
 from apps.workflows.services.compiler import WorkflowCompileError, WorkflowCompiler
@@ -74,6 +79,10 @@ def _create_draft_response(*, request, text: str) -> Response:
         now=timezone.now(),
         timezone="Asia/Shanghai",
     )
+    return _response_for_reminder_draft(created)
+
+
+def _response_for_reminder_draft(created) -> Response:
     draft = created.draft
     return Response(
         {
@@ -102,14 +111,18 @@ def _clarification_policy_json(task: TaskSpec) -> dict:
     }
 
 
-def _workflow_draft_response(*, request, text: str) -> Response | None:
+def _workflow_draft_response(
+    *, request, text: str, task: TaskSpec | None = None
+) -> Response | None:
     """Route text with a workflow template intent to the workflow draft flow.
 
     Returns None when the text does not match any registered workflow
     template, so the caller can fall back to one-time reminder parsing.
     """
     now = timezone.now()
-    task = WorkflowTaskParser().parse(text, now=now, timezone="Asia/Shanghai")
+    task = task or WorkflowTaskParser().parse(
+        text, now=now, timezone="Asia/Shanghai"
+    )
     if task.template_hint is None:
         return None
     if task.template_hint == "smart_departure" and task.ambiguities:
@@ -133,6 +146,8 @@ def _workflow_draft_response(*, request, text: str) -> Response | None:
         try:
             workflow = WorkflowCompiler().compile(task)
         except WorkflowCompileError:
+            return None
+        if task.template_hint != workflow.template_key:
             return None
         decision = evaluate_workflow_policy(
             request.user, task, workflow, now, WORKFLOW_ROUTING_SCOPE
@@ -171,6 +186,47 @@ def _workflow_draft_response(*, request, text: str) -> Response | None:
     )
 
 
+def _natural_language_response(*, request, text: str) -> Response:
+    """模型负责理解；系统只编译注册工作流或保存待确认提醒草稿。"""
+    if settings.DEEPSEEK_API_KEY:
+        provider = DeepSeekNaturalLanguageProvider(
+            api_key=settings.DEEPSEEK_API_KEY,
+            base_url=settings.DEEPSEEK_BASE_URL,
+            model=settings.DEEPSEEK_MODEL,
+            timeout_seconds=settings.DEEPSEEK_TIMEOUT_SECONDS,
+        )
+        try:
+            result = provider.parse(
+                text,
+                now=timezone.now(),
+                timezone="Asia/Shanghai",
+            )
+        except DeepSeekResponseError:
+            result = None
+        if result is not None and result.workflow is not None:
+            response = _workflow_draft_response(
+                request=request,
+                text=text,
+                task=result.workflow,
+            )
+            if response is not None:
+                return response
+        if result is not None and result.reminder is not None:
+            created = persist_reminder_draft(
+                user=request.user,
+                text=text,
+                draft_data=result.reminder,
+                parser_source="deepseek",
+                now=timezone.now(),
+            )
+            return _response_for_reminder_draft(created)
+
+    workflow_response = _workflow_draft_response(request=request, text=text)
+    if workflow_response is not None:
+        return workflow_response
+    return _create_draft_response(request=request, text=text)
+
+
 class ReminderDraftListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -178,10 +234,7 @@ class ReminderDraftListCreateView(APIView):
         serializer = CreateTextReminderDraftSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         text = serializer.validated_data["text"]
-        workflow_response = _workflow_draft_response(request=request, text=text)
-        if workflow_response is not None:
-            return workflow_response
-        return _create_draft_response(request=request, text=text)
+        return _natural_language_response(request=request, text=text)
 
 
 class VoiceReminderDraftListCreateView(APIView):
@@ -190,7 +243,7 @@ class VoiceReminderDraftListCreateView(APIView):
     def post(self, request):
         serializer = CreateVoiceReminderDraftSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        return _create_draft_response(
+        return _natural_language_response(
             request=request,
             text=serializer.validated_data["transcript"],
         )

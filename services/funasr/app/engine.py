@@ -6,6 +6,9 @@ MODEL_CACHE_DIR = Path(os.environ.get("MODELSCOPE_CACHE", "/models"))
 
 
 def _cached_model_path(model_id: str) -> str:
+    direct_path = MODEL_CACHE_DIR / model_id
+    if direct_path.exists():
+        return str(direct_path)
     return str(MODEL_CACHE_DIR / "models" / model_id)
 
 

@@ -184,6 +184,7 @@ def test_example_has_complete_non_secret_asr_contract():
     assert {key: values[key] for key in (
         "ASR_PROVIDER",
         "ASR_BASE_URL",
+        "ASR_LEASE_PROVIDER",
         "ASR_MODEL",
         "ASR_TIMEOUT_SECONDS",
         "ASR_MAX_AUDIO_BYTES",
@@ -201,6 +202,7 @@ def test_example_has_complete_non_secret_asr_contract():
     )} == {
         "ASR_PROVIDER": "funasr",
         "ASR_BASE_URL": "http://funasr:8000",
+        "ASR_LEASE_PROVIDER": "redis",
         "ASR_MODEL": "paraformer-zh",
         "ASR_TIMEOUT_SECONDS": "20",
         "ASR_MAX_AUDIO_BYTES": "4194304",
@@ -222,6 +224,7 @@ def test_example_has_complete_non_secret_asr_contract():
     ("key", "value", "message"),
     (
         ("ASR_BASE_URL", "https://asr.example.com", "ASR_BASE_URL"),
+        ("ASR_LEASE_PROVIDER", "memory", "ASR_LEASE_PROVIDER"),
         ("ASR_REDIS_URL", "redis://example.com:6379/0", "ASR_REDIS_URL"),
         (
             "ASR_THROTTLE_REDIS_URL",

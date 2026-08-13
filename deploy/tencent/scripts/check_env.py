@@ -22,6 +22,7 @@ REQUIRED = {
     "DEEPSEEK_API_KEY",
     "ASR_PROVIDER",
     "ASR_BASE_URL",
+    "ASR_LEASE_PROVIDER",
     "ASR_MODEL",
     "ASR_TIMEOUT_SECONDS",
     "ASR_MAX_AUDIO_BYTES",
@@ -126,6 +127,8 @@ def validate(values: dict[str, str]) -> list[str]:
         errors.append("JWT_SIGNING_KEY must contain at least 32 characters")
     if values.get("ASR_PROVIDER") not in {None, "", "funasr"}:
         errors.append("ASR_PROVIDER must be funasr")
+    if values.get("ASR_LEASE_PROVIDER") not in {None, "", "redis"}:
+        errors.append("ASR_LEASE_PROVIDER must be redis")
     if values.get("ASR_MODEL") not in {None, "", "paraformer-zh"}:
         errors.append("ASR_MODEL must be paraformer-zh")
     if values.get("ASR_BASE_URL") not in {

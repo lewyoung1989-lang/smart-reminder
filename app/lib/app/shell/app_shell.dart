@@ -20,6 +20,7 @@ import '../../features/today/data/action_center_api.dart';
 import '../../features/today/data/today_repository.dart';
 import '../../features/today/domain/today_models.dart';
 import '../../features/today/presentation/today_screen.dart';
+import '../../platform/notifications/local_notification_scheduler.dart';
 import '../settings/settings_screen.dart';
 import '../theme/app_spacing.dart';
 
@@ -47,6 +48,7 @@ class AppShell extends StatefulWidget {
     this.onCorrectBatchExpiry,
     this.onCreateBatch,
     this.onParseMedicineDescription,
+    this.planNotificationScheduler,
     super.key,
   });
 
@@ -79,6 +81,7 @@ class AppShell extends StatefulWidget {
   final Future<void> Function(MedicineBatchInput input)? onCreateBatch;
   final Future<MedicineDescriptionDraft> Function(String text)?
       onParseMedicineDescription;
+  final PlanNotificationScheduler? planNotificationScheduler;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -180,11 +183,16 @@ class _AppShellState extends State<AppShell> {
     final confirm = widget.confirmWorkflowDraft;
     if (confirm == null || !draft.canConfirm) return;
     try {
-      await confirm(draft.id);
+      final planId = await confirm(draft.id);
+      final notificationScheduled = await _schedulePlanNotification(planId);
       if (!mounted) return;
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('计划已确认')),
+        SnackBar(
+          content: Text(
+            notificationScheduled ? '计划已确认，手机通知已安排' : '计划已确认，但手机通知未安排',
+          ),
+        ),
       );
     } catch (_) {
       if (mounted) {
@@ -192,6 +200,20 @@ class _AppShellState extends State<AppShell> {
           const SnackBar(content: Text('确认失败，请稍后重试')),
         );
       }
+    }
+  }
+
+  Future<bool> _schedulePlanNotification(String planId) async {
+    final scheduler = widget.planNotificationScheduler;
+    if (scheduler == null) return false;
+    try {
+      final detail = await widget.planRepository.getById(planId);
+      final schedule = detail.notificationSchedule;
+      if (schedule == null) return false;
+      await scheduler.schedulePlan(planId: planId, schedule: schedule);
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -278,6 +300,8 @@ class _AppShellState extends State<AppShell> {
         child: PlansScreen(
           repository: widget.planRepository,
           onOpenSettings: _openSettings,
+          notificationScheduler: widget.planNotificationScheduler,
+          onEditPlan: (sourceText) => _openQuickCreate(initialText: sourceText),
         ),
       ),
       KeyedSubtree(
