@@ -397,66 +397,144 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
   }
 
   Widget _collectionContent(BuildContext context, bool expanded) {
-    return CustomScrollView(
-      slivers: <Widget>[
-        SliverPadding(
+    final collection = _collection;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
           padding: const EdgeInsets.fromLTRB(
-              AppSpacing.lg, AppSpacing.xxl, AppSpacing.lg, AppSpacing.lg),
-          sliver: SliverToBoxAdapter(
-            child: AppPageHeader(
-              title: '药箱',
-              largeTitle: true,
-              actions: <Widget>[
-                _EntryButton(
-                  enabled: !_isOpeningEntry &&
-                      (widget.onCapture != null ||
-                          widget.onCreateBatch != null),
-                  onPressed: _openEntrySheet,
-                ),
-                IconButton(
-                  tooltip: '打开设置',
-                  onPressed: widget.onOpenSettings,
-                  icon: const Icon(LucideIcons.settings),
-                ),
-              ],
-            ),
+            AppSpacing.lg,
+            AppSpacing.xxl,
+            AppSpacing.lg,
+            AppSpacing.lg,
+          ),
+          child: AppPageHeader(
+            title: '药箱',
+            largeTitle: true,
+            actions: <Widget>[
+              _EntryButton(
+                enabled: !_isOpeningEntry &&
+                    (widget.onCapture != null || widget.onCreateBatch != null),
+                onPressed: _openEntrySheet,
+              ),
+              IconButton(
+                tooltip: '打开设置',
+                onPressed: widget.onOpenSettings,
+                icon: const Icon(LucideIcons.settings),
+              ),
+            ],
           ),
         ),
-        SliverPadding(
+        Padding(
           padding: const EdgeInsets.fromLTRB(
             AppSpacing.lg,
             0,
             AppSpacing.lg,
             AppSpacing.md,
           ),
-          sliver: SliverToBoxAdapter(
-            child: AppSegmentedControl<MedicineCabinetScope>(
-              key: const ValueKey('cabinet-scope-tabs'),
-              value: _scope,
-              options: const [
-                AppSegment(
-                  value: MedicineCabinetScope.personal,
-                  label: '个人药箱',
-                ),
-                AppSegment(
-                  value: MedicineCabinetScope.family,
-                  label: '家庭药箱',
-                ),
-              ],
-              onChanged: (scope) {
-                if (scope == _scope) return;
-                setState(() => _scope = scope);
-                _load(clearCollection: true);
-              },
-            ),
+          child: AppSegmentedControl<MedicineCabinetScope>(
+            key: const ValueKey('cabinet-scope-tabs'),
+            value: _scope,
+            options: const [
+              AppSegment(
+                value: MedicineCabinetScope.personal,
+                label: '个人药箱',
+              ),
+              AppSegment(
+                value: MedicineCabinetScope.family,
+                label: '家庭药箱',
+              ),
+            ],
+            onChanged: (scope) {
+              if (scope == _scope) return;
+              setState(() => _scope = scope);
+              _load(clearCollection: true);
+            },
           ),
         ),
-        ..._contentSlivers(context, expanded),
+        if (collection != null) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+            child: TextField(
+              key: const Key('medicine-search'),
+              onChanged: _setQuery,
+              decoration: InputDecoration(
+                hintText: '搜索药品或规格',
+                prefixIcon: const Icon(LucideIcons.search, size: 20),
+                filled: true,
+                fillColor: Theme.of(context).colorScheme.surfaceContainer,
+                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                  borderSide: BorderSide(
+                    color: Theme.of(context).colorScheme.primary,
+                    width: 1.5,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+            child: AppSegmentedControl<_ExpiryFilter>(
+              key: const ValueKey('cabinet-filter-tabs'),
+              value: _filter,
+              options: _filterOptions(collection),
+              onChanged: _setFilter,
+            ),
+          ),
+        ],
+        Expanded(
+          child: CustomScrollView(
+            key: const PageStorageKey('cabinet-list-scroll'),
+            slivers: _listSlivers(context, expanded),
+          ),
+        ),
       ],
     );
   }
 
-  List<Widget> _contentSlivers(BuildContext context, bool expanded) {
+  List<AppSegment<_ExpiryFilter>> _filterOptions(
+    MedicineCollection collection,
+  ) {
+    final counts = <_ExpiryFilter, int>{
+      _ExpiryFilter.all: collection.items.length,
+      _ExpiryFilter.expiring: collection.items
+          .where((item) => item.status == MedicineStatus.expiring)
+          .length,
+      _ExpiryFilter.expired: collection.items
+          .where((item) => item.status == MedicineStatus.expired)
+          .length,
+    };
+    return <AppSegment<_ExpiryFilter>>[
+      AppSegment(
+        value: _ExpiryFilter.all,
+        label: '全部',
+        count: counts[_ExpiryFilter.all],
+      ),
+      AppSegment(
+        value: _ExpiryFilter.expiring,
+        label: '临期',
+        count: counts[_ExpiryFilter.expiring],
+      ),
+      AppSegment(
+        value: _ExpiryFilter.expired,
+        label: '已过期',
+        count: counts[_ExpiryFilter.expired],
+      ),
+    ];
+  }
+
+  List<Widget> _listSlivers(BuildContext context, bool expanded) {
     final collection = _collection;
     final permissionRecovery = _permissionRecoverySlivers();
     if (collection == null) {
@@ -505,72 +583,7 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
       ];
     }
     final visible = _filtered(collection.items);
-    final counts = <_ExpiryFilter, int>{
-      _ExpiryFilter.all: collection.items.length,
-      _ExpiryFilter.expiring: collection.items
-          .where((item) => item.status == MedicineStatus.expiring)
-          .length,
-      _ExpiryFilter.expired: collection.items
-          .where((item) => item.status == MedicineStatus.expired)
-          .length,
-    };
     final slivers = <Widget>[
-      SliverPadding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-        sliver: SliverToBoxAdapter(
-          child: TextField(
-            key: const Key('medicine-search'),
-            onChanged: _setQuery,
-            decoration: InputDecoration(
-              hintText: '搜索药品或规格',
-              prefixIcon: const Icon(LucideIcons.search, size: 20),
-              filled: true,
-              fillColor: Theme.of(context).colorScheme.surfaceContainer,
-              contentPadding: const EdgeInsets.symmetric(vertical: 10),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-                borderSide: BorderSide.none,
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-                borderSide: BorderSide.none,
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-                borderSide: BorderSide(
-                  color: Theme.of(context).colorScheme.primary,
-                  width: 1.5,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-      const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.md)),
-      SliverPadding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-        sliver: SliverToBoxAdapter(
-          child: AppSegmentedControl<_ExpiryFilter>(
-            key: const ValueKey('cabinet-filter-tabs'),
-            value: _filter,
-            options: <AppSegment<_ExpiryFilter>>[
-              AppSegment(
-                  value: _ExpiryFilter.all,
-                  label: '全部',
-                  count: counts[_ExpiryFilter.all]),
-              AppSegment(
-                  value: _ExpiryFilter.expiring,
-                  label: '临期',
-                  count: counts[_ExpiryFilter.expiring]),
-              AppSegment(
-                  value: _ExpiryFilter.expired,
-                  label: '已过期',
-                  count: counts[_ExpiryFilter.expired]),
-            ],
-            onChanged: _setFilter,
-          ),
-        ),
-      ),
       const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.lg)),
       ...permissionRecovery,
     ];
@@ -608,27 +621,29 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
       )));
       return slivers;
     }
-    slivers.add(SliverPadding(
-      padding: const EdgeInsets.fromLTRB(
-          AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.xxl),
-      sliver: SliverToBoxAdapter(
-        child: DecoratedBox(
+    slivers.add(
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          0,
+          AppSpacing.lg,
+          AppSpacing.xxl,
+        ),
+        sliver: DecoratedSliver(
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface,
           ),
-          child: Column(
-            children: <Widget>[
-              for (var index = 0; index < visible.length; index += 1)
-                _MedicineRow(
-                  medicine: visible[index],
-                  showDivider: index < visible.length - 1,
-                  onTap: () => _openMedicine(visible[index], expanded),
-                ),
-            ],
+          sliver: SliverList.builder(
+            itemCount: visible.length,
+            itemBuilder: (context, index) => _MedicineRow(
+              medicine: visible[index],
+              showDivider: index < visible.length - 1,
+              onTap: () => _openMedicine(visible[index], expanded),
+            ),
           ),
         ),
       ),
-    ));
+    );
     return slivers;
   }
 

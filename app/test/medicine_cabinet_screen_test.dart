@@ -217,6 +217,45 @@ void main() {
     );
   });
 
+  testWidgets('scrolls medicine rows without moving cabinet controls',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 700));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: MedicineCabinetScreen(
+          repository: _Repository(itemCount: 12),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final controls = find.byKey(const ValueKey('cabinet-filter-tabs'));
+    final firstRow = find.byKey(const ValueKey('medicine-row-medicine-1'));
+    final list = find.byKey(const PageStorageKey('cabinet-list-scroll'));
+    final scrollable = find.descendant(
+      of: list,
+      matching: find.byType(Scrollable),
+    );
+    final controlsTopBefore = tester.getTopLeft(controls).dy;
+    final scrollOffsetBefore =
+        tester.state<ScrollableState>(scrollable).position.pixels;
+    expect(firstRow, findsOneWidget);
+
+    await tester.drag(list, const Offset(0, -240));
+    await tester.pumpAndSettle();
+
+    expect(tester.getTopLeft(controls).dy, controlsTopBefore);
+    expect(
+      tester.state<ScrollableState>(scrollable).position.pixels,
+      greaterThan(scrollOffsetBefore),
+    );
+    expect(firstRow, findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('cabinet applies a paired native dark palette', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -416,6 +455,7 @@ class _Repository implements MedicineRepository {
     this.status = MedicineStatus.active,
     this.nearestExpiry,
     this.isTruncated = false,
+    this.itemCount = 1,
   });
 
   var loadCalls = 0;
@@ -423,6 +463,7 @@ class _Repository implements MedicineRepository {
   final MedicineStatus status;
   final DateTime? nearestExpiry;
   final bool isTruncated;
+  final int itemCount;
 
   late final detail = MedicineDetail(
     summary: MedicineSummary(
@@ -457,9 +498,20 @@ class _Repository implements MedicineRepository {
     loadCalls += 1;
     scopes.add(scope);
     return MedicineCollection(
-      items: [detail.summary],
+      items: [
+        detail.summary,
+        for (var index = 2; index <= itemCount; index += 1)
+          MedicineSummary(
+            id: 'medicine-$index',
+            name: '测试药品 $index',
+            specification: '10mg*20片',
+            totalQuantity: index,
+            nearestExpiry: DateTime(2027, 1, index.clamp(1, 28)),
+            status: MedicineStatus.active,
+          ),
+      ],
       isTruncated: isTruncated,
-      loadedBatchCount: 1,
+      loadedBatchCount: itemCount,
     );
   }
 }
