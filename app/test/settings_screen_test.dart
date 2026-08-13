@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:smart_reminder_app/app/settings/settings_screen.dart';
+import 'package:smart_reminder_app/app/theme/app_theme.dart';
 import 'package:smart_reminder_app/features/auth/domain/auth_models.dart';
 
 void main() {
@@ -12,6 +13,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        theme: AppTheme.light(),
         home: StatefulBuilder(
           builder: (context, setState) => SettingsScreen(
             user: const AuthUser(
@@ -50,7 +52,17 @@ void main() {
     await tester.pumpAndSettle();
     expect(passwordCalls, 1);
 
-    await tester.tap(find.text('退出登录'));
+    final logoutButton = find.widgetWithText(TextButton, '退出登录');
+    ScaffoldMessenger.of(
+      tester.element(find.byType(SettingsScreen)),
+    ).hideCurrentSnackBar();
+    await tester.pumpAndSettle();
+    await Scrollable.ensureVisible(
+      tester.element(logoutButton),
+      alignment: 0.5,
+    );
+    await tester.pump();
+    await tester.tap(logoutButton);
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '确认退出'));
     await tester.pumpAndSettle();

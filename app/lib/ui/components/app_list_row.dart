@@ -28,8 +28,8 @@ class AppListRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final border = _borderFor(scheme.outline);
-    final borderRadius = _borderRadiusFor(position);
+    final showDivider = position != AppListRowPosition.single &&
+        position != AppListRowPosition.last;
     final semanticsLabel = [
       title,
       subtitle,
@@ -46,19 +46,20 @@ class AppListRow extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: scheme.surface,
-          border: border,
-          borderRadius: borderRadius,
         ),
         child: Material(
           color: Colors.transparent,
-          borderRadius: borderRadius,
-          clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: onTap,
             child: ConstrainedBox(
               constraints: const BoxConstraints(minHeight: 64),
               child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.md),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg,
+                  AppSpacing.md,
+                  AppSpacing.lg,
+                  0,
+                ),
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     final textScaler = MediaQuery.textScalerOf(context);
@@ -75,11 +76,26 @@ class AppListRow extends StatelessWidget {
                         ),
                         const SizedBox(width: AppSpacing.md),
                         Expanded(
-                          child: _RowText(
-                            title: title,
-                            subtitle: subtitle,
-                            compactStatus: useCompactLayout ? statusText : null,
-                            statusColor: statusColor,
+                          child: Container(
+                            padding:
+                                const EdgeInsets.only(bottom: AppSpacing.md),
+                            decoration: BoxDecoration(
+                              border: showDivider
+                                  ? Border(
+                                      bottom: BorderSide(
+                                        color: scheme.outlineVariant,
+                                        width: 0.5,
+                                      ),
+                                    )
+                                  : null,
+                            ),
+                            child: _RowText(
+                              title: title,
+                              subtitle: subtitle,
+                              compactStatus:
+                                  useCompactLayout ? statusText : null,
+                              statusColor: statusColor,
+                            ),
                           ),
                         ),
                         if (!useCompactLayout && statusText != null) ...[
@@ -96,34 +112,6 @@ class AppListRow extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  Border _borderFor(Color color) {
-    final side = BorderSide(color: color);
-    return switch (position) {
-      AppListRowPosition.single => Border.fromBorderSide(side),
-      AppListRowPosition.first => Border(
-          top: side,
-          left: side,
-          right: side,
-          bottom: side,
-        ),
-      AppListRowPosition.middle || AppListRowPosition.last => Border(
-          left: side,
-          right: side,
-          bottom: side,
-        ),
-    };
-  }
-
-  BorderRadius _borderRadiusFor(AppListRowPosition rowPosition) {
-    const radius = Radius.circular(AppSpacing.radiusMd);
-    return switch (rowPosition) {
-      AppListRowPosition.single => BorderRadius.circular(AppSpacing.radiusMd),
-      AppListRowPosition.first => const BorderRadius.vertical(top: radius),
-      AppListRowPosition.middle => BorderRadius.zero,
-      AppListRowPosition.last => const BorderRadius.vertical(bottom: radius),
-    };
   }
 }
 

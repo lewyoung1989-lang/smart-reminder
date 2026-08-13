@@ -342,11 +342,26 @@ class _AppShellState extends State<AppShell> {
         body: Column(
           children: [
             Expanded(child: content),
-            if (showQuickCreate) quickCreate,
-            NavigationBar(
-              selectedIndex: _selectedIndex,
-              onDestinationSelected: _selectDestination,
-              destinations: _destinations,
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                border: Border(
+                  top: BorderSide(
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (showQuickCreate) quickCreate,
+                  NavigationBar(
+                    selectedIndex: _selectedIndex,
+                    onDestinationSelected: _selectDestination,
+                    destinations: _destinations,
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -414,20 +429,30 @@ class _QuickCreateBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SizedBox(
         key: const Key('quick-create-bar'),
-        height: 56,
-        child: Center(
+        height: compact ? 64 : 56,
+        child: Padding(
+          padding: compact
+              ? const EdgeInsets.fromLTRB(
+                  AppSpacing.lg,
+                  AppSpacing.sm,
+                  AppSpacing.lg,
+                  AppSpacing.sm,
+                )
+              : EdgeInsets.zero,
           child: compact
               ? FilledButton.icon(
                   key: const Key('quick-create-action'),
                   onPressed: enabled ? onPressed : null,
                   icon: const Icon(LucideIcons.plus),
-                  label: const Text('快速创建'),
+                  label: const Text('创建提醒'),
                 )
-              : IconButton(
-                  key: const Key('quick-create-action'),
-                  tooltip: '快速创建提醒',
-                  onPressed: enabled ? onPressed : null,
-                  icon: const Icon(LucideIcons.plus),
+              : Center(
+                  child: IconButton(
+                    key: const Key('quick-create-action'),
+                    tooltip: '创建提醒',
+                    onPressed: enabled ? onPressed : null,
+                    icon: const Icon(LucideIcons.plus),
+                  ),
                 ),
         ),
       );

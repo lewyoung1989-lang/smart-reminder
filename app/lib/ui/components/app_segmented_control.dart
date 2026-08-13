@@ -1,7 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
-
-import '../../app/theme/app_spacing.dart';
 
 class AppSegment<T> {
   const AppSegment({required this.value, required this.label, this.count});
@@ -13,7 +10,6 @@ class AppSegment<T> {
 
 class AppSegmentedControl<T> extends StatelessWidget {
   static const double _controlHeight = 44;
-  static const double _visualTrackHeight = 40;
 
   AppSegmentedControl({
     super.key,
@@ -30,57 +26,89 @@ class AppSegmentedControl<T> extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    const visualTrackInset = (_controlHeight - _visualTrackHeight) / 2;
+    final textScaler = MediaQuery.textScalerOf(context);
+    final labelStyle = theme.textTheme.labelMedium?.copyWith(
+      fontWeight: FontWeight.w600,
+    );
+    final controlHeight = textScaler.scale(14) + 22 < _controlHeight
+        ? _controlHeight
+        : textScaler.scale(14) + 22;
+    final disableAnimations = MediaQuery.disableAnimationsOf(context);
 
     return SizedBox(
-      height: _controlHeight,
+      height: controlHeight,
       child: LayoutBuilder(
         builder: (context, constraints) {
           final minimumOptionWidth = constraints.hasBoundedWidth
               ? constraints.maxWidth / options.length
               : 112.0;
-
-          return Stack(
-            alignment: Alignment.center,
-            children: [
-              Positioned.fill(
-                top: visualTrackInset,
-                bottom: visualTrackInset,
-                child: DecoratedBox(
-                  key: const ValueKey(
-                    'app-segmented-control-visual-track',
-                  ),
-                  decoration: BoxDecoration(
-                    color: scheme.surface,
-                    border: Border.all(color: scheme.outline),
-                    borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
-                  ),
-                ),
+          var minimumLabelWidth = 0.0;
+          for (final option in options) {
+            final painter = TextPainter(
+              text: TextSpan(
+                text: option.count == null
+                    ? option.label
+                    : '${option.label} ${option.count}',
+                style: labelStyle,
               ),
-              Positioned.fill(
-                child: ClipRect(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        for (final option in options)
-                          ConstrainedBox(
-                            constraints: BoxConstraints(
-                              minWidth: minimumOptionWidth,
-                            ),
-                            child: _SegmentOption<T>(
-                              option: option,
-                              selected: option.value == value,
-                              onChanged: onChanged,
-                            ),
-                          ),
-                      ],
+              textDirection: Directionality.of(context),
+              textScaler: textScaler,
+              maxLines: 1,
+            )..layout();
+            if (painter.width > minimumLabelWidth) {
+              minimumLabelWidth = painter.width;
+            }
+          }
+
+          final selectedIndex =
+              options.indexWhere((option) => option.value == value);
+          final contentOptionWidth = minimumLabelWidth + 24;
+          final optionWidth = minimumOptionWidth > contentOptionWidth
+              ? minimumOptionWidth
+              : contentOptionWidth;
+          final contentWidth = optionWidth * options.length;
+          return SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const ClampingScrollPhysics(),
+            child: SizedBox(
+              width: contentWidth,
+              height: controlHeight,
+              child: Stack(
+                children: [
+                  AnimatedPositioned(
+                    key: const ValueKey('app-segmented-control-indicator'),
+                    duration: disableAnimations
+                        ? Duration.zero
+                        : const Duration(milliseconds: 180),
+                    curve: Curves.easeOutCubic,
+                    left: selectedIndex * optionWidth + (optionWidth - 32) / 2,
+                    bottom: 0,
+                    width: 32,
+                    height: 2,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: scheme.primary,
+                        borderRadius: BorderRadius.circular(1),
+                      ),
                     ),
                   ),
-                ),
+                  Row(
+                    children: [
+                      for (final option in options)
+                        SizedBox(
+                          width: optionWidth,
+                          height: controlHeight,
+                          child: _SegmentOption<T>(
+                            option: option,
+                            selected: option.value == value,
+                            onChanged: onChanged,
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
               ),
-            ],
+            ),
           );
         },
       ),
@@ -141,7 +169,7 @@ class _SegmentOption<T> extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final foreground = selected ? scheme.onPrimary : scheme.onSurfaceVariant;
+    final foreground = selected ? scheme.primary : scheme.onSurfaceVariant;
 
     return Semantics(
       button: true,
@@ -153,53 +181,30 @@ class _SegmentOption<T> extends StatelessWidget {
           child: SizedBox(
             height: AppSegmentedControl._controlHeight,
             child: Center(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: selected ? scheme.primary : Colors.transparent,
-                  borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
-                ),
-                child: SizedBox(
-                  height: AppSegmentedControl._visualTrackHeight,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.sm,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        SizedBox.square(
-                          dimension: 16,
-                          child: selected
-                              ? Icon(
-                                  LucideIcons.check,
-                                  size: 16,
-                                  color: foreground,
-                                )
-                              : null,
-                        ),
-                        const SizedBox(width: AppSpacing.xs),
-                        Text(
-                          option.label,
-                          softWrap: false,
-                          style: theme.textTheme.labelMedium?.copyWith(
-                            color: foreground,
-                          ),
-                        ),
-                        if (option.count != null) ...[
-                          const SizedBox(width: AppSpacing.xs),
-                          Text(
-                            '${option.count}',
-                            softWrap: false,
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: foreground,
-                            ),
-                          ),
-                        ],
-                      ],
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    option.label,
+                    softWrap: false,
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: foreground,
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
                     ),
                   ),
-                ),
+                  if (option.count != null) ...[
+                    const SizedBox(width: 4),
+                    Text(
+                      '${option.count}',
+                      softWrap: false,
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: foreground,
+                        fontWeight:
+                            selected ? FontWeight.w600 : FontWeight.w400,
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ),

@@ -5,6 +5,7 @@ import '../../features/auth/domain/auth_models.dart';
 import '../../features/family/data/family_api.dart';
 import '../../features/family/presentation/family_screen.dart';
 import '../../features/profile/presentation/change_password_screen.dart';
+import '../theme/app_spacing.dart';
 import '../../ui/components/app_page_header.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -105,7 +106,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) => Scaffold(
         body: SafeArea(
           child: ListView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.xxl,
+              AppSpacing.lg,
+              AppSpacing.xxxl,
+            ),
             children: [
               AppPageHeader(
                 title: '设置',
@@ -117,74 +123,119 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 24),
-              Text('账户', style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 8),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const CircleAvatar(child: Icon(LucideIcons.user)),
-                title: Text(widget.user.phoneMasked),
-                subtitle: Text(widget.user.phoneVerified ? '手机号已验证' : '手机号未验证'),
+              const SizedBox(height: AppSpacing.xxl),
+              _SettingsSection(
+                title: '账户',
+                children: [
+                  ListTile(
+                    leading: const Icon(LucideIcons.user),
+                    title: Text(widget.user.phoneMasked),
+                    subtitle: Text(
+                      widget.user.phoneVerified ? '手机号已验证' : '手机号未验证',
+                    ),
+                  ),
+                  ListTile(
+                    leading: const Icon(LucideIcons.keyRound),
+                    title: const Text('修改密码'),
+                    trailing: const Icon(LucideIcons.chevronRight, size: 20),
+                    onTap: _openPasswordChange,
+                  ),
+                  ListTile(
+                    leading: const Icon(LucideIcons.users),
+                    title: const Text('我的家庭'),
+                    subtitle: const Text('管理共享药箱与家庭成员'),
+                    trailing: const Icon(LucideIcons.chevronRight, size: 20),
+                    enabled: widget.familyApi != null,
+                    onTap: widget.familyApi == null
+                        ? null
+                        : () => Navigator.of(context).push<void>(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    FamilyScreen(api: widget.familyApi!),
+                              ),
+                            ),
+                  ),
+                ],
               ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(LucideIcons.keyRound),
-                title: const Text('修改密码'),
-                trailing: const Icon(LucideIcons.chevronRight),
-                onTap: _openPasswordChange,
-              ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(LucideIcons.users),
-                title: const Text('我的家庭'),
-                subtitle: const Text('管理共享药箱与家庭成员'),
-                trailing: const Icon(LucideIcons.chevronRight),
-                enabled: widget.familyApi != null,
-                onTap: widget.familyApi == null
-                    ? null
-                    : () => Navigator.of(context).push<void>(
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                FamilyScreen(api: widget.familyApi!),
-                          ),
+              const SizedBox(height: AppSpacing.xxl),
+              _SettingsSection(
+                title: '外观',
+                children: [
+                  RadioGroup<ThemeMode>(
+                    groupValue: _selectedThemeMode,
+                    onChanged: (value) {
+                      if (value != null) _selectThemeMode(value);
+                    },
+                    child: const Column(
+                      children: [
+                        RadioListTile<ThemeMode>(
+                          value: ThemeMode.system,
+                          title: Text('跟随系统'),
                         ),
+                        RadioListTile<ThemeMode>(
+                          value: ThemeMode.light,
+                          title: Text('浅色'),
+                        ),
+                        RadioListTile<ThemeMode>(
+                          value: ThemeMode.dark,
+                          title: Text('深色'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
+              const SizedBox(height: AppSpacing.xxl),
+              TextButton.icon(
                 onPressed: _loggingOut ? null : _confirmLogout,
+                style: TextButton.styleFrom(
+                  foregroundColor: Theme.of(context).colorScheme.error,
+                  minimumSize: const Size.fromHeight(44),
+                ),
                 icon: const Icon(LucideIcons.logOut),
                 label: Text(_loggingOut ? '正在退出' : '退出登录'),
-              ),
-              const SizedBox(height: 32),
-              Text('外观', style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 8),
-              RadioGroup<ThemeMode>(
-                groupValue: _selectedThemeMode,
-                onChanged: (value) {
-                  if (value != null) _selectThemeMode(value);
-                },
-                child: const Column(
-                  children: [
-                    RadioListTile<ThemeMode>(
-                      value: ThemeMode.system,
-                      title: Text('系统'),
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                    RadioListTile<ThemeMode>(
-                      value: ThemeMode.light,
-                      title: Text('浅色'),
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                    RadioListTile<ThemeMode>(
-                      value: ThemeMode.dark,
-                      title: Text('深色'),
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  ],
-                ),
               ),
             ],
           ),
         ),
       );
+}
+
+class _SettingsSection extends StatelessWidget {
+  const _SettingsSection({required this.title, required this.children});
+
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: AppSpacing.xs),
+          child: Text(title, style: theme.textTheme.labelMedium),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        Material(
+          color: theme.colorScheme.surface,
+          child: Column(
+            children: [
+              for (var index = 0; index < children.length; index += 1) ...[
+                children[index],
+                if (index < children.length - 1)
+                  Divider(
+                    height: 0.5,
+                    thickness: 0.5,
+                    indent: 56,
+                    color: theme.colorScheme.outlineVariant,
+                  ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 }

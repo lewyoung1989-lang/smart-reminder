@@ -9,7 +9,6 @@ import '../../../app/theme/app_spacing.dart';
 import '../../quick_create/domain/voice_input_controller.dart';
 import '../../../core/data/feature_unavailable_exception.dart';
 import '../../../ui/components/app_content_state.dart';
-import '../../../ui/components/app_list_row.dart';
 import '../../../ui/components/app_page_header.dart';
 import '../../../ui/components/app_segmented_control.dart';
 import '../../../ui/components/app_status_banner.dart';
@@ -437,10 +436,17 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
           ),
           sliver: SliverToBoxAdapter(
             child: AppSegmentedControl<MedicineCabinetScope>(
+              key: const ValueKey('cabinet-scope-tabs'),
               value: _scope,
               options: const [
-                AppSegment(value: MedicineCabinetScope.personal, label: '个人'),
-                AppSegment(value: MedicineCabinetScope.family, label: '家庭'),
+                AppSegment(
+                  value: MedicineCabinetScope.personal,
+                  label: '个人药箱',
+                ),
+                AppSegment(
+                  value: MedicineCabinetScope.family,
+                  label: '家庭药箱',
+                ),
               ],
               onChanged: (scope) {
                 if (scope == _scope) return;
@@ -520,9 +526,27 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
           child: TextField(
             key: const Key('medicine-search'),
             onChanged: _setQuery,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               hintText: '搜索药品或规格',
-              prefixIcon: Icon(LucideIcons.search),
+              prefixIcon: const Icon(LucideIcons.search, size: 20),
+              filled: true,
+              fillColor: Theme.of(context).colorScheme.surfaceContainer,
+              contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                borderSide: BorderSide(
+                  color: Theme.of(context).colorScheme.primary,
+                  width: 1.5,
+                ),
+              ),
             ),
           ),
         ),
@@ -532,6 +556,7 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
         sliver: SliverToBoxAdapter(
           child: AppSegmentedControl<_ExpiryFilter>(
+            key: const ValueKey('cabinet-filter-tabs'),
             value: _filter,
             options: <AppSegment<_ExpiryFilter>>[
               AppSegment(
@@ -592,15 +617,20 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
       padding: const EdgeInsets.fromLTRB(
           AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.xxl),
       sliver: SliverToBoxAdapter(
-        child: Column(
-          children: <Widget>[
-            for (var index = 0; index < visible.length; index += 1)
-              _MedicineRow(
-                medicine: visible[index],
-                position: _positionFor(index, visible.length),
-                onTap: () => _openMedicine(visible[index], expanded),
-              ),
-          ],
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+          ),
+          child: Column(
+            children: <Widget>[
+              for (var index = 0; index < visible.length; index += 1)
+                _MedicineRow(
+                  medicine: visible[index],
+                  showDivider: index < visible.length - 1,
+                  onTap: () => _openMedicine(visible[index], expanded),
+                ),
+            ],
+          ),
         ),
       ),
     ));
@@ -1394,10 +1424,10 @@ class _PermissionRecoveryBanner extends StatelessWidget {
 
 class _MedicineRow extends StatelessWidget {
   const _MedicineRow(
-      {required this.medicine, required this.position, required this.onTap});
+      {required this.medicine, required this.showDivider, required this.onTap});
 
   final MedicineSummary medicine;
-  final AppListRowPosition position;
+  final bool showDivider;
   final VoidCallback onTap;
 
   @override
@@ -1407,34 +1437,98 @@ class _MedicineRow extends StatelessWidget {
             ? AppSemanticColors.dark
             : AppSemanticColors.light);
     final color = switch (medicine.status) {
-      MedicineStatus.active => semantic.success,
+      MedicineStatus.active => Theme.of(context).colorScheme.onSurfaceVariant,
       MedicineStatus.expiring => semantic.warning,
       MedicineStatus.expired => Theme.of(context).colorScheme.error,
       MedicineStatus.unknown => Theme.of(context).colorScheme.onSurfaceVariant,
     };
-    return AppListRow(
-      icon: LucideIcons.pill,
-      title: medicine.name,
-      subtitle:
-          '${medicine.specification} · ${medicine.totalQuantity} 件 · ${_formatExpiry(medicine.nearestExpiry)}',
-      statusText: medicineStatusLabel(medicine.status),
-      statusColor: color,
-      position: position,
+    final status = medicineStatusLabel(medicine.status);
+    final subtitle = [
+      if (medicine.specification.trim().isNotEmpty) medicine.specification,
+      '${medicine.totalQuantity} 件',
+      _formatExpiry(medicine.nearestExpiry),
+    ].join(' · ');
+
+    return Semantics(
+      container: true,
+      button: true,
+      label: '${medicine.name}，$subtitle，$status',
       onTap: onTap,
+      excludeSemantics: true,
+      child: Material(
+        key: ValueKey('medicine-row-${medicine.id}'),
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 80),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.md,
+              AppSpacing.lg,
+              0,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Icon(
+                    LucideIcons.pill,
+                    size: 22,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                    decoration: BoxDecoration(
+                      border: showDivider
+                          ? Border(
+                              bottom: BorderSide(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .outlineVariant,
+                                width: 0.5,
+                              ),
+                            )
+                          : null,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          medicine.name,
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        const SizedBox(height: AppSpacing.xs),
+                        Text(
+                          subtitle,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        Text(
+                          status,
+                          style: Theme.of(context)
+                              .textTheme
+                              .labelMedium
+                              ?.copyWith(color: color),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
 
 enum _ExpiryFilter { all, expiring, expired }
-
-AppListRowPosition _positionFor(int index, int length) =>
-    switch ((index, length)) {
-      (_, 1) => AppListRowPosition.single,
-      (0, _) => AppListRowPosition.first,
-      (final value, final total) when value == total - 1 =>
-        AppListRowPosition.last,
-      _ => AppListRowPosition.middle,
-    };
 
 String _formatExpiry(DateTime? value) =>
     value == null ? '有效期未录入' : '有效期至 ${value.year}/${value.month}/${value.day}';

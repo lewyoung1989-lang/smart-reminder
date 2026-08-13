@@ -199,37 +199,71 @@ class _FamilyScreenState extends State<FamilyScreen> {
                 label: const Text('邀请成员')),
           ],
           const SizedBox(height: AppSpacing.xl),
-          Text('家庭成员', style: Theme.of(context).textTheme.titleLarge),
+          Text('家庭成员', style: Theme.of(context).textTheme.labelMedium),
           const SizedBox(height: AppSpacing.sm),
-          for (final member in family.members)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading:
-                  CircleAvatar(child: Text(member.nickname.characters.first)),
-              title: Text(member.nickname),
-              subtitle: Text(
-                  '${member.phoneMasked} · ${member.role == 'admin' ? '管理员' : '成员'}'),
-              trailing: family.isAdmin && !member.isSelf
-                  ? PopupMenuButton<String>(
-                      tooltip: '管理${member.nickname}',
-                      onSelected: (value) =>
-                          _memberAction(member, value == 'transfer'),
-                      itemBuilder: (_) => const [
-                        PopupMenuItem(value: 'transfer', child: Text('转让管理员')),
-                        PopupMenuItem(value: 'remove', child: Text('移出家庭')),
-                      ],
-                    )
-                  : null,
+          Material(
+            color: Theme.of(context).colorScheme.surface,
+            child: Column(
+              children: [
+                for (var index = 0;
+                    index < family.members.length;
+                    index += 1) ...[
+                  _memberTile(family, family.members[index]),
+                  if (index < family.members.length - 1)
+                    Divider(
+                      height: 0.5,
+                      thickness: 0.5,
+                      indent: 56,
+                      color: Theme.of(context).colorScheme.outlineVariant,
+                    ),
+                ],
+              ],
             ),
+          ),
           const SizedBox(height: AppSpacing.xl),
-          OutlinedButton.icon(
+          TextButton.icon(
             onPressed: _leaveOrDisband,
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+              minimumSize: const Size.fromHeight(44),
+            ),
             icon:
                 Icon(family.isAdmin ? LucideIcons.trash2 : LucideIcons.logOut),
             label: Text(family.isAdmin ? '解散家庭' : '退出家庭'),
           ),
         ],
       );
+
+  Widget _memberTile(FamilyInfo family, FamilyMember member) {
+    final theme = Theme.of(context);
+    return ListTile(
+      leading: SizedBox.square(
+        dimension: 32,
+        child: Center(
+          child: Text(
+            member.nickname.characters.first,
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: theme.colorScheme.primary,
+            ),
+          ),
+        ),
+      ),
+      title: Text(member.nickname),
+      subtitle: Text(
+        '${member.phoneMasked} · ${member.role == 'admin' ? '管理员' : '成员'}',
+      ),
+      trailing: family.isAdmin && !member.isSelf
+          ? PopupMenuButton<String>(
+              tooltip: '管理${member.nickname}',
+              onSelected: (value) => _memberAction(member, value == 'transfer'),
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'transfer', child: Text('转让管理员')),
+                PopupMenuItem(value: 'remove', child: Text('移出家庭')),
+              ],
+            )
+          : null,
+    );
+  }
 }
 
 class _FamilyEntryDialog extends StatefulWidget {

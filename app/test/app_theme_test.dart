@@ -9,8 +9,9 @@ void main() {
       final theme = AppTheme.light();
       final semanticColors = theme.extension<AppSemanticColors>();
 
-      expect(theme.colorScheme.primary, const Color(0xFF173E31));
-      expect(theme.scaffoldBackgroundColor, const Color(0xFFF7F9F8));
+      expect(theme.colorScheme.primary, const Color(0xFF176B52));
+      expect(theme.scaffoldBackgroundColor, const Color(0xFFF2F2F7));
+      expect(theme.colorScheme.surface, const Color(0xFFFFFFFF));
       expect(semanticColors?.warning, const Color(0xFF9A6700));
       expect(theme.cardTheme.elevation, 0);
       expect(theme.materialTapTargetSize, MaterialTapTargetSize.padded);
@@ -22,9 +23,9 @@ void main() {
       final theme = AppTheme.dark();
       final semanticColors = theme.extension<AppSemanticColors>();
 
-      expect(theme.scaffoldBackgroundColor, const Color(0xFF0F1512));
-      expect(theme.colorScheme.surface, const Color(0xFF171E1A));
-      expect(theme.colorScheme.primary, const Color(0xFF76D3AC));
+      expect(theme.scaffoldBackgroundColor, const Color(0xFF000000));
+      expect(theme.colorScheme.surface, const Color(0xFF1C1C1E));
+      expect(theme.colorScheme.primary, const Color(0xFF78D5B2));
       expect(semanticColors?.warning, const Color(0xFFFFC95C));
       expect(theme.cardTheme.elevation, 0);
     });
@@ -100,13 +101,13 @@ void main() {
       test('${entry.key} theme preserves the approved typography', () {
         final textTheme = entry.value().textTheme;
         final approvedStyles = <(TextStyle?, (double, double, FontWeight))>[
-          (textTheme.displaySmall, (28, 36, FontWeight.w700)),
-          (textTheme.headlineSmall, (22, 30, FontWeight.w700)),
-          (textTheme.titleLarge, (18, 26, FontWeight.w600)),
-          (textTheme.titleMedium, (16, 24, FontWeight.w600)),
-          (textTheme.bodyLarge, (16, 24, FontWeight.w400)),
-          (textTheme.bodyMedium, (14, 21, FontWeight.w400)),
-          (textTheme.labelLarge, (14, 20, FontWeight.w600)),
+          (textTheme.displaySmall, (32, 40, FontWeight.w600)),
+          (textTheme.headlineSmall, (22, 28, FontWeight.w600)),
+          (textTheme.titleLarge, (20, 25, FontWeight.w600)),
+          (textTheme.titleMedium, (17, 22, FontWeight.w600)),
+          (textTheme.bodyLarge, (17, 22, FontWeight.w400)),
+          (textTheme.bodyMedium, (15, 20, FontWeight.w400)),
+          (textTheme.labelLarge, (15, 20, FontWeight.w600)),
           (textTheme.labelSmall, (12, 18, FontWeight.w500)),
         ];
 
@@ -137,24 +138,22 @@ void main() {
       });
     }
 
-    test('light theme uses a stronger input boundary', () {
+    test('light theme uses a native filled input without a resting border', () {
       final border = AppTheme.light().inputDecorationTheme.enabledBorder;
 
       expect(border, isA<OutlineInputBorder>());
-      expect(
-        (border! as OutlineInputBorder).borderSide.color,
-        const Color(0xFF65716B),
-      );
+      expect((border! as OutlineInputBorder).borderSide, BorderSide.none);
+      expect(AppTheme.light().inputDecorationTheme.fillColor,
+          const Color(0xFFE5E5EA));
     });
 
-    test('dark theme uses a stronger input boundary', () {
+    test('dark theme uses a native filled input without a resting border', () {
       final border = AppTheme.dark().inputDecorationTheme.enabledBorder;
 
       expect(border, isA<OutlineInputBorder>());
-      expect(
-        (border! as OutlineInputBorder).borderSide.color,
-        const Color(0xFFAAB6AF),
-      );
+      expect((border! as OutlineInputBorder).borderSide, BorderSide.none);
+      expect(AppTheme.dark().inputDecorationTheme.fillColor,
+          const Color(0xFF2C2C2E));
     });
   });
 }

@@ -107,8 +107,14 @@ class _LoadingState extends StatelessWidget {
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   color: scheme.surface,
-                  border: Border.all(color: scheme.outline),
-                  borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                  border: index < 3
+                      ? Border(
+                          bottom: BorderSide(
+                            color: scheme.outlineVariant,
+                            width: 0.5,
+                          ),
+                        )
+                      : null,
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(AppSpacing.md),
@@ -164,7 +170,6 @@ class _LoadingState extends StatelessWidget {
                 ),
               ),
             ),
-            if (index < 3) const SizedBox(height: AppSpacing.sm),
           ],
         ],
       ),

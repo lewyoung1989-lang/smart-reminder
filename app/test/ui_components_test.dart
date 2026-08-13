@@ -177,10 +177,10 @@ void main() {
       expect(
         tester
             .getSize(
-              find.byKey(const ValueKey('app-segmented-control-visual-track')),
+              find.byKey(const ValueKey('app-segmented-control-indicator')),
             )
             .height,
-        40,
+        2,
       );
 
       setState(() => count = 999);
@@ -323,7 +323,7 @@ void main() {
       );
     });
 
-    testWidgets('shows a check cue only in the selected segment', (
+    testWidgets('uses text weight and an underline without a check icon', (
       tester,
     ) async {
       await tester.pumpApp(
@@ -337,28 +337,13 @@ void main() {
         ),
       );
 
-      final selectedSegment = find.ancestor(
-        of: find.text('进行中'),
-        matching: find.byType(InkWell),
-      );
-      final pendingSegment = find.ancestor(
-        of: find.text('待处理'),
-        matching: find.byType(InkWell),
-      );
-      expect(
-        find.descendant(
-          of: selectedSegment,
-          matching: find.byIcon(LucideIcons.check),
-        ),
-        findsOneWidget,
-      );
-      expect(
-        find.descendant(
-          of: pendingSegment,
-          matching: find.byIcon(LucideIcons.check),
-        ),
-        findsNothing,
-      );
+      final selected = tester.widget<Text>(find.text('进行中'));
+      final pending = tester.widget<Text>(find.text('待处理'));
+      expect(selected.style?.fontWeight, FontWeight.w600);
+      expect(pending.style?.fontWeight, FontWeight.w400);
+      expect(find.byIcon(LucideIcons.check), findsNothing);
+      expect(find.byKey(const ValueKey('app-segmented-control-indicator')),
+          findsOneWidget);
     });
   });
 
@@ -490,7 +475,7 @@ void main() {
     expect(taps, 1);
   });
 
-  testWidgets('AppListRow positions form one continuous bordered list', (
+  testWidgets('AppListRow positions form a flat continuous divided list', (
     tester,
   ) async {
     await tester.pumpApp(
@@ -534,24 +519,12 @@ void main() {
     final first = decorationFor('第一行');
     final middle = decorationFor('中间行');
     final last = decorationFor('最后一行');
-    final firstBorder = first.border! as Border;
-    final middleBorder = middle.border! as Border;
-    final lastBorder = last.border! as Border;
-    final firstRadius = first.borderRadius! as BorderRadius;
-    final middleRadius = middle.borderRadius! as BorderRadius;
-    final lastRadius = last.borderRadius! as BorderRadius;
-
-    expect(firstBorder.top.style, BorderStyle.solid);
-    expect(firstBorder.bottom.style, BorderStyle.solid);
-    expect(firstRadius.topLeft, isNot(Radius.zero));
-    expect(firstRadius.bottomLeft, Radius.zero);
-    expect(middleBorder.top.style, BorderStyle.none);
-    expect(middleBorder.bottom.style, BorderStyle.solid);
-    expect(middleRadius, BorderRadius.zero);
-    expect(lastBorder.top.style, BorderStyle.none);
-    expect(lastBorder.bottom.style, BorderStyle.solid);
-    expect(lastRadius.topLeft, Radius.zero);
-    expect(lastRadius.bottomLeft, isNot(Radius.zero));
+    expect(first.border, isNull);
+    expect(first.borderRadius, isNull);
+    expect(middle.border, isNull);
+    expect(middle.borderRadius, isNull);
+    expect(last.border, isNull);
+    expect(last.borderRadius, isNull);
     final firstRow = find.ancestor(
       of: find.text('第一行'),
       matching: find.byType(AppListRow),
@@ -612,7 +585,7 @@ void main() {
     );
 
     final title = tester.widget<Text>(find.text('今天'));
-    expect(title.style?.fontSize, 28);
+    expect(title.style?.fontSize, 32);
     expect(
         tester.getSemantics(find.text('今天')).flagsCollection.isHeader, isTrue);
   });

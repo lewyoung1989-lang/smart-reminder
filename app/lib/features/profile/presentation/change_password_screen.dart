@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../auth/data/auth_api.dart';
 
@@ -114,14 +115,12 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
         obscureText: !visible,
         decoration: InputDecoration(
           labelText: label,
-          prefixIcon: const Icon(Icons.lock_outline),
+          prefixIcon: const Icon(LucideIcons.lockKeyhole),
           suffixIcon: IconButton(
             tooltip: visible ? '隐藏密码' : '显示密码',
             onPressed: onToggle,
             icon: Icon(
-              visible
-                  ? Icons.visibility_off_outlined
-                  : Icons.visibility_outlined,
+              visible ? LucideIcons.eyeOff : LucideIcons.eye,
             ),
           ),
         ),

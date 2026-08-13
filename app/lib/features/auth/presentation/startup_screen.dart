@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 class StartupScreen extends StatelessWidget {
   const StartupScreen({this.onRetry, super.key});
@@ -14,20 +15,12 @@ class StartupScreen extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    width: 72,
-                    height: 72,
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    child: Icon(
-                      onRetry == null
-                          ? Icons.notifications_active_outlined
-                          : Icons.cloud_off_outlined,
-                      size: 36,
-                      color: Theme.of(context).colorScheme.onPrimaryContainer,
-                    ),
+                  Icon(
+                    onRetry == null
+                        ? LucideIcons.bellRing
+                        : LucideIcons.cloudOff,
+                    size: 36,
+                    color: Theme.of(context).colorScheme.primary,
                   ),
                   const SizedBox(height: 20),
                   Text(
@@ -50,7 +43,7 @@ class StartupScreen extends StatelessWidget {
                   else
                     FilledButton.icon(
                       onPressed: onRetry,
-                      icon: const Icon(Icons.refresh),
+                      icon: const Icon(LucideIcons.refreshCw),
                       label: const Text('重试'),
                     ),
                 ],

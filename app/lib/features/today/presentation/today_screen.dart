@@ -98,9 +98,9 @@ class _TodayScreenState extends State<TodayScreen> {
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(
                 AppSpacing.lg,
+                AppSpacing.xl,
+                AppSpacing.lg,
                 AppSpacing.xxl,
-                AppSpacing.lg,
-                AppSpacing.lg,
               ),
               sliver: SliverToBoxAdapter(
                 child: AppPageHeader(
@@ -186,6 +186,20 @@ class _TodayScreenState extends State<TodayScreen> {
       return slivers;
     }
 
+    slivers.add(
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          0,
+          AppSpacing.lg,
+          AppSpacing.xxxl,
+        ),
+        sliver: SliverToBoxAdapter(
+          child: _TodayOverview(snapshot: snapshot),
+        ),
+      ),
+    );
+
     if (snapshot.decisions.isNotEmpty) {
       final decisions = List<AttentionItem>.of(snapshot.decisions)
         ..sort((left, right) => left.dueAt.compareTo(right.dueAt));
@@ -195,12 +209,14 @@ class _TodayScreenState extends State<TodayScreen> {
           title: '需要你决定',
           child: Column(
             children: <Widget>[
-              for (final item in decisions)
+              for (var index = 0; index < decisions.length; index += 1) ...[
                 _DecisionRow(
-                  item: item,
+                  item: decisions[index],
+                  showDivider: index < decisions.length - 1,
                   onOpen:
                       widget.onOpenAttention == null ? null : _openAttention,
                 ),
+              ],
             ],
           ),
         ),
@@ -277,9 +293,14 @@ class _TodayScreenState extends State<TodayScreen> {
 }
 
 class _DecisionRow extends StatelessWidget {
-  const _DecisionRow({required this.item, this.onOpen});
+  const _DecisionRow({
+    required this.item,
+    required this.showDivider,
+    this.onOpen,
+  });
 
   final AttentionItem item;
+  final bool showDivider;
   final AttentionActionCallback? onOpen;
 
   @override
@@ -299,71 +320,153 @@ class _DecisionRow extends StatelessWidget {
       child: DecoratedBox(
         key: ValueKey('today-decision-row-${item.id}'),
         decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: theme.colorScheme.outline)),
-          borderRadius: BorderRadius.zero,
+          color: theme.colorScheme.surface,
+          border: showDivider
+              ? Border(
+                  bottom: BorderSide(
+                    color: theme.colorScheme.outlineVariant,
+                    width: 0.5,
+                  ),
+                )
+              : null,
         ),
-        child: Stack(
-          children: <Widget>[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg + 4,
-                AppSpacing.lg,
-                AppSpacing.lg,
-                AppSpacing.lg,
-              ),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final compact =
-                      constraints.maxWidth < AppSpacing.breakpointMedium ||
-                          MediaQuery.textScalerOf(context).scale(14) > 20;
-                  final details =
-                      _DecisionDetails(item: item, visuals: visuals);
-                  final action = Semantics(
-                    container: true,
-                    label: actionSemantics,
-                    button: true,
-                    enabled: enabled,
-                    onTap: enabled ? () => onOpen!(item) : null,
-                    child: ExcludeSemantics(
-                      child: FilledButton(
-                        onPressed: enabled ? () => onOpen!(item) : null,
-                        child: Text(item.actionLabel),
-                      ),
-                    ),
-                  );
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final compact =
+                  constraints.maxWidth < AppSpacing.breakpointMedium ||
+                      MediaQuery.textScalerOf(context).scale(14) > 20;
+              final details = _DecisionDetails(item: item, visuals: visuals);
+              final action = Semantics(
+                container: true,
+                label: actionSemantics,
+                button: true,
+                enabled: enabled,
+                onTap: enabled ? () => onOpen!(item) : null,
+                child: ExcludeSemantics(
+                  child: FilledButton(
+                    onPressed: enabled ? () => onOpen!(item) : null,
+                    child: Text(item.actionLabel),
+                  ),
+                ),
+              );
 
-                  if (compact) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        details,
-                        const SizedBox(height: AppSpacing.lg),
-                        action,
-                      ],
-                    );
-                  }
+              if (compact) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    details,
+                    const SizedBox(height: AppSpacing.lg),
+                    SizedBox(width: double.infinity, child: action),
+                  ],
+                );
+              }
 
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Expanded(child: details),
-                      const SizedBox(width: AppSpacing.lg),
-                      action,
-                    ],
-                  );
-                },
-              ),
-            ),
-            Positioned(
-              top: 0,
-              bottom: 0,
-              left: 0,
-              width: 4,
-              child: ColoredBox(color: visuals.color),
-            ),
-          ],
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Expanded(child: details),
+                  const SizedBox(width: AppSpacing.lg),
+                  action,
+                ],
+              );
+            },
+          ),
         ),
       ),
+    );
+  }
+}
+
+class _TodayOverview extends StatelessWidget {
+  const _TodayOverview({required this.snapshot});
+
+  final TodaySnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final nextAt = _nextScheduledAt(snapshot);
+    final items = <({String label, String value})>[
+      (label: '待决定', value: '${snapshot.decisions.length}'),
+      (label: '今日日程', value: '${snapshot.timeline.length}'),
+      (label: '下一项', value: nextAt == null ? '暂无' : _formatTime(nextAt)),
+    ];
+    final accessibilityText =
+        items.map((item) => '${item.label}${item.value}').join('，');
+
+    return Semantics(
+      key: const ValueKey('today-overview'),
+      container: true,
+      label: '今日概览：$accessibilityText',
+      child: ExcludeSemantics(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.xl,
+              vertical: AppSpacing.lg,
+            ),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final stacked = constraints.maxWidth < 320 ||
+                    MediaQuery.textScalerOf(context).scale(14) > 20;
+                if (stacked) {
+                  return Wrap(
+                    spacing: AppSpacing.xxxl,
+                    runSpacing: AppSpacing.lg,
+                    children: [
+                      for (final item in items) _OverviewMetric(item: item),
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    for (var index = 0; index < items.length; index += 1) ...[
+                      Expanded(child: _OverviewMetric(item: items[index])),
+                      if (index < items.length - 1)
+                        SizedBox(
+                          height: 36,
+                          child: VerticalDivider(
+                            color: theme.colorScheme.outline,
+                          ),
+                        ),
+                    ],
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _OverviewMetric extends StatelessWidget {
+  const _OverviewMetric({required this.item});
+
+  final ({String label, String value}) item;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          item.value,
+          style: theme.textTheme.titleLarge?.copyWith(
+            color: theme.colorScheme.primary,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        Text(item.label, style: theme.textTheme.bodySmall),
+      ],
     );
   }
 }
@@ -532,6 +635,17 @@ String _formatDate(DateTime value) {
 }
 
 String _formatDue(DateTime value) => '${_formatTime(value)} 截止';
+
+DateTime? _nextScheduledAt(TodaySnapshot snapshot) {
+  final candidates = <DateTime>[
+    for (final item in snapshot.decisions) item.dueAt,
+    for (final item in snapshot.timeline)
+      if (item.status == TimelineStatus.upcoming ||
+          item.status == TimelineStatus.due)
+        item.scheduledAt,
+  ]..sort();
+  return candidates.isEmpty ? null : candidates.first;
+}
 
 String _formatTime(DateTime value) {
   final minute = value.minute.toString().padLeft(2, '0');

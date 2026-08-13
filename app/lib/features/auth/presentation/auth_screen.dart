@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../ui/components/app_segmented_control.dart';
 import '../data/auth_api.dart';
 
 enum _AuthMode { login, register }
@@ -62,7 +64,11 @@ class _AuthScreenState extends State<AuthScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Icon(Icons.alarm, size: 42),
+                      Icon(
+                        LucideIcons.bellRing,
+                        size: 36,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
                       const SizedBox(height: 16),
                       Text(
                         '智能提醒',
@@ -70,22 +76,16 @@ class _AuthScreenState extends State<AuthScreen> {
                         style: Theme.of(context).textTheme.headlineMedium,
                       ),
                       const SizedBox(height: 28),
-                      SegmentedButton<_AuthMode>(
-                        segments: const [
-                          ButtonSegment(
-                            value: _AuthMode.login,
-                            label: Text('登录'),
-                          ),
-                          ButtonSegment(
-                            value: _AuthMode.register,
-                            label: Text('注册'),
-                          ),
+                      AppSegmentedControl<_AuthMode>(
+                        value: _mode,
+                        options: const <AppSegment<_AuthMode>>[
+                          AppSegment(value: _AuthMode.login, label: '登录'),
+                          AppSegment(value: _AuthMode.register, label: '注册'),
                         ],
-                        selected: {_mode},
-                        onSelectionChanged: _submitting
-                            ? null
-                            : (selection) => setState(() {
-                                  _mode = selection.single;
+                        onChanged: _submitting
+                            ? (_) {}
+                            : (mode) => setState(() {
+                                  _mode = mode;
                                   _pageError = null;
                                   _fieldErrors.clear();
                                   _formKey.currentState?.reset();

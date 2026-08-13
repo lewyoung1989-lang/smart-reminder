@@ -1,12 +1,15 @@
+import 'dart:ui' show Tristate;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:smart_reminder_app/app/theme/app_theme.dart';
 import 'package:smart_reminder_app/features/medicine_cabinet/data/medicine_repository.dart';
 import 'package:smart_reminder_app/features/medicine_cabinet/domain/medicine_models.dart';
 import 'package:smart_reminder_app/features/medicine_cabinet/domain/inventory_batch.dart';
 import 'package:smart_reminder_app/features/medicine_cabinet/domain/medicine_description_draft.dart';
 import 'package:smart_reminder_app/features/medicine_cabinet/presentation/medicine_cabinet_screen.dart';
 import 'package:smart_reminder_app/features/quick_create/domain/voice_input_controller.dart';
-import 'package:smart_reminder_app/ui/components/app_list_row.dart';
+import 'package:smart_reminder_app/ui/components/app_segmented_control.dart';
 
 void main() {
   testWidgets('switches between personal and family inventory scopes',
@@ -17,14 +20,16 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('家庭'));
+    await tester.tap(find.text('家庭药箱'));
     await tester.pumpAndSettle();
 
     expect(repository.scopes, [
       MedicineCabinetScope.personal,
       MedicineCabinetScope.family,
     ]);
-    expect(find.text('个人'), findsOneWidget);
+    expect(find.text('个人药箱'), findsOneWidget);
+    expect(
+        find.byType(AppSegmentedControl<MedicineCabinetScope>), findsOneWidget);
   });
 
   testWidgets('deletes a batch and reloads the cabinet only after success',
@@ -125,13 +130,109 @@ void main() {
 
     expect(find.text('仅显示已加载的 1 个库存批次'), findsOneWidget);
     expect(find.text('数量和有效期状态仅基于这些批次'), findsOneWidget);
-    final row = tester.widget<AppListRow>(
-      find.byWidgetPredicate(
-        (widget) => widget is AppListRow && widget.title == '布洛芬胶囊',
+    final row = find.byKey(const ValueKey('medicine-row-medicine-1'));
+    expect(row, findsOneWidget);
+    expect(
+      tester.getSemantics(row).label,
+      contains('有效期未知'),
+    );
+    final status = tester.widget<Text>(find.text('有效期未知'));
+    expect(status.style?.color, isNot(Colors.green));
+  });
+
+  testWidgets('uses native cabinet tabs and a continuous neutral list',
+      (tester) async {
+    final repository = _Repository(status: MedicineStatus.expired);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: MedicineCabinetScreen(repository: repository),
       ),
     );
-    expect(row.statusText, '有效期未知');
-    expect(row.statusColor, isNot(Colors.green));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('cabinet-scope-tabs')), findsOneWidget);
+    expect(find.byKey(const ValueKey('cabinet-filter-tabs')), findsOneWidget);
+    expect(
+        find.byType(AppSegmentedControl<MedicineCabinetScope>), findsOneWidget);
+
+    final personal = tester.widget<Text>(find.text('个人药箱'));
+    final family = tester.widget<Text>(find.text('家庭药箱'));
+    expect(personal.style?.fontSize, 13);
+    expect(personal.style?.fontWeight, FontWeight.w600);
+    expect(personal.style?.color, const Color(0xFF176B52));
+    expect(family.style?.color, const Color(0xFF6C6C70));
+    expect(
+      tester.getSemantics(find.text('个人药箱')).flagsCollection.isSelected,
+      Tristate.isTrue,
+    );
+
+    final search = tester.widget<TextField>(
+      find.byKey(const Key('medicine-search')),
+    );
+    final decoration = search.decoration!;
+    expect(decoration.filled, isTrue);
+    expect(decoration.fillColor, const Color(0xFFE5E5EA));
+    expect((decoration.enabledBorder as OutlineInputBorder).borderSide,
+        BorderSide.none);
+
+    final scaffold = tester.widget<Scaffold>(find.byType(Scaffold).first);
+    expect(scaffold.backgroundColor, isNull);
+    expect(
+      Theme.of(tester.element(find.text('药箱'))).scaffoldBackgroundColor,
+      const Color(0xFFF2F2F7),
+    );
+    expect(find.text('已过期'), findsWidgets);
+    expect(
+        find.byKey(const ValueKey('medicine-row-medicine-1')), findsOneWidget);
+  });
+
+  testWidgets('cabinet tabs remain usable at narrow width and 200 percent text',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(320, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(
+          size: Size(320, 800),
+          textScaler: TextScaler.linear(2),
+        ),
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: MedicineCabinetScreen(repository: _Repository()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('个人药箱'), findsOneWidget);
+    expect(find.text('家庭药箱'), findsOneWidget);
+    expect(find.text('全部'), findsOneWidget);
+    expect(find.text('1'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    expect(
+      tester.getSize(find.byKey(const ValueKey('cabinet-scope-tabs'))).height,
+      greaterThanOrEqualTo(44),
+    );
+  });
+
+  testWidgets('cabinet applies a paired native dark palette', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        darkTheme: AppTheme.dark(),
+        themeMode: ThemeMode.dark,
+        home: MedicineCabinetScreen(repository: _Repository()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final theme = Theme.of(tester.element(find.text('药箱')));
+    expect(theme.scaffoldBackgroundColor, const Color(0xFF000000));
+    expect(theme.colorScheme.surface, const Color(0xFF1C1C1E));
+    expect(theme.colorScheme.primary, const Color(0xFF78D5B2));
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('reloads the cabinet only after confirmed capture',

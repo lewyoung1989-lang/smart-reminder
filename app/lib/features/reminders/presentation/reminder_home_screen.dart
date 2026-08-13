@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../platform/notifications/reminder_notification_scheduler.dart';
 import '../data/reminder_api.dart';
@@ -269,7 +270,7 @@ class _ReminderHomeScreenState extends State<ReminderHomeScreen>
               key: const Key('add-reminder'),
               tooltip: '创建提醒',
               onPressed: _createReminder,
-              icon: const Icon(Icons.add),
+              icon: const Icon(LucideIcons.plus),
             ),
           ],
           bottom: TabBar(
@@ -299,13 +300,13 @@ class _ReminderHomeScreenState extends State<ReminderHomeScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.cloud_off_outlined, size: 40),
+            const Icon(LucideIcons.cloudOff, size: 40),
             const SizedBox(height: 12),
             const Text('提醒加载失败'),
             const SizedBox(height: 8),
             TextButton.icon(
               onPressed: () => _loadFirst(status),
-              icon: const Icon(Icons.refresh),
+              icon: const Icon(LucideIcons.refreshCw),
               label: const Text('重试'),
             ),
           ],
@@ -348,7 +349,7 @@ class _ReminderHomeScreenState extends State<ReminderHomeScreen>
                         const Text('更多提醒加载失败'),
                         TextButton.icon(
                           onPressed: () => _loadNext(status),
-                          icon: const Icon(Icons.refresh),
+                          icon: const Icon(LucideIcons.refreshCw),
                           label: const Text('重试加载'),
                         ),
                       ],
@@ -376,9 +377,9 @@ class _ReminderHomeScreenState extends State<ReminderHomeScreen>
   }
 
   static IconData _emptyIcon(ReminderStatus status) => switch (status) {
-        ReminderStatus.pending => Icons.notifications_none_outlined,
-        ReminderStatus.expired => Icons.history_outlined,
-        ReminderStatus.cancelled => Icons.notifications_off_outlined,
+        ReminderStatus.pending => LucideIcons.bell,
+        ReminderStatus.expired => LucideIcons.history,
+        ReminderStatus.cancelled => LucideIcons.bellOff,
       };
 
   static String _emptyText(ReminderStatus status) => switch (status) {
@@ -416,8 +417,8 @@ class _ReminderRow extends StatelessWidget {
         contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
         leading: Icon(
           reminder.severity == ReminderSeverity.alarm
-              ? Icons.alarm_outlined
-              : Icons.notifications_outlined,
+              ? LucideIcons.alarmClock
+              : LucideIcons.bell,
           color: _statusColor(reminder.status),
         ),
         title: Text(reminder.title),
@@ -436,7 +437,7 @@ class _ReminderRow extends StatelessWidget {
                     key: Key('cancel-${reminder.id}'),
                     tooltip: '取消提醒',
                     onPressed: onCancel,
-                    icon: const Icon(Icons.notifications_off_outlined),
+                    icon: const Icon(LucideIcons.bellOff),
                   ),
       );
 

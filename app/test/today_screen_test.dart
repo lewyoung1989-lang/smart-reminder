@@ -45,6 +45,10 @@ void main() {
       expect(find.text('待确认'), findsOneWidget);
       expect(find.text('已完成'), findsWidgets);
       expect(find.text('即将开始'), findsWidgets);
+      expect(find.byKey(const ValueKey('today-overview')), findsOneWidget);
+      expect(find.text('待决定'), findsOneWidget);
+      expect(find.text('今日日程'), findsOneWidget);
+      expect(find.text('下一项'), findsOneWidget);
     });
 
     testWidgets(
@@ -358,7 +362,7 @@ void main() {
       );
     });
 
-    testWidgets('decision rows are flat and use continuous separators', (
+    testWidgets('renders decisions as a continuous neutral list', (
       tester,
     ) async {
       final snapshot = TodaySnapshot(
@@ -395,13 +399,21 @@ void main() {
       final laterRow = find.byKey(
         const ValueKey('today-decision-row-later-decision'),
       );
-      for (final row in <Finder>[earlyRow, laterRow]) {
-        final decoration =
-            tester.widget<DecoratedBox>(row).decoration as BoxDecoration;
-        expect(decoration.color, isNull);
-        expect(decoration.borderRadius, BorderRadius.zero);
-      }
-      expect(tester.getBottomLeft(earlyRow).dy, tester.getTopLeft(laterRow).dy);
+      final theme = Theme.of(tester.element(find.byType(TodayScreen)));
+      final earlyDecoration =
+          tester.widget<DecoratedBox>(earlyRow).decoration as BoxDecoration;
+      final laterDecoration =
+          tester.widget<DecoratedBox>(laterRow).decoration as BoxDecoration;
+      expect(earlyDecoration.color, theme.colorScheme.surface);
+      expect(earlyDecoration.borderRadius, isNull);
+      expect(earlyDecoration.border, isNotNull);
+      expect(laterDecoration.color, theme.colorScheme.surface);
+      expect(laterDecoration.borderRadius, isNull);
+      expect(laterDecoration.border, isNull);
+      expect(
+        tester.getTopLeft(laterRow).dy,
+        tester.getBottomLeft(earlyRow).dy,
+      );
     });
 
     testWidgets('keeps a newer load when an older load completes afterward', (
@@ -551,7 +563,11 @@ void main() {
         textScaler: const TextScaler.linear(2),
       );
       await tester.pumpAndSettle();
-      await tester.drag(find.byType(CustomScrollView), const Offset(0, -500));
+      await tester.scrollUntilVisible(
+        find.text('早间用药'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('早间用药'), findsOneWidget);
