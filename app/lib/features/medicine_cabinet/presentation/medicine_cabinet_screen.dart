@@ -371,11 +371,6 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
       );
       return true;
     } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('录入失败，请检查内容后重试')),
-        );
-      }
       return false;
     }
   }
@@ -991,8 +986,14 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
         quantity: quantity,
         scope: widget.scope,
       ));
-      if (!mounted || !created) return;
+      if (!mounted) return;
+      if (!created) {
+        setState(() => _error = '保存失败，请检查网络后重试');
+        return;
+      }
       Navigator.of(context).pop(true);
+    } catch (_) {
+      if (mounted) setState(() => _error = '保存失败，请检查网络后重试');
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -1031,6 +1032,7 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
   Widget build(BuildContext context) {
     final phase = _voice?.phase ?? VoiceInputPhase.idle;
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    final theme = Theme.of(context);
     return AnimatedPadding(
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOut,
@@ -1039,289 +1041,269 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
         top: false,
         child: Material(
           key: const Key('medicine-entry-sheet'),
+          color: theme.colorScheme.surface,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
           clipBehavior: Clip.antiAlias,
-          child: LayoutBuilder(
-            builder: (context, constraints) => SingleChildScrollView(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+          child: FractionallySizedBox(
+            heightFactor: 0.92,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg,
+                    AppSpacing.sm,
+                    AppSpacing.sm,
+                    AppSpacing.sm,
+                  ),
+                  child: Row(
                     children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              '录入药品',
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                          ),
-                          SizedBox(
-                            height: 44,
-                            child: TextButton(
-                              onPressed: _cancel,
-                              child: const Text('取消'),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        height: 48,
-                        child: OutlinedButton.icon(
-                          key: const Key('medicine-entry-capture'),
-                          onPressed: widget.canCapture && !widget.isCapturing
-                              ? widget.onCapture
-                              : null,
-                          icon: const Icon(LucideIcons.camera),
-                          label: const Text('拍照识别'),
+                      Expanded(
+                        child: Text(
+                          '录入药品',
+                          style: theme.textTheme.headlineMedium,
                         ),
                       ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        key: const Key('medicine-entry-description'),
-                        controller: _descriptionController,
-                        minLines: 2,
-                        maxLines: 4,
-                        maxLength: 300,
-                        decoration: const InputDecoration(
-                          labelText: '文字或语音描述',
-                          hintText: '例如：录入布洛芬胶囊 0.3g 2盒，有效期到2027年1月1日',
-                          border: OutlineInputBorder(),
+                      SizedBox(
+                        height: 44,
+                        child: TextButton(
+                          onPressed: _isSaving ? null : _cancel,
+                          child: const Text('取消'),
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        height: 48,
-                        child: FilledButton.icon(
-                          key: const Key('medicine-entry-parse'),
-                          onPressed: widget.onParseDescription != null &&
-                                  !_isParsing &&
-                                  !_isSaving
-                              ? _parseDescription
-                              : null,
-                          icon: _isParsing
-                              ? const SizedBox.square(
-                                  dimension: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
+                    ],
+                  ),
+                ),
+                Divider(
+                  color: theme.colorScheme.outlineVariant,
+                  height: 0.5,
+                  thickness: 0.5,
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.lg,
+                      AppSpacing.lg,
+                      AppSpacing.lg,
+                      AppSpacing.xxl,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _EntrySection(
+                          title: '快速识别',
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              OutlinedButton.icon(
+                                key: const Key('medicine-entry-capture'),
+                                onPressed:
+                                    widget.canCapture && !widget.isCapturing
+                                        ? widget.onCapture
+                                        : null,
+                                icon: const Icon(LucideIcons.camera),
+                                label: const Text('拍照识别药盒'),
+                              ),
+                              const SizedBox(height: AppSpacing.md),
+                              _EntryField(
+                                label: '文字或语音描述',
+                                child: TextField(
+                                  key: const Key('medicine-entry-description'),
+                                  controller: _descriptionController,
+                                  minLines: 3,
+                                  maxLines: 5,
+                                  maxLength: 300,
+                                  decoration: const InputDecoration(
+                                    hintText: '例如：依巴斯汀 20片，1盒，下个月底到期',
                                   ),
-                                )
-                              : const Icon(LucideIcons.sparkles),
-                          label: Text(_isParsing ? '正在智能解析' : '智能解析'),
-                        ),
-                      ),
-                      if (_parseError != null) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          _parseError!,
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.error,
-                          ),
-                        ),
-                      ],
-                      if (_ambiguities.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          '请确认：${_ambiguities.join('；')}',
-                          style: TextStyle(
-                            color:
-                                Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 8),
-                      _VoiceStatus(
-                        voice: _voice,
-                        phase: phase,
-                        inFlight: _isVoiceActionInFlight,
-                        actionError: _voiceActionError,
-                        onRetry: _retryVoice,
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          SizedBox(
-                            height: 48,
-                            child: OutlinedButton.icon(
-                              key: const Key('medicine-entry-voice'),
-                              onPressed: _isSaving ||
-                                      _isParsing ||
-                                      _isVoiceActionInFlight ||
-                                      phase == VoiceInputPhase.transcribing ||
-                                      phase == VoiceInputPhase.failure
-                                  ? null
-                                  : _handleVoiceAction,
-                              icon: Icon(phase == VoiceInputPhase.recording
-                                  ? LucideIcons.square
-                                  : LucideIcons.mic),
-                              label: Text(phase == VoiceInputPhase.recording
-                                  ? '停止录音'
-                                  : '语音录入'),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        key: const Key('medicine-entry-name'),
-                        controller: _nameController,
-                        textInputAction: TextInputAction.next,
-                        decoration: const InputDecoration(
-                          labelText: '药品名称 *',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        key: const Key('medicine-entry-specification'),
-                        controller: _specificationController,
-                        textInputAction: TextInputAction.next,
-                        decoration: const InputDecoration(
-                          labelText: '规格',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        key: const Key('medicine-entry-manufacturer'),
-                        controller: _manufacturerController,
-                        textInputAction: TextInputAction.next,
-                        decoration: const InputDecoration(
-                          labelText: '生产公司（选填）',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Semantics(
-                        label: _photoBytes == null ? '添加药品照片' : '已添加药品照片',
-                        child: Container(
-                          constraints: const BoxConstraints(minHeight: 120),
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                              color:
-                                  Theme.of(context).colorScheme.outlineVariant,
-                            ),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          clipBehavior: Clip.antiAlias,
-                          child: _photoBytes == null
-                              ? TextButton.icon(
-                                  key: const Key('medicine-entry-photo'),
-                                  onPressed: widget.onCapturePhoto == null ||
-                                          _isTakingPhoto
-                                      ? null
-                                      : _takePhoto,
-                                  icon: const Icon(LucideIcons.camera),
-                                  label: Text(
-                                      _isTakingPhoto ? '正在打开相机' : '添加药品照片（选填）'),
-                                )
-                              : Stack(
-                                  alignment: Alignment.topRight,
-                                  children: [
-                                    SizedBox(
-                                      height: 180,
-                                      width: double.infinity,
-                                      child: Image.memory(
-                                        Uint8List.fromList(_photoBytes!),
-                                        fit: BoxFit.cover,
-                                      ),
-                                    ),
-                                    Padding(
-                                      padding: const EdgeInsets.all(8),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          IconButton.filledTonal(
-                                            tooltip: '重新拍摄',
-                                            onPressed: _isTakingPhoto
-                                                ? null
-                                                : _takePhoto,
-                                            icon:
-                                                const Icon(LucideIcons.camera),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          IconButton.filledTonal(
-                                            tooltip: '移除照片',
-                                            onPressed: () => setState(
-                                              () => _photoBytes = null,
-                                            ),
-                                            icon:
-                                                const Icon(LucideIcons.trash2),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
                                 ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        key: const Key('medicine-entry-batch-number'),
-                        controller: _batchNumberController,
-                        textInputAction: TextInputAction.next,
-                        decoration: const InputDecoration(
-                          labelText: '批号',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              key: const Key('medicine-entry-production-date'),
-                              controller: _productionDateController,
-                              keyboardType: TextInputType.datetime,
-                              decoration: const InputDecoration(
-                                labelText: '生产日期',
-                                hintText: 'YYYY-MM-DD',
-                                border: OutlineInputBorder(),
                               ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: TextField(
-                              key: const Key('medicine-entry-expiry-date'),
-                              controller: _expiryDateController,
-                              keyboardType: TextInputType.datetime,
-                              decoration: const InputDecoration(
-                                labelText: '有效期',
-                                hintText: 'YYYY-MM-DD',
-                                border: OutlineInputBorder(),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: FilledButton.icon(
+                                      key: const Key('medicine-entry-parse'),
+                                      onPressed:
+                                          widget.onParseDescription != null &&
+                                                  !_isParsing &&
+                                                  !_isSaving
+                                              ? _parseDescription
+                                              : null,
+                                      icon: _isParsing
+                                          ? const SizedBox.square(
+                                              dimension: 18,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                              ),
+                                            )
+                                          : const Icon(LucideIcons.sparkles),
+                                      label: Text(
+                                        _isParsing ? '正在解析' : '智能解析',
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: AppSpacing.sm),
+                                  OutlinedButton.icon(
+                                    key: const Key('medicine-entry-voice'),
+                                    onPressed: _isSaving ||
+                                            _isParsing ||
+                                            _isVoiceActionInFlight ||
+                                            phase ==
+                                                VoiceInputPhase.transcribing ||
+                                            phase == VoiceInputPhase.failure
+                                        ? null
+                                        : _handleVoiceAction,
+                                    icon: Icon(
+                                      phase == VoiceInputPhase.recording
+                                          ? LucideIcons.square
+                                          : LucideIcons.mic,
+                                    ),
+                                    label: Text(
+                                      phase == VoiceInputPhase.recording
+                                          ? '停止录音'
+                                          : '语音',
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
+                              if (_parseError != null) ...[
+                                const SizedBox(height: AppSpacing.sm),
+                                _InlineMessage(
+                                  text: _parseError!,
+                                  isError: true,
+                                ),
+                              ],
+                              if (_ambiguities.isNotEmpty) ...[
+                                const SizedBox(height: AppSpacing.sm),
+                                _InlineMessage(
+                                  text: '请核对：${_ambiguities.join('；')}',
+                                ),
+                              ],
+                              _VoiceStatus(
+                                voice: _voice,
+                                phase: phase,
+                                inFlight: _isVoiceActionInFlight,
+                                actionError: _voiceActionError,
+                                onRetry: _retryVoice,
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        key: const Key('medicine-entry-quantity'),
-                        controller: _quantityController,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: '数量 *',
-                          border: OutlineInputBorder(),
                         ),
-                      ),
-                      if (_error != null) ...[
-                        const SizedBox(height: 12),
-                        Text(
-                          _error!,
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.error,
+                        const SizedBox(height: AppSpacing.xxl),
+                        _EntrySection(
+                          title: '药品信息',
+                          child: Column(
+                            children: [
+                              _EntryField(
+                                label: '药品名称',
+                                required: true,
+                                child: TextField(
+                                  key: const Key('medicine-entry-name'),
+                                  controller: _nameController,
+                                  textInputAction: TextInputAction.next,
+                                  decoration: const InputDecoration(
+                                      hintText: '例如：依巴斯汀'),
+                                ),
+                              ),
+                              _EntryField(
+                                label: '规格',
+                                child: TextField(
+                                  key:
+                                      const Key('medicine-entry-specification'),
+                                  controller: _specificationController,
+                                  textInputAction: TextInputAction.next,
+                                  decoration: const InputDecoration(
+                                      hintText: '例如：20片/盒'),
+                                ),
+                              ),
+                              _EntryField(
+                                label: '生产公司',
+                                optional: true,
+                                child: TextField(
+                                  key: const Key('medicine-entry-manufacturer'),
+                                  controller: _manufacturerController,
+                                  textInputAction: TextInputAction.next,
+                                  decoration: const InputDecoration(
+                                      hintText: '药盒上的生产企业'),
+                                ),
+                              ),
+                              _EntryPhoto(
+                                photoBytes: _photoBytes,
+                                takingPhoto: _isTakingPhoto,
+                                enabled: widget.onCapturePhoto != null,
+                                onTakePhoto: _takePhoto,
+                                onRemove: () =>
+                                    setState(() => _photoBytes = null),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.xxl),
+                        _EntrySection(
+                          title: '库存与有效期',
+                          child: Column(
+                            children: [
+                              _EntryField(
+                                label: '有效期',
+                                child: TextField(
+                                  key: const Key('medicine-entry-expiry-date'),
+                                  controller: _expiryDateController,
+                                  keyboardType: TextInputType.datetime,
+                                  decoration: const InputDecoration(
+                                    hintText: 'YYYY-MM-DD',
+                                    suffixIcon: Icon(LucideIcons.calendarDays),
+                                  ),
+                                ),
+                              ),
+                              _EntryField(
+                                label: '生产日期',
+                                optional: true,
+                                child: TextField(
+                                  key: const Key(
+                                    'medicine-entry-production-date',
+                                  ),
+                                  controller: _productionDateController,
+                                  keyboardType: TextInputType.datetime,
+                                  decoration: const InputDecoration(
+                                    hintText: 'YYYY-MM-DD',
+                                    suffixIcon: Icon(LucideIcons.calendarDays),
+                                  ),
+                                ),
+                              ),
+                              _EntryField(
+                                label: '数量',
+                                required: true,
+                                child: TextField(
+                                  key: const Key('medicine-entry-quantity'),
+                                  controller: _quantityController,
+                                  keyboardType: TextInputType.number,
+                                  decoration:
+                                      const InputDecoration(hintText: '1'),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        height: 48,
-                        child: FilledButton(
+                    ),
+                  ),
+                ),
+                Material(
+                  color: theme.colorScheme.surface,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.lg,
+                      AppSpacing.sm,
+                      AppSpacing.lg,
+                      AppSpacing.lg,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (_error != null) ...[
+                          _InlineMessage(text: _error!, isError: true),
+                          const SizedBox(height: AppSpacing.sm),
+                        ],
+                        FilledButton(
                           key: const Key('medicine-entry-save'),
                           onPressed: widget.canCreateBatch && !_isSaving
                               ? _save
@@ -1329,19 +1311,184 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
                           child: _isSaving
                               ? const SizedBox.square(
                                   dimension: 18,
-                                  child:
-                                      CircularProgressIndicator(strokeWidth: 2),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
                                 )
                               : const Text('保存到药箱'),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
+              ],
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _EntrySection extends StatelessWidget {
+  const _EntrySection({required this.title, required this.child});
+
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(title, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: AppSpacing.md),
+          child,
+        ],
+      );
+}
+
+class _EntryField extends StatelessWidget {
+  const _EntryField({
+    required this.label,
+    required this.child,
+    this.required = false,
+    this.optional = false,
+  });
+
+  final String label;
+  final Widget child;
+  final bool required;
+  final bool optional;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final suffix = required
+        ? ' *'
+        : optional
+            ? '（选填）'
+            : '';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            '$label$suffix',
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _EntryPhoto extends StatelessWidget {
+  const _EntryPhoto({
+    required this.photoBytes,
+    required this.takingPhoto,
+    required this.enabled,
+    required this.onTakePhoto,
+    required this.onRemove,
+  });
+
+  final List<int>? photoBytes;
+  final bool takingPhoto;
+  final bool enabled;
+  final VoidCallback onTakePhoto;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final bytes = photoBytes;
+    if (bytes != null) {
+      return Semantics(
+        label: '已添加药品照片',
+        child: Stack(
+          alignment: Alignment.topRight,
+          children: [
+            AspectRatio(
+              aspectRatio: 16 / 9,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                child:
+                    Image.memory(Uint8List.fromList(bytes), fit: BoxFit.cover),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.sm),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton.filledTonal(
+                    tooltip: '重新拍摄',
+                    onPressed: takingPhoto ? null : onTakePhoto,
+                    icon: const Icon(LucideIcons.camera),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  IconButton.filledTonal(
+                    tooltip: '移除照片',
+                    onPressed: onRemove,
+                    icon: const Icon(LucideIcons.trash2),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return ListTile(
+      key: const Key('medicine-entry-photo'),
+      contentPadding: EdgeInsets.zero,
+      tileColor: Colors.transparent,
+      leading: const Icon(LucideIcons.camera),
+      title: const Text('药品照片'),
+      subtitle: Text(takingPhoto ? '正在打开相机' : '选填，方便以后购买同款'),
+      trailing: const Icon(LucideIcons.chevronRight, size: 20),
+      enabled: enabled && !takingPhoto,
+      onTap: enabled && !takingPhoto ? onTakePhoto : null,
+    );
+  }
+}
+
+class _InlineMessage extends StatelessWidget {
+  const _InlineMessage({required this.text, this.isError = false});
+
+  final String text;
+  final bool isError;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Semantics(
+      liveRegion: true,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            isError ? LucideIcons.circleAlert : LucideIcons.info,
+            size: 18,
+            color: isError
+                ? theme.colorScheme.error
+                : theme.colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              text,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: isError
+                    ? theme.colorScheme.error
+                    : theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

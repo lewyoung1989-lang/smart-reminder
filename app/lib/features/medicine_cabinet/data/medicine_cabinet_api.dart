@@ -132,7 +132,7 @@ class MedicineCabinetApi implements MedicineCabinetDataSource {
         'medicine_name': medicineName.trim(),
         'specification': specification.trim(),
         'manufacturer': manufacturer.trim(),
-        'photo_object_key': photoObjectKey,
+        if (photoObjectKey != null) 'photo_object_key': photoObjectKey,
         'batch_number': batchNumber.trim(),
         'production_date':
             productionDate == null ? null : _formatDate(productionDate),

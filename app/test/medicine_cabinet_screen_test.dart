@@ -304,6 +304,72 @@ void main() {
     expect(find.text('药品已录入'), findsOneWidget);
   });
 
+  testWidgets('keeps medicine input visible and explains a save failure',
+      (tester) async {
+    final repository = _Repository();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: MedicineCabinetScreen(
+          repository: repository,
+          onCreateBatch: (_) => Future.error(StateError('create failed')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('录入'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('medicine-entry-name')),
+      '依巴斯汀',
+    );
+    await tester.tap(find.byKey(const Key('medicine-entry-save')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('medicine-entry-sheet')), findsOneWidget);
+    expect(find.text('依巴斯汀'), findsOneWidget);
+    expect(find.text('保存失败，请检查网络后重试'), findsOneWidget);
+    expect(repository.loadCalls, 1);
+  });
+
+  testWidgets('medicine entry reflows at narrow width and large text',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(320, 568));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(
+          size: Size(320, 568),
+          textScaler: TextScaler.linear(2),
+        ),
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: MedicineCabinetScreen(
+            repository: _Repository(),
+            onCreateBatch: (_) async {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('录入'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('药品名称 *'), findsOneWidget);
+    expect(find.text('规格'), findsOneWidget);
+    expect(find.text('有效期'), findsOneWidget);
+    expect(find.text('生产日期（选填）'), findsOneWidget);
+    expect(
+      find.byKey(const Key('medicine-entry-batch-number')),
+      findsNothing,
+    );
+    expect(find.byKey(const Key('medicine-entry-save')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('uses voice transcript to prefill medicine entry',
       (tester) async {
     final voice = _FakeVoiceInputController()

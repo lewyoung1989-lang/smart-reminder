@@ -213,7 +213,6 @@ void main() {
       'medicine_name': '布洛芬胶囊',
       'specification': '0.3g*20粒',
       'manufacturer': '',
-      'photo_object_key': null,
       'batch_number': 'LOT-88',
       'production_date': '2026-01-01',
       'expiry_date': '2027-01-01',
