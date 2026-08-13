@@ -528,7 +528,8 @@ class _BatchRow extends StatelessWidget {
             runSpacing: AppSpacing.sm,
             children: <Widget>[
               _CorrectExpiryAction(batch: batch, onCorrect: onCorrectExpiry),
-              _DeleteBatchAction(batch: batch, onDelete: onDelete),
+              if (batch.canDelete)
+                _DeleteBatchAction(batch: batch, onDelete: onDelete),
             ],
           ),
         ],

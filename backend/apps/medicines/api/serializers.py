@@ -34,6 +34,9 @@ class ExpiryDateCorrectionSerializer(serializers.Serializer):
 
 
 class InventoryBatchCreateSerializer(serializers.Serializer):
+    scope = serializers.ChoiceField(
+        choices=("personal", "family"), required=False, default="personal"
+    )
     medicine_name = serializers.CharField(max_length=200, trim_whitespace=True)
     specification = serializers.CharField(
         max_length=120,
@@ -74,6 +77,10 @@ class InventoryBatchCreateSerializer(serializers.Serializer):
         return attrs
 
     def create_for_user(self, user):
+        from apps.families.services import record_event
+        from apps.medicines.services.access import resolve_inventory_scope
+
+        ownership = resolve_inventory_scope(user, self.validated_data["scope"])
         manufacturer = self.validated_data.get("manufacturer", "").strip()
         photo_object_key = self.validated_data.get("photo_object_key", "").strip()
         if photo_object_key:
@@ -84,7 +91,7 @@ class InventoryBatchCreateSerializer(serializers.Serializer):
                     {"photo_object_key": "照片不属于当前用户。"}
                 ) from error
         medicine, created = MedicineItem.objects.get_or_create(
-            owner=user,
+            **ownership,
             name=self.validated_data["medicine_name"].strip(),
             specification=self.validated_data.get("specification", "").strip(),
             defaults={
@@ -115,9 +122,18 @@ class InventoryBatchCreateSerializer(serializers.Serializer):
             production_date=self.validated_data.get("production_date"),
             expiry_date=self.validated_data.get("expiry_date"),
             quantity=self.validated_data.get("quantity", 1),
+            created_by=user,
+            updated_by=user,
         )
         batch.full_clean()
         batch.save()
+        if medicine.family_id:
+            record_event(
+                family=medicine.family,
+                actor=user,
+                event_type="inventory_created",
+                payload={"batch_id": str(batch.id)},
+            )
         return batch
 
 
@@ -138,6 +154,8 @@ class InventoryBatchSerializer(serializers.ModelSerializer):
     effective_deadline = serializers.SerializerMethodField()
     expiry_status = serializers.SerializerMethodField()
     days_until_expiry = serializers.SerializerMethodField()
+    scope = serializers.SerializerMethodField()
+    can_delete = serializers.SerializerMethodField()
 
     class Meta:
         model = InventoryBatch
@@ -158,6 +176,9 @@ class InventoryBatchSerializer(serializers.ModelSerializer):
             "quantity",
             "expiry_status",
             "days_until_expiry",
+            "scope",
+            "can_delete",
+            "version",
         )
 
     @cached_property
@@ -195,6 +216,22 @@ class InventoryBatchSerializer(serializers.ModelSerializer):
         if storage is None:
             storage = get_object_storage()
         return storage.presign_get(key=key, expires_in=3600)
+
+    def get_scope(self, batch):
+        return "family" if batch.medicine.family_id else "personal"
+
+    def get_can_delete(self, batch):
+        request = self.context.get("request")
+        if request is None:
+            return batch.medicine.family_id is None
+        if batch.medicine.owner_id == request.user.id:
+            return True
+        membership = getattr(request.user, "family_membership", None)
+        return bool(
+            membership
+            and membership.family_id == batch.medicine.family_id
+            and membership.role == "admin"
+        )
 
 
 class MedicinePhotoUploadSerializer(serializers.Serializer):

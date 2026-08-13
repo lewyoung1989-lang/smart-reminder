@@ -17,6 +17,7 @@ import '../data/api_medicine_repository.dart';
 import '../data/medicine_cabinet_api.dart';
 import '../data/medicine_repository.dart';
 import '../domain/medicine_models.dart';
+import '../domain/inventory_batch.dart';
 import '../domain/medicine_description_draft.dart';
 import 'medicine_detail_screen.dart';
 
@@ -46,7 +47,7 @@ class MedicineCabinetScreen extends StatefulWidget {
   final InventoryBatchLoader? listBatches;
   final Future<void> Function(String batchId)? deleteBatch;
   final Future<void> Function(MedicineBatch batch)? onDeleteBatch;
-  final Future<bool> Function()? onCapture;
+  final Future<bool> Function(MedicineCabinetScope scope)? onCapture;
   final Future<List<int>?> Function()? onCapturePhoto;
   final MedicineCaptureAvailability captureAvailability;
   final VoidCallback? onOpenSystemSettings;
@@ -77,6 +78,7 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
   var _isOpeningCompactDetail = false;
   var _isCapturing = false;
   var _isOpeningEntry = false;
+  var _scope = MedicineCabinetScope.personal;
   var _wasExpanded = false;
   var _loadGeneration = 0;
   var _detailGeneration = 0;
@@ -133,7 +135,7 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
       }
     });
     try {
-      final collection = await _repository.load();
+      final collection = await _repository.load(scope: _scope);
       if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _collection = collection;
@@ -313,7 +315,7 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
     }
     setState(() => _isCapturing = true);
     try {
-      final confirmed = await capture();
+      final confirmed = await capture(_scope);
       if (confirmed && mounted) await _load(clearCollection: true);
     } catch (_) {
       if (!mounted) return;
@@ -341,6 +343,7 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
                       MedicineCaptureAvailability.denied),
           isCapturing: _isCapturing,
           canCreateBatch: widget.onCreateBatch != null,
+          scope: _scope,
           voiceInputController: widget.voiceInputController,
           onCapture: () async {
             Navigator.of(sheetContext).pop(false);
@@ -407,7 +410,7 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
               AppSpacing.lg, AppSpacing.xxl, AppSpacing.lg, AppSpacing.lg),
           sliver: SliverToBoxAdapter(
             child: AppPageHeader(
-              title: '家庭药箱',
+              title: '药箱',
               largeTitle: true,
               actions: <Widget>[
                 _EntryButton(
@@ -422,6 +425,28 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
                   icon: const Icon(LucideIcons.settings),
                 ),
               ],
+            ),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            0,
+            AppSpacing.lg,
+            AppSpacing.md,
+          ),
+          sliver: SliverToBoxAdapter(
+            child: AppSegmentedControl<MedicineCabinetScope>(
+              value: _scope,
+              options: const [
+                AppSegment(value: MedicineCabinetScope.personal, label: '个人'),
+                AppSegment(value: MedicineCabinetScope.family, label: '家庭'),
+              ],
+              onChanged: (scope) {
+                if (scope == _scope) return;
+                setState(() => _scope = scope);
+                _load(clearCollection: true);
+              },
             ),
           ),
         ),
@@ -450,6 +475,19 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
         ];
       }
       if (_error != null) {
+        if (_scope == MedicineCabinetScope.family &&
+            _error is MedicineCabinetApiException &&
+            (_error as MedicineCabinetApiException).statusCode == 400) {
+          return [
+            ...permissionRecovery,
+            ..._stateSlivers(AppContentState.empty(
+              title: '尚未加入家庭',
+              message: '创建家庭或使用邀请码加入后，即可共享药品库存',
+              actionLabel: '前往设置',
+              onAction: widget.onOpenSettings,
+            )),
+          ];
+        }
         return [
           ...permissionRecovery,
           ..._stateSlivers(AppContentState.error(
@@ -643,6 +681,7 @@ class MedicineBatchInput {
     this.batchNumber = '',
     this.productionDate,
     this.expiryDate,
+    this.scope = MedicineCabinetScope.personal,
   });
 
   final String medicineName;
@@ -653,6 +692,7 @@ class MedicineBatchInput {
   final DateTime? productionDate;
   final DateTime? expiryDate;
   final int quantity;
+  final MedicineCabinetScope scope;
 }
 
 class _EntryButton extends StatelessWidget {
@@ -684,6 +724,7 @@ class MedicineBatchEntrySheet extends StatefulWidget {
     required this.canCapture,
     required this.isCapturing,
     required this.canCreateBatch,
+    this.scope = MedicineCabinetScope.personal,
     this.voiceInputController,
     this.onCapture,
     this.onCreate,
@@ -696,6 +737,7 @@ class MedicineBatchEntrySheet extends StatefulWidget {
   final bool canCapture;
   final bool isCapturing;
   final bool canCreateBatch;
+  final MedicineCabinetScope scope;
   final VoiceInputController? voiceInputController;
   final Future<void> Function()? onCapture;
   final Future<bool> Function(MedicineBatchInput input)? onCreate;
@@ -917,6 +959,7 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
         productionDate: productionDate,
         expiryDate: expiryDate,
         quantity: quantity,
+        scope: widget.scope,
       ));
       if (!mounted || !created) return;
       Navigator.of(context).pop(true);

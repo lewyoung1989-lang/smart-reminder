@@ -84,9 +84,11 @@ class TodayActionCenterView(APIView):
             scheduled_at__lte=now,
         ).select_related("plan__medicine")
         active_expiry_alerts = ExpiryAlertState.objects.filter(
-            batch__medicine__owner=request.user,
             status=ExpiryAlertState.Status.ACTIVE,
-        ).select_related("batch__medicine")
+        ).filter(
+            Q(batch__medicine__owner=request.user)
+            | Q(batch__medicine__family__members__user=request.user)
+        ).distinct().select_related("batch__medicine")
         upcoming_medication = MedicationOccurrence.objects.filter(
             plan__owner=request.user,
             plan__enabled=True,
@@ -208,7 +210,8 @@ class TodayActionCenterView(APIView):
 
 
 def _medication_title(occurrence):
-    return f"服用{occurrence.plan.medicine.name}（{occurrence.plan.dosage_text}）"
+    name = occurrence.plan.medicine_name or occurrence.plan.medicine.name
+    return f"服用{name}（{occurrence.plan.dosage_text}）"
 
 
 def _expiry_title(alert):

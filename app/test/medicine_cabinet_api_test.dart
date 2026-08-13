@@ -209,6 +209,7 @@ void main() {
     expect(client.requests.single.headers['Accept'], 'application/json');
     expect(client.requests.single.headers['Content-Type'], 'application/json');
     expect(jsonDecode(client.requestBodies.single), {
+      'scope': 'personal',
       'medicine_name': '布洛芬胶囊',
       'specification': '0.3g*20粒',
       'manufacturer': '',

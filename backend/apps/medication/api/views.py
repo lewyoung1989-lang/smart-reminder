@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.db import models
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
@@ -20,7 +21,8 @@ from .serializers import (
 def _plan_payload(plan: MedicationPlan) -> dict:
     return {
         "id": str(plan.id),
-        "medicine_id": str(plan.medicine_id),
+        "medicine_id": str(plan.medicine_id) if plan.medicine_id else None,
+        "medicine_name": plan.medicine_name,
         "dosage_text": plan.dosage_text,
         "timezone": plan.timezone,
         "times": plan.schedule_json["times"],
@@ -52,14 +54,16 @@ class MedicationPlanListCreateView(APIView):
                 raise ValidationError(
                     {"workflow_draft_id": ["需要已确认的周期用药工作流。"]}
                 )
-            medicine = MedicineItem.objects.filter(
-                id=data["medicine_id"], owner=request.user
-            ).first()
+            medicine = MedicineItem.objects.filter(id=data["medicine_id"]).filter(
+                models.Q(owner=request.user)
+                | models.Q(family__members__user=request.user)
+            ).distinct().first()
             if medicine is None:
                 raise ValidationError({"medicine_id": ["药品不存在或不属于当前用户。"]})
             plan = MedicationPlan(
                 owner=request.user,
                 medicine=medicine,
+                medicine_name=medicine.name,
                 source_workflow_draft=draft,
                 dosage_text=data["dosage_text"],
                 timezone=data["timezone"],

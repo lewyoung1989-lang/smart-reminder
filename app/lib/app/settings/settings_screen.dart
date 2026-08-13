@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../features/auth/domain/auth_models.dart';
+import '../../features/family/data/family_api.dart';
+import '../../features/family/presentation/family_screen.dart';
 import '../../features/profile/presentation/change_password_screen.dart';
 import '../../ui/components/app_page_header.dart';
 
@@ -12,6 +14,7 @@ class SettingsScreen extends StatefulWidget {
     required this.onThemeModeChanged,
     required this.onChangePassword,
     required this.onLogout,
+    this.familyApi,
     super.key,
   });
 
@@ -24,6 +27,7 @@ class SettingsScreen extends StatefulWidget {
     String newPasswordConfirm,
   ) onChangePassword;
   final Future<void> Function() onLogout;
+  final FamilyApi? familyApi;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -128,6 +132,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 title: const Text('修改密码'),
                 trailing: const Icon(LucideIcons.chevronRight),
                 onTap: _openPasswordChange,
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(LucideIcons.users),
+                title: const Text('我的家庭'),
+                subtitle: const Text('管理共享药箱与家庭成员'),
+                trailing: const Icon(LucideIcons.chevronRight),
+                enabled: widget.familyApi != null,
+                onTap: widget.familyApi == null
+                    ? null
+                    : () => Navigator.of(context).push<void>(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                FamilyScreen(api: widget.familyApi!),
+                          ),
+                        ),
               ),
               const SizedBox(height: 8),
               OutlinedButton.icon(

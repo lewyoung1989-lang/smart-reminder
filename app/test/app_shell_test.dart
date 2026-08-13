@@ -8,6 +8,7 @@ import 'package:smart_reminder_app/features/reminder_drafts/application/reminder
 import 'package:smart_reminder_app/features/reminder_drafts/domain/reminder_draft.dart';
 import 'package:smart_reminder_app/features/medicine_cabinet/data/medicine_repository.dart';
 import 'package:smart_reminder_app/features/medicine_cabinet/domain/medicine_models.dart';
+import 'package:smart_reminder_app/features/medicine_cabinet/domain/inventory_batch.dart';
 import 'package:smart_reminder_app/features/plans/data/plan_repository.dart';
 import 'package:smart_reminder_app/features/today/data/action_center_api.dart';
 import 'package:smart_reminder_app/features/today/data/today_repository.dart';
@@ -432,7 +433,10 @@ class _ThrowingNotificationScheduler implements ReminderNotificationScheduler {
 
 class _UnavailableMedicineRepository implements MedicineRepository {
   @override
-  Future<MedicineCollection> load() => Future.value(
+  Future<MedicineCollection> load({
+    MedicineCabinetScope scope = MedicineCabinetScope.personal,
+  }) =>
+      Future.value(
         MedicineCollection(items: const [], loadedBatchCount: 0),
       );
 

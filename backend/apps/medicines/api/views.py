@@ -19,7 +19,13 @@ from apps.medicines.providers import (
     DeepSeekMedicineDescriptionProvider,
 )
 from apps.medicines.services.expiry_alerts import refresh_expiry_alerts
+from apps.medicines.services.access import (
+    inventory_access_query,
+    require_batch_access,
+    resolve_inventory_scope,
+)
 from apps.medicines.services.photos import create_medicine_photo_upload
+from apps.families.services import record_event
 from apps.ocr.providers.storage import get_object_storage
 
 from .pagination import InventoryBatchCursorPagination
@@ -77,8 +83,11 @@ class InventoryBatchListView(ListAPIView):
         if len(query) > 100:
             raise ValidationError({"q": "搜索内容不能超过 100 个字符"})
 
+        scope = self.request.query_params.get("scope", "personal")
+        ownership = resolve_inventory_scope(self.request.user, scope)
         queryset = InventoryBatch.objects.filter(
-            medicine__owner=self.request.user
+            medicine__owner=ownership["owner"],
+            medicine__family=ownership["family"],
         ).select_related("medicine")
         if query:
             queryset = queryset.filter(
@@ -104,7 +113,11 @@ class InventoryBatchListView(ListAPIView):
         logger.info("inventory_batch_created batch_id=%s", batch.id)
         return Response(
             InventoryBatchSerializer(
-                batch, context={"object_storage": get_object_storage()}
+                batch,
+                context={
+                    "object_storage": get_object_storage(),
+                    "request": request,
+                },
             ).data,
             status=status.HTTP_201_CREATED,
         )
@@ -139,10 +152,21 @@ class InventoryBatchDestroyView(DestroyAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return InventoryBatch.objects.filter(medicine__owner=self.request.user)
+        return InventoryBatch.objects.filter(
+            inventory_access_query(self.request.user)
+        ).distinct().select_related("medicine")
 
     def perform_destroy(self, instance):
+        require_batch_access(instance, self.request.user, delete=True)
         batch_id = instance.id
+        family = instance.medicine.family
+        if family is not None:
+            record_event(
+                family=family,
+                actor=self.request.user,
+                event_type="inventory_deleted",
+                payload={"batch_id": str(batch_id)},
+            )
         instance.delete()
         logger.info("inventory_batch_deleted batch_id=%s", batch_id)
 
@@ -160,12 +184,14 @@ class InventoryBatchExpiryActionView(APIView):
                 batch = (
                     InventoryBatch.objects.select_for_update()
                     .select_related("medicine")
-                    .get(id=pk, medicine__owner=request.user)
+                    .filter(inventory_access_query(request.user))
+                    .get(id=pk)
                 )
             except InventoryBatch.DoesNotExist:
                 return Response(
                     {"detail": "未找到库存批次"}, status=status.HTTP_404_NOT_FOUND
                 )
+            require_batch_access(batch, request.user)
 
             now = timezone.now()
             ExpiryAlertState.objects.filter(
@@ -175,6 +201,13 @@ class InventoryBatchExpiryActionView(APIView):
             audit = ExpiryBatchAction(batch=batch, user=request.user, action=action)
             audit.full_clean()
             audit.save()
+            if batch.medicine.family_id:
+                record_event(
+                    family=batch.medicine.family,
+                    actor=request.user,
+                    event_type="expiry_handled",
+                    payload={"batch_id": str(batch.id), "action": action},
+                )
 
         return Response(
             {"batch_id": str(batch.id), "action": action}, status=status.HTTP_200_OK
@@ -194,11 +227,20 @@ class InventoryBatchExpiryDateCorrectionView(APIView):
                 batch = (
                     InventoryBatch.objects.select_for_update()
                     .select_related("medicine")
-                    .get(id=pk, medicine__owner=request.user)
+                    .filter(inventory_access_query(request.user))
+                    .get(id=pk)
                 )
             except InventoryBatch.DoesNotExist:
                 return Response(
                     {"detail": "未找到库存批次"}, status=status.HTTP_404_NOT_FOUND
+                )
+            require_batch_access(batch, request.user)
+
+            expected_version = request.data.get("version")
+            if expected_version is not None and expected_version != batch.version:
+                return Response(
+                    {"code": "inventory_version_conflict", "version": batch.version},
+                    status=status.HTTP_409_CONFLICT,
                 )
 
             original = {
@@ -217,7 +259,9 @@ class InventoryBatchExpiryDateCorrectionView(APIView):
                 field for field, old_value in original.items() if getattr(batch, field) != old_value
             ]
             if changed_fields:
-                batch.save(update_fields=changed_fields)
+                batch.version += 1
+                batch.updated_by = request.user
+                batch.save(update_fields=[*changed_fields, "version", "updated_by", "updated_at"])
                 refresh_expiry_alerts(batch=batch, today=timezone.localdate())
                 audit = ExpiryBatchAction(
                     batch=batch,
@@ -233,8 +277,21 @@ class InventoryBatchExpiryDateCorrectionView(APIView):
                 )
                 audit.full_clean()
                 audit.save()
+                if batch.medicine.family_id:
+                    record_event(
+                        family=batch.medicine.family,
+                        actor=request.user,
+                        event_type="inventory_corrected",
+                        payload={
+                            "batch_id": str(batch.id),
+                            "version": batch.version,
+                        },
+                    )
 
-        return Response(InventoryBatchSerializer(batch).data, status=status.HTTP_200_OK)
+        return Response(
+            InventoryBatchSerializer(batch, context={"request": request}).data,
+            status=status.HTTP_200_OK,
+        )
 
 
 def _json_value(value):

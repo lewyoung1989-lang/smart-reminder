@@ -8,7 +8,16 @@ from django.db import models
 
 class MedicineItem(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True
+    )
+    family = models.ForeignKey(
+        "families.Family",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="medicines",
+    )
     name = models.CharField(max_length=200)
     specification = models.CharField(max_length=120, blank=True)
     manufacturer = models.CharField(max_length=200, blank=True)
@@ -21,7 +30,20 @@ class MedicineItem(models.Model):
             models.UniqueConstraint(
                 fields=["owner", "name", "specification"],
                 name="unique_owner_medicine_specification",
-            )
+                condition=models.Q(owner__isnull=False),
+            ),
+            models.UniqueConstraint(
+                fields=["family", "name", "specification"],
+                name="unique_family_medicine_specification",
+                condition=models.Q(family__isnull=False),
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(owner__isnull=False, family__isnull=True)
+                    | models.Q(owner__isnull=True, family__isnull=False)
+                ),
+                name="medicine_exactly_one_owner",
+            ),
         ]
 
 
@@ -38,7 +60,23 @@ class InventoryBatch(models.Model):
     opened_at = models.DateField(null=True, blank=True)
     opened_shelf_life_days = models.PositiveIntegerField(null=True, blank=True)
     quantity = models.PositiveIntegerField(default=1)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_inventory_batches",
+    )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="updated_inventory_batches",
+    )
+    version = models.PositiveIntegerField(default=1)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         constraints = [

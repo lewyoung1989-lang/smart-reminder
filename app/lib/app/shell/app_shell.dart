@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../features/auth/domain/auth_models.dart';
+import '../../features/family/data/family_api.dart';
+import '../../features/medicine_cabinet/domain/inventory_batch.dart';
 import '../../features/medicine_cabinet/data/medicine_repository.dart';
 import '../../features/medicine_cabinet/domain/medicine_models.dart';
 import '../../features/medicine_cabinet/domain/medicine_description_draft.dart';
@@ -34,6 +36,7 @@ class AppShell extends StatefulWidget {
     required this.onThemeModeChanged,
     required this.onChangePassword,
     required this.onLogout,
+    this.familyApi,
     this.onOpenReminderManager,
     this.createDraft,
     this.confirmWorkflowDraft,
@@ -65,6 +68,7 @@ class AppShell extends StatefulWidget {
     String newPasswordConfirm,
   ) onChangePassword;
   final Future<void> Function() onLogout;
+  final FamilyApi? familyApi;
   final VoidCallback? onOpenReminderManager;
   final Future<QuickCreateDraft> Function(String text)? createDraft;
   final Future<String> Function(String draftId)? confirmWorkflowDraft;
@@ -73,7 +77,7 @@ class AppShell extends StatefulWidget {
   final ReminderCreationService? reminderCreationService;
   final VoiceInputController? voiceInputController;
   final Future<void> Function(MedicineBatch batch)? onDeleteBatch;
-  final Future<bool> Function()? onCaptureMedicine;
+  final Future<bool> Function(MedicineCabinetScope scope)? onCaptureMedicine;
   final Future<List<int>?> Function()? onCaptureMedicinePhoto;
   final MedicineCaptureAvailability captureAvailability;
   final VoidCallback? onOpenSystemSettings;
@@ -105,6 +109,7 @@ class _AppShellState extends State<AppShell> {
           onThemeModeChanged: widget.onThemeModeChanged,
           onChangePassword: widget.onChangePassword,
           onLogout: widget.onLogout,
+          familyApi: widget.familyApi,
         ),
       ),
     );

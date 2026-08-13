@@ -1,5 +1,12 @@
 enum InventoryExpiryStatus { expired, expiringSoon, valid, unknown }
 
+enum MedicineCabinetScope { personal, family }
+
+extension MedicineCabinetScopeValue on MedicineCabinetScope {
+  String get apiValue => name;
+  String get label => this == MedicineCabinetScope.personal ? '个人药箱' : '家庭药箱';
+}
+
 class InventoryBatch {
   const InventoryBatch({
     required this.id,
@@ -14,6 +21,9 @@ class InventoryBatch {
     required this.quantity,
     required this.expiryStatus,
     required this.daysUntilExpiry,
+    this.scope = MedicineCabinetScope.personal,
+    this.canDelete = true,
+    this.version = 1,
   });
 
   factory InventoryBatch.fromJson(Map<String, dynamic> json) => InventoryBatch(
@@ -29,6 +39,11 @@ class InventoryBatch {
         quantity: json['quantity'] as int,
         expiryStatus: _parseStatus(json['expiry_status'] as String?),
         daysUntilExpiry: json['days_until_expiry'] as int?,
+        scope: json['scope'] == 'family'
+            ? MedicineCabinetScope.family
+            : MedicineCabinetScope.personal,
+        canDelete: json['can_delete'] as bool? ?? true,
+        version: json['version'] as int? ?? 1,
       );
 
   final String id;
@@ -43,6 +58,9 @@ class InventoryBatch {
   final int quantity;
   final InventoryExpiryStatus expiryStatus;
   final int? daysUntilExpiry;
+  final MedicineCabinetScope scope;
+  final bool canDelete;
+  final int version;
 
   static DateTime? _parseDate(Object? value) =>
       value == null ? null : DateTime.parse(value as String);

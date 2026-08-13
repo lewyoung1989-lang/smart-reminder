@@ -2,12 +2,31 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:smart_reminder_app/features/medicine_cabinet/data/medicine_repository.dart';
 import 'package:smart_reminder_app/features/medicine_cabinet/domain/medicine_models.dart';
+import 'package:smart_reminder_app/features/medicine_cabinet/domain/inventory_batch.dart';
 import 'package:smart_reminder_app/features/medicine_cabinet/domain/medicine_description_draft.dart';
 import 'package:smart_reminder_app/features/medicine_cabinet/presentation/medicine_cabinet_screen.dart';
 import 'package:smart_reminder_app/features/quick_create/domain/voice_input_controller.dart';
 import 'package:smart_reminder_app/ui/components/app_list_row.dart';
 
 void main() {
+  testWidgets('switches between personal and family inventory scopes',
+      (tester) async {
+    final repository = _Repository();
+    await tester.pumpWidget(
+      MaterialApp(home: MedicineCabinetScreen(repository: repository)),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('家庭'));
+    await tester.pumpAndSettle();
+
+    expect(repository.scopes, [
+      MedicineCabinetScope.personal,
+      MedicineCabinetScope.family,
+    ]);
+    expect(find.text('个人'), findsOneWidget);
+  });
+
   testWidgets('deletes a batch and reloads the cabinet only after success',
       (tester) async {
     final repository = _Repository();
@@ -124,7 +143,7 @@ void main() {
         home: MedicineCabinetScreen(
           repository: repository,
           captureAvailability: MedicineCaptureAvailability.ready,
-          onCapture: () async => results.moveNext() && results.current,
+          onCapture: (_) async => results.moveNext() && results.current,
         ),
       ),
     );
@@ -233,6 +252,7 @@ class _Repository implements MedicineRepository {
   });
 
   var loadCalls = 0;
+  final scopes = <MedicineCabinetScope>[];
   final MedicineStatus status;
   final DateTime? nearestExpiry;
   final bool isTruncated;
@@ -264,8 +284,11 @@ class _Repository implements MedicineRepository {
   Future<MedicineDetail> getById(String id) async => detail;
 
   @override
-  Future<MedicineCollection> load() async {
+  Future<MedicineCollection> load({
+    MedicineCabinetScope scope = MedicineCabinetScope.personal,
+  }) async {
     loadCalls += 1;
+    scopes.add(scope);
     return MedicineCollection(
       items: [detail.summary],
       isTruncated: isTruncated,

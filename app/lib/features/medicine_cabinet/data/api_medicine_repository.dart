@@ -13,8 +13,10 @@ class ApiMedicineRepository implements MedicineRepository {
   Map<String, MedicineDetail> _details = const {};
 
   @override
-  Future<MedicineCollection> load() async {
-    final page = await _source.listBatches();
+  Future<MedicineCollection> load({
+    MedicineCabinetScope scope = MedicineCabinetScope.personal,
+  }) async {
+    final page = await _source.listBatches(scope: scope);
     final grouped = <(String, String, String), List<InventoryBatch>>{};
     for (final batch in page.batches) {
       final key = (batch.medicineId, batch.medicineName, batch.specification);
@@ -47,7 +49,9 @@ class ApiMedicineRepository implements MedicineRepository {
                 productionDate: batch.productionDate,
                 expiresOn: batch.expiryDate,
                 quantity: batch.quantity,
-                sourceLabel: '家庭药箱',
+                sourceLabel: batch.scope.label,
+                canDelete: batch.canDelete,
+                version: batch.version,
               ),
             )
             .toList(growable: false),
@@ -126,6 +130,7 @@ class _LoaderDataSource implements MedicineCabinetDataSource {
     DateTime? productionDate,
     DateTime? expiryDate,
     int quantity = 1,
+    MedicineCabinetScope scope = MedicineCabinetScope.personal,
   }) =>
       Future.error(UnsupportedError('Batch creation is not configured.'));
 
@@ -146,6 +151,7 @@ class _LoaderDataSource implements MedicineCabinetDataSource {
   Future<InventoryBatchPage> listBatches({
     String query = '',
     Uri? pageUrl,
+    MedicineCabinetScope scope = MedicineCabinetScope.personal,
   }) =>
       _loader(query: query, pageUrl: pageUrl);
 }

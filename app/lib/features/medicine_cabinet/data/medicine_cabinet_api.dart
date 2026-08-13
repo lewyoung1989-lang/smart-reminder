@@ -14,6 +14,7 @@ abstract interface class MedicineCabinetDataSource {
   Future<InventoryBatchPage> listBatches({
     String query = '',
     Uri? pageUrl,
+    MedicineCabinetScope scope = MedicineCabinetScope.personal,
   });
 
   Future<InventoryBatch> createBatch({
@@ -25,6 +26,7 @@ abstract interface class MedicineCabinetDataSource {
     DateTime? productionDate,
     DateTime? expiryDate,
     int quantity = 1,
+    MedicineCabinetScope scope = MedicineCabinetScope.personal,
   });
 
   Future<void> deleteBatch(String batchId);
@@ -68,6 +70,7 @@ class MedicineCabinetApi implements MedicineCabinetDataSource {
   Future<InventoryBatchPage> listBatches({
     String query = '',
     Uri? pageUrl,
+    MedicineCabinetScope scope = MedicineCabinetScope.personal,
   }) async {
     if (pageUrl != null && !_hasSameOrigin(pageUrl, _baseUri)) {
       throw const MedicineCabinetApiException(
@@ -79,9 +82,11 @@ class MedicineCabinetApi implements MedicineCabinetDataSource {
     final trimmedQuery = query.trim();
     final uri = pageUrl ??
         _baseUri.resolve('/api/v1/inventory-batches').replace(
-              queryParameters:
-                  trimmedQuery.isEmpty ? null : {'q': trimmedQuery},
-            );
+          queryParameters: {
+            'scope': scope.apiValue,
+            if (trimmedQuery.isNotEmpty) 'q': trimmedQuery,
+          },
+        );
     final response = await _client.get(uri, headers: _headers);
     if (response.statusCode != 200) {
       throw MedicineCabinetApiException(response.statusCode, response.body);
@@ -112,6 +117,7 @@ class MedicineCabinetApi implements MedicineCabinetDataSource {
     DateTime? productionDate,
     DateTime? expiryDate,
     int quantity = 1,
+    MedicineCabinetScope scope = MedicineCabinetScope.personal,
   }) async {
     final photoObjectKey =
         photoBytes == null ? null : await _uploadMedicinePhoto(photoBytes);
@@ -122,6 +128,7 @@ class MedicineCabinetApi implements MedicineCabinetDataSource {
         'Content-Type': 'application/json',
       },
       body: jsonEncode({
+        'scope': scope.apiValue,
         'medicine_name': medicineName.trim(),
         'specification': specification.trim(),
         'manufacturer': manufacturer.trim(),
@@ -184,6 +191,7 @@ class MedicineCabinetApi implements MedicineCabinetDataSource {
   Future<InventoryBatch> correctExpiryDate(
     String batchId, {
     required DateTime expiryDate,
+    int? version,
   }) async {
     final encodedBatchId = Uri.encodeComponent(batchId);
     final uri = Uri.parse(
@@ -195,7 +203,10 @@ class MedicineCabinetApi implements MedicineCabinetDataSource {
         ..._headers,
         'Content-Type': 'application/json',
       },
-      body: jsonEncode({'expiry_date': _formatDate(expiryDate)}),
+      body: jsonEncode({
+        'expiry_date': _formatDate(expiryDate),
+        if (version != null) 'version': version,
+      }),
     );
     if (response.statusCode != 200) {
       throw MedicineCabinetApiException(response.statusCode, response.body);

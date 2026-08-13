@@ -16,9 +16,12 @@ class MedicationPlan(models.Model):
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     medicine = models.ForeignKey(
         "medicines.MedicineItem",
-        on_delete=models.PROTECT,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="medication_plans",
     )
+    medicine_name = models.CharField(max_length=200, blank=True)
     source_workflow_draft = models.OneToOneField(
         "workflows.WorkflowDraft",
         on_delete=models.PROTECT,
@@ -44,8 +47,14 @@ class MedicationPlan(models.Model):
     def clean(self):
         super().clean()
         errors = {}
-        if self.medicine_id and self.owner_id and self.medicine.owner_id != self.owner_id:
-            errors["medicine"] = "The medicine must belong to the plan owner."
+        if self.medicine_id and self.owner_id:
+            is_personal = self.medicine.owner_id == self.owner_id
+            is_family = (
+                self.medicine.family_id is not None
+                and self.medicine.family.members.filter(user_id=self.owner_id).exists()
+            )
+            if not is_personal and not is_family:
+                errors["medicine"] = "The medicine must be available to the plan owner."
         try:
             ZoneInfo(self.timezone)
         except (ZoneInfoNotFoundError, ValueError):

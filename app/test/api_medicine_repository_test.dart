@@ -104,7 +104,7 @@ void main() {
     expect(detail.batches.first.quantity, 2);
     expect(detail.batches.first.productionDate, DateTime(2026, 1, 1));
     expect(detail.batches.first.expiresOn, DateTime(2027, 1, 1));
-    expect(detail.batches.first.sourceLabel, '家庭药箱');
+    expect(detail.batches.first.sourceLabel, '个人药箱');
     expect(detail.batches.last.batchNumber, 'LOT-B');
     expect(detail.batches.last.productionDate, isNull);
     expect(detail.batches.last.expiresOn, isNull);
@@ -191,6 +191,7 @@ class _InventorySource implements MedicineCabinetDataSource {
     DateTime? productionDate,
     DateTime? expiryDate,
     int quantity = 1,
+    MedicineCabinetScope scope = MedicineCabinetScope.personal,
   }) =>
       Future.error(UnsupportedError('unused'));
 
@@ -210,6 +211,7 @@ class _InventorySource implements MedicineCabinetDataSource {
   Future<InventoryBatchPage> listBatches({
     String query = '',
     Uri? pageUrl,
+    MedicineCabinetScope scope = MedicineCabinetScope.personal,
   }) {
     calls += 1;
     lastQuery = query;

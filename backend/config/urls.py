@@ -52,6 +52,7 @@ urlpatterns = [
     ),
     path("api/v1/voice/", include("apps.reminders.api.urls")),
     path("api/v1/ocr/", include("apps.ocr.api.urls")),
+    path("api/v1/", include("apps.families.api.urls")),
     path("api/v1/", include("apps.medicines.api.urls")),
     path("api/v1/", include("apps.medication.api.urls")),
 ]

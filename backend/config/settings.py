@@ -90,6 +90,7 @@ INSTALLED_APPS = [
     "apps.reminders",
     "apps.workflows.apps.WorkflowsConfig",
     "apps.voice",
+    "apps.families.apps.FamiliesConfig",
     "apps.medicines.apps.MedicinesConfig",
     "apps.medication.apps.MedicationConfig",
     "apps.ocr.apps.OCRConfig",

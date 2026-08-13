@@ -15,9 +15,11 @@ import 'features/auth/data/secure_token_store.dart';
 import 'features/auth/data/token_store.dart';
 import 'features/auth/presentation/auth_screen.dart';
 import 'features/auth/presentation/startup_screen.dart';
+import 'features/family/data/family_api.dart';
 import 'features/medicine_cabinet/data/api_medicine_repository.dart';
 import 'features/medicine_cabinet/data/medicine_cabinet_api.dart';
 import 'features/medicine_cabinet/domain/medicine_models.dart';
+import 'features/medicine_cabinet/domain/inventory_batch.dart';
 import 'features/medicine_ocr/data/medicine_ocr_api.dart';
 import 'features/medicine_ocr/presentation/medicine_ocr_screen.dart';
 import 'features/plans/data/api_plan_repository.dart';
@@ -81,6 +83,7 @@ class _SmartReminderAppState extends State<SmartReminderApp>
   late final ApiTodayRepository _todayRepository;
   late final ApiPlanRepository _planRepository;
   late final ActionCenterApi _actionCenterApi;
+  late final FamilyApi _familyApi;
   late final TokenStore _tokenStore;
   late final AuthApi _refreshApi;
   late final AuthenticatedClient _authenticatedClient;
@@ -156,6 +159,10 @@ class _SmartReminderAppState extends State<SmartReminderApp>
       client: _authenticatedClient,
     );
     _actionCenterApi = ActionCenterApi(
+      baseUrl: widget.config.apiBaseUrl,
+      client: _authenticatedClient,
+    );
+    _familyApi = FamilyApi(
       baseUrl: widget.config.apiBaseUrl,
       client: _authenticatedClient,
     );
@@ -241,6 +248,7 @@ class _SmartReminderAppState extends State<SmartReminderApp>
     _todayRepository.close();
     _planRepository.close();
     _actionCenterApi.close();
+    _familyApi.close();
     _medicineCabinetApi.close();
     _medicineOcrApi.close();
     _authController.removeListener(_authChanged);
@@ -328,7 +336,7 @@ class _SmartReminderAppState extends State<SmartReminderApp>
     return _captureMedicineImage('front');
   }
 
-  Future<bool> _openMedicineOcr() async {
+  Future<bool> _openMedicineOcr(MedicineCabinetScope scope) async {
     if (!_medicineOcrEnabled) return false;
     var permission = await _cameraPermissionGateway.current();
     if (!mounted) return false;
@@ -371,6 +379,7 @@ class _SmartReminderAppState extends State<SmartReminderApp>
               createJob: _medicineOcrApi.createJob,
               getJob: _medicineOcrApi.getJob,
               confirmJob: _medicineOcrApi.confirmJob,
+              scope: scope,
             ),
           ),
         )) ??
@@ -473,6 +482,7 @@ class _SmartReminderAppState extends State<SmartReminderApp>
               newPasswordConfirm: confirm,
             ),
             onLogout: _authController.logout,
+            familyApi: _familyApi,
             onOpenReminderManager: _openReminderManager,
             createDraft: _reminderDraftApi.createDraft,
             confirmWorkflowDraft: _reminderDraftApi.confirmWorkflowDraft,
@@ -484,6 +494,7 @@ class _SmartReminderAppState extends State<SmartReminderApp>
               await _medicineCabinetApi.correctExpiryDate(
                 batch.id,
                 expiryDate: expiryDate,
+                version: batch.version,
               );
             },
             onCreateBatch: (input) async {
@@ -496,6 +507,7 @@ class _SmartReminderAppState extends State<SmartReminderApp>
                 productionDate: input.productionDate,
                 expiryDate: input.expiryDate,
                 quantity: input.quantity,
+                scope: input.scope,
               );
             },
             onParseMedicineDescription: _medicineCabinetApi.parseDescription,

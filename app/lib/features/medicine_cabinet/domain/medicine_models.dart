@@ -38,6 +38,8 @@ class MedicineBatch {
     required this.expiresOn,
     required this.quantity,
     required this.sourceLabel,
+    this.canDelete = true,
+    this.version = 1,
   });
 
   final String id;
@@ -47,6 +49,8 @@ class MedicineBatch {
   final DateTime? expiresOn;
   final int quantity;
   final String sourceLabel;
+  final bool canDelete;
+  final int version;
 }
 
 class MedicineDetail {

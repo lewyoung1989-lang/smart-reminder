@@ -2,8 +2,10 @@ from django.db import transaction
 
 from apps.medicines.models import InventoryBatch, MedicineItem
 from apps.medicines.services.photos import medicine_photo_key
+from apps.medicines.services.access import resolve_inventory_scope
 from apps.ocr.providers.storage import get_object_storage
 from apps.ocr.models import OCRJob
+from apps.families.services import record_event
 
 
 @transaction.atomic
@@ -16,8 +18,9 @@ def confirm_job(*, job_id, user, fields):
         raise ValueError("ocr_job_not_ready")
 
     manufacturer = fields.get("manufacturer", "").strip()
+    ownership = resolve_inventory_scope(user, fields.get("scope", "personal"))
     medicine, created = MedicineItem.objects.get_or_create(
-        owner=user,
+        **ownership,
         name=fields["medicine_name"].strip(),
         specification=fields.get("specification", "").strip(),
         defaults={"manufacturer": manufacturer},
@@ -53,10 +56,19 @@ def confirm_job(*, job_id, user, fields):
         production_date=fields.get("production_date"),
         expiry_date=fields.get("expiry_date"),
         quantity=fields.get("quantity", 1),
+        created_by=user,
+        updated_by=user,
     )
     job.confirmed_batch = batch
     job.status = OCRJob.Status.CONFIRMED
     job.save(
         update_fields=["confirmed_batch", "status", "updated_at"]
     )
+    if medicine.family_id:
+        record_event(
+            family=medicine.family,
+            actor=user,
+            event_type="inventory_created",
+            payload={"batch_id": str(batch.id), "source": "ocr"},
+        )
     return batch, True

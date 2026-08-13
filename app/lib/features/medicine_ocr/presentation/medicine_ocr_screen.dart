@@ -8,6 +8,7 @@ import '../../../app/theme/app_spacing.dart';
 import '../../../ui/components/app_page_header.dart';
 import '../../../ui/components/app_status_banner.dart';
 import '../domain/ocr_job.dart';
+import '../../medicine_cabinet/domain/inventory_batch.dart';
 
 enum MedicineOcrStage { capture, uploading, processing, review }
 
@@ -17,6 +18,7 @@ class MedicineOcrScreen extends StatefulWidget {
     required this.createJob,
     required this.getJob,
     required this.confirmJob,
+    this.scope = MedicineCabinetScope.personal,
     this.pollInterval = const Duration(seconds: 2),
     super.key,
   });
@@ -29,6 +31,7 @@ class MedicineOcrScreen extends StatefulWidget {
   final Future<OcrJob> Function(String id) getJob;
   final Future<void> Function(String id, Map<String, Object?> fields)
       confirmJob;
+  final MedicineCabinetScope scope;
   final Duration pollInterval;
 
   @override
@@ -194,6 +197,7 @@ class _MedicineOcrScreenState extends State<MedicineOcrScreen> {
     try {
       // OCR 只提供候选，实际入库始终使用用户核对后的表单值。
       await widget.confirmJob(job.id, {
+        'scope': widget.scope.apiValue,
         'medicine_name': _name.text.trim(),
         'specification': _specification.text.trim(),
         'manufacturer': _manufacturer.text.trim(),

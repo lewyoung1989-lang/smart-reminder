@@ -35,6 +35,9 @@ class CreateJobSerializer(serializers.Serializer):
 
 
 class ConfirmCandidateSerializer(serializers.Serializer):
+    scope = serializers.ChoiceField(
+        choices=("personal", "family"), required=False, default="personal"
+    )
     medicine_name = serializers.CharField(max_length=200)
     specification = serializers.CharField(
         max_length=120,
