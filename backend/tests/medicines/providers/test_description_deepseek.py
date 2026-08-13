@@ -37,6 +37,7 @@ def test_parses_description_as_strict_draft_without_executing():
             {
                 "medicine_name": "布洛芬胶囊",
                 "specification": "0.3g*20粒",
+                "manufacturer": "华北制药股份有限公司",
                 "batch_number": None,
                 "production_date": None,
                 "expiry_date": "2027-01-01",
@@ -57,6 +58,7 @@ def test_parses_description_as_strict_draft_without_executing():
 
     assert draft.medicine_name == "布洛芬胶囊"
     assert draft.quantity == 2
+    assert draft.manufacturer == "华北制药股份有限公司"
     assert draft.expiry_date == date(2027, 1, 1)
     assert transport.payload["response_format"] == {"type": "json_object"}
     assert transport.payload["thinking"] == {"type": "disabled"}

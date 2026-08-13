@@ -74,6 +74,16 @@ def resolve_candidates(
             semantic.specification,
         )
 
+    manufacturer = local.manufacturer
+    if not manufacturer and semantic.manufacturer is not None:
+        manufacturer = semantic.manufacturer.value
+        _set_semantic_confidence(
+            confidence,
+            "manufacturer",
+            documents,
+            semantic.manufacturer,
+        )
+
     batch_number = local.batch_number
     if not batch_number and semantic.batch_number is not None:
         batch_number = semantic.batch_number.value
@@ -124,6 +134,7 @@ def resolve_candidates(
     return MedicineCandidates(
         medicine_name=medicine_name,
         specification=specification,
+        manufacturer=manufacturer,
         batch_number=batch_number,
         production_date=production_date,
         expiry_date=expiry_date,

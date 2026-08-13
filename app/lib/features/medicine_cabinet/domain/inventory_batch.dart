@@ -6,6 +6,8 @@ class InventoryBatch {
     required this.medicineId,
     required this.medicineName,
     required this.specification,
+    this.manufacturer = '',
+    this.photoUrl,
     required this.batchNumber,
     required this.productionDate,
     required this.expiryDate,
@@ -19,6 +21,8 @@ class InventoryBatch {
         medicineId: json['medicine_id'] as String,
         medicineName: json['medicine_name'] as String,
         specification: json['specification'] as String? ?? '',
+        manufacturer: json['manufacturer'] as String? ?? '',
+        photoUrl: json['photo_url'] as String?,
         batchNumber: json['batch_number'] as String? ?? '',
         productionDate: _parseDate(json['production_date']),
         expiryDate: _parseDate(json['expiry_date']),
@@ -31,6 +35,8 @@ class InventoryBatch {
   final String medicineId;
   final String medicineName;
   final String specification;
+  final String manufacturer;
+  final String? photoUrl;
   final String batchNumber;
   final DateTime? productionDate;
   final DateTime? expiryDate;

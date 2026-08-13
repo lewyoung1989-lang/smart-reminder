@@ -11,6 +11,9 @@ class MedicineItem(models.Model):
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     name = models.CharField(max_length=200)
     specification = models.CharField(max_length=120, blank=True)
+    manufacturer = models.CharField(max_length=200, blank=True)
+    photo_object_key = models.CharField(max_length=300, blank=True)
+    photo_content_type = models.CharField(max_length=32, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

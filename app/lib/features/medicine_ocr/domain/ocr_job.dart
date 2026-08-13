@@ -2,6 +2,7 @@ class OcrCandidate {
   const OcrCandidate({
     required this.medicineName,
     required this.specification,
+    this.manufacturer = '',
     required this.batchNumber,
     this.productionDate,
     this.expiryDate,
@@ -9,6 +10,7 @@ class OcrCandidate {
 
   final String medicineName;
   final String specification;
+  final String manufacturer;
   final String batchNumber;
   final DateTime? productionDate;
   final DateTime? expiryDate;
@@ -16,6 +18,7 @@ class OcrCandidate {
   factory OcrCandidate.fromJson(Map<String, dynamic> json) => OcrCandidate(
         medicineName: json['medicine_name'] as String? ?? '',
         specification: json['specification'] as String? ?? '',
+        manufacturer: json['manufacturer'] as String? ?? '',
         batchNumber: json['batch_number'] as String? ?? '',
         productionDate: json['production_date'] == null
             ? null

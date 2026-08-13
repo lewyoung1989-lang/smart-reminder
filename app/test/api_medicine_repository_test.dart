@@ -185,6 +185,8 @@ class _InventorySource implements MedicineCabinetDataSource {
   Future<InventoryBatch> createBatch({
     required String medicineName,
     String specification = '',
+    String manufacturer = '',
+    List<int>? photoBytes,
     String batchNumber = '',
     DateTime? productionDate,
     DateTime? expiryDate,

@@ -42,6 +42,13 @@ class ConfirmCandidateSerializer(serializers.Serializer):
         required=False,
         default="",
     )
+    manufacturer = serializers.CharField(
+        max_length=200,
+        allow_blank=True,
+        required=False,
+        default="",
+    )
+    retain_front_photo = serializers.BooleanField(required=False, default=True)
     batch_number = serializers.CharField(
         max_length=100,
         allow_blank=True,

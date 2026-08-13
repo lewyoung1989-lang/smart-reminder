@@ -12,6 +12,8 @@ class MedicineSummary {
     required this.id,
     required this.name,
     required this.specification,
+    this.manufacturer = '',
+    this.photoUrl,
     required this.totalQuantity,
     required this.nearestExpiry,
     required this.status,
@@ -20,6 +22,8 @@ class MedicineSummary {
   final String id;
   final String name;
   final String specification;
+  final String manufacturer;
+  final String? photoUrl;
   final int totalQuantity;
   final DateTime? nearestExpiry;
   final MedicineStatus status;

@@ -8,6 +8,7 @@ class MedicineDescriptionDraft(BaseModel):
 
     medicine_name: str | None = Field(default=None, min_length=1, max_length=200)
     specification: str | None = Field(default=None, min_length=1, max_length=120)
+    manufacturer: str | None = Field(default=None, min_length=1, max_length=200)
     batch_number: str | None = Field(default=None, min_length=1, max_length=100)
     production_date: date | None = None
     expiry_date: date | None = None

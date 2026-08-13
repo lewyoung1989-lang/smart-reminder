@@ -8,6 +8,10 @@ from .types import MedicineCandidates, OCRDocument
 
 EXPIRY_LABEL = re.compile(r"有效期(?:至)?|失效期|EXP", re.IGNORECASE)
 PRODUCTION_LABEL = re.compile(r"生产日期|生产日|MFG", re.IGNORECASE)
+MANUFACTURER = re.compile(
+    r"(?:生产企业|生产厂家|生产厂商|制造商|厂家)\s*[:：]?\s*"
+    r"([^，。；;]{2,80}(?:公司|药业|制药厂|制药|集团|有限责任公司))"
+)
 BATCH = re.compile(
     r"(?:批号|产品批号|LOT)\s*[:：]?\s*([A-Z0-9-]{4,30})",
     re.IGNORECASE,
@@ -124,6 +128,7 @@ def extract_candidates(
     values = {
         "medicine_name": "",
         "specification": "",
+        "manufacturer": "",
         "batch_number": "",
     }
     confidence = {}
@@ -144,6 +149,11 @@ def extract_candidates(
             if specification and not values["specification"]:
                 values["specification"] = specification.group(1)
                 confidence["specification"] = window.score
+
+            manufacturer = MANUFACTURER.search(text)
+            if manufacturer and not values["manufacturer"]:
+                values["manufacturer"] = manufacturer.group(1)
+                confidence["manufacturer"] = window.score
 
             batch = BATCH.search(text)
             if batch and not values["batch_number"]:

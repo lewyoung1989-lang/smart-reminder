@@ -24,7 +24,11 @@ def test_extracts_front_and_expiry_fields():
         (
             OCRDocument(
                 "front",
-                (line("布洛芬缓释胶囊"), line("规格 0.3g*20粒")),
+                (
+                    line("布洛芬缓释胶囊"),
+                    line("规格 0.3g*20粒"),
+                    line("生产企业：华北制药股份有限公司"),
+                ),
             ),
             OCRDocument(
                 "expiry",
@@ -34,6 +38,7 @@ def test_extracts_front_and_expiry_fields():
     )
     assert result.medicine_name == "布洛芬缓释胶囊"
     assert result.specification == "0.3g*20粒"
+    assert result.manufacturer == "华北制药股份有限公司"
     assert result.batch_number == "20260108"
     assert result.expiry_date == date(2028, 5, 31)
 

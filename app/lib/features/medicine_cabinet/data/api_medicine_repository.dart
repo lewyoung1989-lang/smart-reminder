@@ -29,6 +29,8 @@ class ApiMedicineRepository implements MedicineRepository {
         id: _summaryId(medicineId, name, specification),
         name: name,
         specification: specification,
+        manufacturer: batches.first.manufacturer,
+        photoUrl: batches.first.photoUrl,
         totalQuantity:
             batches.fold(0, (total, batch) => total + batch.quantity),
         nearestExpiry: _nearestExpiry(batches),
@@ -118,6 +120,8 @@ class _LoaderDataSource implements MedicineCabinetDataSource {
   Future<InventoryBatch> createBatch({
     required String medicineName,
     String specification = '',
+    String manufacturer = '',
+    List<int>? photoBytes,
     String batchNumber = '',
     DateTime? productionDate,
     DateTime? expiryDate,

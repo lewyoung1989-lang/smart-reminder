@@ -63,6 +63,7 @@ def run_job(job_id, *, storage, provider, semantic_provider=None):
             defaults={
                 "medicine_name": candidates.medicine_name,
                 "specification": candidates.specification,
+                "manufacturer": candidates.manufacturer,
                 "batch_number": candidates.batch_number,
                 "production_date": candidates.production_date,
                 "expiry_date": candidates.expiry_date,

@@ -42,6 +42,7 @@ class AppShell extends StatefulWidget {
     this.voiceInputController,
     this.onDeleteBatch,
     this.onCaptureMedicine,
+    this.onCaptureMedicinePhoto,
     this.captureAvailability = MedicineCaptureAvailability.unavailable,
     this.onOpenSystemSettings,
     this.actionCenterActions,
@@ -73,6 +74,7 @@ class AppShell extends StatefulWidget {
   final VoiceInputController? voiceInputController;
   final Future<void> Function(MedicineBatch batch)? onDeleteBatch;
   final Future<bool> Function()? onCaptureMedicine;
+  final Future<List<int>?> Function()? onCaptureMedicinePhoto;
   final MedicineCaptureAvailability captureAvailability;
   final VoidCallback? onOpenSystemSettings;
   final ActionCenterActions? actionCenterActions;
@@ -311,6 +313,7 @@ class _AppShellState extends State<AppShell> {
           onDeleteBatch: widget.onDeleteBatch,
           captureAvailability: widget.captureAvailability,
           onCapture: widget.onCaptureMedicine,
+          onCapturePhoto: widget.onCaptureMedicinePhoto,
           onOpenSystemSettings: widget.onOpenSystemSettings,
           onCorrectBatchExpiry: widget.onCorrectBatchExpiry,
           onCreateBatch: widget.onCreateBatch,

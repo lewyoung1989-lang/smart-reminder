@@ -6,10 +6,16 @@ from .views import (
     InventoryBatchExpiryDateCorrectionView,
     InventoryBatchListView,
     MedicineDescriptionParseView,
+    MedicinePhotoUploadView,
 )
 
 
 urlpatterns = [
+    path(
+        "medicine-photos/uploads",
+        MedicinePhotoUploadView.as_view(),
+        name="medicine-photo-upload",
+    ),
     path(
         "inventory-batches/parse-description",
         MedicineDescriptionParseView.as_view(),

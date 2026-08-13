@@ -5,6 +5,7 @@
 .venv-funasr/
 .models/
 .tools/
+.local/
 .worktrees/
 .superpowers/
 __pycache__/

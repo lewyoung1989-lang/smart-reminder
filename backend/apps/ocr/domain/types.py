@@ -24,6 +24,7 @@ class OCRDocument:
 class MedicineCandidates:
     medicine_name: str = ""
     specification: str = ""
+    manufacturer: str = ""
     batch_number: str = ""
     production_date: date | None = None
     expiry_date: date | None = None

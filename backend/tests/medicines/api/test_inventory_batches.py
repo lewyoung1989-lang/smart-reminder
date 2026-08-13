@@ -146,6 +146,7 @@ def test_inventory_batch_create_adds_owned_medicine_and_refreshes_expiry_alert(
         {
             "medicine_name": "布洛芬胶囊",
             "specification": "0.3g*20粒",
+            "manufacturer": "华北制药股份有限公司",
             "batch_number": "LOT-88",
             "production_date": "2026-01-01",
             "expiry_date": "2027-01-01",
@@ -158,10 +159,12 @@ def test_inventory_batch_create_adds_owned_medicine_and_refreshes_expiry_alert(
     payload = response.json()
     assert payload["medicine_name"] == "布洛芬胶囊"
     assert payload["specification"] == "0.3g*20粒"
+    assert payload["manufacturer"] == "华北制药股份有限公司"
     assert payload["batch_number"] == "LOT-88"
     assert payload["quantity"] == 2
     medicine = MedicineItem.objects.get(owner=user)
     assert medicine.name == "布洛芬胶囊"
+    assert medicine.manufacturer == "华北制药股份有限公司"
     batch = InventoryBatch.objects.get(medicine=medicine)
     assert str(batch.id) == payload["id"]
     refresh.assert_called_once_with(batch=batch, today=TODAY)
@@ -191,6 +194,31 @@ def test_inventory_batch_create_reuses_same_owned_medicine(api_client, user):
     assert response.status_code == 201
     assert MedicineItem.objects.count() == 1
     assert InventoryBatch.objects.get().medicine_id == medicine.id
+
+
+@pytest.mark.django_db
+def test_inventory_batch_create_only_fills_missing_manufacturer(api_client, user):
+    medicine = MedicineItem.objects.create(
+        owner=user,
+        name="维生素C",
+        specification="100mg",
+        manufacturer="原生产公司",
+    )
+    api_client.force_authenticate(user)
+
+    response = api_client.post(
+        "/api/v1/inventory-batches",
+        {
+            "medicine_name": "维生素C",
+            "specification": "100mg",
+            "manufacturer": "另一生产公司",
+        },
+        format="json",
+    )
+
+    assert response.status_code == 201
+    medicine.refresh_from_db()
+    assert medicine.manufacturer == "原生产公司"
 
 
 @pytest.mark.django_db

@@ -19,6 +19,8 @@ from apps.medicines.providers import (
     DeepSeekMedicineDescriptionProvider,
 )
 from apps.medicines.services.expiry_alerts import refresh_expiry_alerts
+from apps.medicines.services.photos import create_medicine_photo_upload
+from apps.ocr.providers.storage import get_object_storage
 
 from .pagination import InventoryBatchCursorPagination
 from .serializers import (
@@ -27,6 +29,7 @@ from .serializers import (
     InventoryBatchCreateSerializer,
     InventoryBatchSerializer,
     MedicineDescriptionParseSerializer,
+    MedicinePhotoUploadSerializer,
 )
 
 
@@ -81,6 +84,7 @@ class InventoryBatchListView(ListAPIView):
             queryset = queryset.filter(
                 Q(medicine__name__icontains=query)
                 | Q(medicine__specification__icontains=query)
+                | Q(medicine__manufacturer__icontains=query)
                 | Q(batch_number__icontains=query)
             )
         return queryset.annotate(
@@ -99,7 +103,34 @@ class InventoryBatchListView(ListAPIView):
             refresh_expiry_alerts(batch=batch, today=timezone.localdate())
         logger.info("inventory_batch_created batch_id=%s", batch.id)
         return Response(
-            InventoryBatchSerializer(batch).data,
+            InventoryBatchSerializer(
+                batch, context={"object_storage": get_object_storage()}
+            ).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class MedicinePhotoUploadView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = MedicinePhotoUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            grant = create_medicine_photo_upload(
+                user=request.user,
+                storage=get_object_storage(),
+                **serializer.validated_data,
+            )
+        except ValueError as exc:
+            return Response({"code": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {
+                "object_key": grant.object_key,
+                "upload_url": grant.upload_url,
+                "headers": grant.headers,
+                "expires_at": grant.expires_at.isoformat(),
+            },
             status=status.HTTP_201_CREATED,
         )
 

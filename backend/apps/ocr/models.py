@@ -48,6 +48,7 @@ class OCRCandidate(models.Model):
     )
     medicine_name = models.CharField(max_length=200, blank=True)
     specification = models.CharField(max_length=120, blank=True)
+    manufacturer = models.CharField(max_length=200, blank=True)
     batch_number = models.CharField(max_length=100, blank=True)
     production_date = models.DateField(null=True, blank=True)
     expiry_date = models.DateField(null=True, blank=True)

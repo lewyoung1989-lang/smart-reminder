@@ -52,6 +52,7 @@ class DeepSeekMedicineProvider:
     FIELD_NAMES = (
         "medicine_name",
         "specification",
+        "manufacturer",
         "batch_number",
         "production_date_text",
         "expiry_date_text",
@@ -106,6 +107,7 @@ class DeepSeekMedicineProvider:
             "你是药盒 OCR 字段整理器，只能引用输入行中的原文。"
             "药名必须是具体药品名称，不能选择成分说明、用法、"
             "含量句或纯剂型。"
+            "生产公司只提取生产企业、生产厂家、厂家或制造商对应的原文。"
             "日期字段只返回图片中的原始日期文字，禁止补全、"
             "推断或改写。"
             "每个非空字段必须给出 line_ids；无法确定时返回 null"

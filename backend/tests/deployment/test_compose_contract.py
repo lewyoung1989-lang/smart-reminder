@@ -132,6 +132,19 @@ def test_ocr_services_are_private_initialized_and_profile_gated():
     assert services["minio-init"]["restart"] == "no"
 
 
+def test_minio_policy_allows_temporary_ocr_and_retained_photos():
+    path = REPO_ROOT / "deploy/tencent/minio/app-policy.json"
+    policy = yaml.safe_load(path.read_text())
+    resources = {
+        resource
+        for statement in policy["Statement"]
+        for resource in statement["Resource"]
+    }
+
+    assert "arn:aws:s3:::smart-reminder-private/ocr/tmp/*" in resources
+    assert "arn:aws:s3:::smart-reminder-private/medicine-photos/*" in resources
+
+
 def test_ocr_worker_is_isolated_and_resource_limited():
     service = load_production_compose()["services"]["ocr-worker"]
     assert service["image"].startswith("smart-reminder-ocr:")

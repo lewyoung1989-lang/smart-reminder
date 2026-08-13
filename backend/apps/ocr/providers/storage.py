@@ -14,6 +14,10 @@ class ObjectStorage(Protocol):
         expires_in: int,
     ) -> dict[str, object]: ...
 
+    def presign_get(self, *, key: str, expires_in: int) -> str: ...
+
+    def copy(self, *, source_key: str, destination_key: str) -> None: ...
+
     def get_bytes(self, key: str) -> bytes: ...
 
     def delete(self, key: str) -> None: ...
@@ -57,6 +61,20 @@ class S3ObjectStorage:
             "url": url,
             "headers": {"Content-Type": content_type},
         }
+
+    def presign_get(self, *, key, expires_in):
+        return self._public_client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": self._bucket, "Key": key},
+            ExpiresIn=expires_in,
+        )
+
+    def copy(self, *, source_key, destination_key):
+        self._internal_client.copy_object(
+            Bucket=self._bucket,
+            Key=destination_key,
+            CopySource={"Bucket": self._bucket, "Key": source_key},
+        )
 
     def get_bytes(self, key):
         response = self._internal_client.get_object(

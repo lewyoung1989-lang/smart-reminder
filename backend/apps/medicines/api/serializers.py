@@ -6,6 +6,12 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from apps.medicines.models import ExpiryBatchAction, InventoryBatch, MedicineItem
+from apps.medicines.services.photos import (
+    delete_replaced_photo_after_commit,
+    photo_content_type,
+    validate_medicine_photo_key,
+)
+from apps.ocr.providers.storage import get_object_storage
 
 
 class ExpiryBatchActionSerializer(serializers.Serializer):
@@ -35,6 +41,19 @@ class InventoryBatchCreateSerializer(serializers.Serializer):
         allow_blank=True,
         trim_whitespace=True,
     )
+    manufacturer = serializers.CharField(
+        max_length=200,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+    )
+    photo_object_key = serializers.CharField(
+        max_length=300,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        write_only=True,
+    )
     batch_number = serializers.CharField(
         max_length=100,
         required=False,
@@ -55,11 +74,41 @@ class InventoryBatchCreateSerializer(serializers.Serializer):
         return attrs
 
     def create_for_user(self, user):
-        medicine, _ = MedicineItem.objects.get_or_create(
+        manufacturer = self.validated_data.get("manufacturer", "").strip()
+        photo_object_key = self.validated_data.get("photo_object_key", "").strip()
+        if photo_object_key:
+            try:
+                validate_medicine_photo_key(user=user, object_key=photo_object_key)
+            except ValueError as error:
+                raise serializers.ValidationError(
+                    {"photo_object_key": "照片不属于当前用户。"}
+                ) from error
+        medicine, created = MedicineItem.objects.get_or_create(
             owner=user,
             name=self.validated_data["medicine_name"].strip(),
             specification=self.validated_data.get("specification", "").strip(),
+            defaults={
+                "manufacturer": manufacturer,
+                "photo_object_key": photo_object_key,
+                "photo_content_type": (
+                    photo_content_type(photo_object_key) if photo_object_key else ""
+                ),
+            },
         )
+        if not created:
+            changed_fields = []
+            if manufacturer and not medicine.manufacturer:
+                medicine.manufacturer = manufacturer
+                changed_fields.append("manufacturer")
+            if photo_object_key:
+                replaced_photo_object_key = medicine.photo_object_key
+                medicine.photo_object_key = photo_object_key
+                medicine.photo_content_type = photo_content_type(photo_object_key)
+                changed_fields.extend(["photo_object_key", "photo_content_type"])
+                if replaced_photo_object_key != photo_object_key:
+                    delete_replaced_photo_after_commit(replaced_photo_object_key)
+            if changed_fields:
+                medicine.save(update_fields=changed_fields)
         batch = InventoryBatch(
             medicine=medicine,
             batch_number=self.validated_data.get("batch_number", "").strip(),
@@ -83,6 +132,8 @@ class MedicineDescriptionParseSerializer(serializers.Serializer):
 class InventoryBatchSerializer(serializers.ModelSerializer):
     medicine_name = serializers.CharField(source="medicine.name")
     specification = serializers.CharField(source="medicine.specification")
+    manufacturer = serializers.CharField(source="medicine.manufacturer")
+    photo_url = serializers.SerializerMethodField()
     opened_use_before = serializers.SerializerMethodField()
     effective_deadline = serializers.SerializerMethodField()
     expiry_status = serializers.SerializerMethodField()
@@ -95,6 +146,8 @@ class InventoryBatchSerializer(serializers.ModelSerializer):
             "medicine_id",
             "medicine_name",
             "specification",
+            "manufacturer",
+            "photo_url",
             "batch_number",
             "production_date",
             "expiry_date",
@@ -133,3 +186,17 @@ class InventoryBatchSerializer(serializers.ModelSerializer):
 
     def get_effective_deadline(self, batch):
         return batch.effective_deadline
+
+    def get_photo_url(self, batch):
+        key = batch.medicine.photo_object_key
+        if not key:
+            return None
+        storage = self.context.get("object_storage")
+        if storage is None:
+            storage = get_object_storage()
+        return storage.presign_get(key=key, expires_in=3600)
+
+
+class MedicinePhotoUploadSerializer(serializers.Serializer):
+    content_type = serializers.ChoiceField(choices=["image/jpeg", "image/png"])
+    byte_length = serializers.IntegerField(min_value=1)

@@ -211,12 +211,64 @@ void main() {
     expect(jsonDecode(client.requestBodies.single), {
       'medicine_name': '布洛芬胶囊',
       'specification': '0.3g*20粒',
+      'manufacturer': '',
+      'photo_object_key': null,
       'batch_number': 'LOT-88',
       'production_date': '2026-01-01',
       'expiry_date': '2027-01-01',
       'quantity': 2,
     });
     expect(batch.medicineName, '布洛芬胶囊');
+  });
+
+  test('uploads an optional medicine photo before creating inventory',
+      () async {
+    final client = RecordingClient([
+      jsonResponse(201, {
+        'object_key': 'medicine-photos/user/photo.jpg',
+        'upload_url': 'https://upload.invalid/photo.jpg',
+        'headers': {'Content-Type': 'image/jpeg'},
+        'expires_at': '2026-08-13T10:00:00Z',
+      }),
+      http.Response('', 200),
+      jsonResponse(201, {
+        'id': 'batch-1',
+        'medicine_id': 'medicine-1',
+        'medicine_name': '布洛芬胶囊',
+        'specification': '0.3g*20粒',
+        'manufacturer': '华北制药股份有限公司',
+        'photo_url': 'https://download.invalid/photo.jpg',
+        'batch_number': '',
+        'production_date': null,
+        'expiry_date': null,
+        'quantity': 1,
+        'expiry_status': 'unknown',
+        'days_until_expiry': null,
+      }),
+    ]);
+    final api = MedicineCabinetApi(
+      baseUrl: 'https://api.invalid',
+      client: client,
+    );
+
+    final batch = await api.createBatch(
+      medicineName: '布洛芬胶囊',
+      specification: '0.3g*20粒',
+      manufacturer: '华北制药股份有限公司',
+      photoBytes: [1, 2, 3],
+    );
+
+    expect(client.requests.map((request) => request.method),
+        ['POST', 'PUT', 'POST']);
+    expect(client.requests[1].headers['Authorization'], isNull);
+    expect(
+        jsonDecode(client.requestBodies.last),
+        containsPair(
+          'photo_object_key',
+          'medicine-photos/user/photo.jpg',
+        ));
+    expect(batch.manufacturer, '华北制药股份有限公司');
+    expect(batch.photoUrl, 'https://download.invalid/photo.jpg');
   });
 
   test('throws a stable exception when batch deletion fails', () async {

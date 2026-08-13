@@ -27,6 +27,7 @@ def _candidate_payload(job):
     return {
         "medicine_name": value.medicine_name,
         "specification": value.specification,
+        "manufacturer": value.manufacturer,
         "batch_number": value.batch_number,
         "production_date": (
             value.production_date.isoformat()

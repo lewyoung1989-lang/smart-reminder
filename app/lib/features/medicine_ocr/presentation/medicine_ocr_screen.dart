@@ -38,6 +38,7 @@ class MedicineOcrScreen extends StatefulWidget {
 class _MedicineOcrScreenState extends State<MedicineOcrScreen> {
   final _name = TextEditingController();
   final _specification = TextEditingController();
+  final _manufacturer = TextEditingController();
   final _batch = TextEditingController();
   final _production = TextEditingController();
   final _expiry = TextEditingController();
@@ -57,6 +58,7 @@ class _MedicineOcrScreenState extends State<MedicineOcrScreen> {
     for (final controller in [
       _name,
       _specification,
+      _manufacturer,
       _batch,
       _production,
       _expiry,
@@ -164,6 +166,7 @@ class _MedicineOcrScreenState extends State<MedicineOcrScreen> {
   void _loadCandidate(OcrCandidate value) {
     _name.text = value.medicineName;
     _specification.text = value.specification;
+    _manufacturer.text = value.manufacturer;
     _batch.text = value.batchNumber;
     _production.text =
         value.productionDate?.toIso8601String().substring(0, 10) ?? '';
@@ -193,6 +196,8 @@ class _MedicineOcrScreenState extends State<MedicineOcrScreen> {
       await widget.confirmJob(job.id, {
         'medicine_name': _name.text.trim(),
         'specification': _specification.text.trim(),
+        'manufacturer': _manufacturer.text.trim(),
+        'retain_front_photo': true,
         'batch_number': _batch.text.trim(),
         'production_date':
             _production.text.trim().isEmpty ? null : _production.text.trim(),
@@ -331,6 +336,11 @@ class _MedicineOcrScreenState extends State<MedicineOcrScreen> {
             TextFormField(
               controller: _specification,
               decoration: const InputDecoration(labelText: '规格'),
+            ),
+            TextFormField(
+              key: const Key('medicine-manufacturer'),
+              controller: _manufacturer,
+              decoration: const InputDecoration(labelText: '生产公司（选填）'),
             ),
             TextFormField(
               controller: _batch,

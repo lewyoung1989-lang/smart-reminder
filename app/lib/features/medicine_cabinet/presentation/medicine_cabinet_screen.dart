@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -26,6 +27,7 @@ class MedicineCabinetScreen extends StatefulWidget {
     this.deleteBatch,
     this.onDeleteBatch,
     this.onCapture,
+    this.onCapturePhoto,
     this.captureAvailability = MedicineCaptureAvailability.unavailable,
     this.onOpenSystemSettings,
     this.onOpenMedicine,
@@ -45,6 +47,7 @@ class MedicineCabinetScreen extends StatefulWidget {
   final Future<void> Function(String batchId)? deleteBatch;
   final Future<void> Function(MedicineBatch batch)? onDeleteBatch;
   final Future<bool> Function()? onCapture;
+  final Future<List<int>?> Function()? onCapturePhoto;
   final MedicineCaptureAvailability captureAvailability;
   final VoidCallback? onOpenSystemSettings;
   final ValueChanged<MedicineSummary>? onOpenMedicine;
@@ -344,6 +347,7 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
             await _capture();
           },
           onCreate: _createBatch,
+          onCapturePhoto: widget.onCapturePhoto,
           onParseDescription: widget.onParseDescription,
           onCancel: () => Navigator.of(sheetContext).pop(false),
         ),
@@ -634,6 +638,8 @@ class MedicineBatchInput {
     required this.medicineName,
     required this.quantity,
     this.specification = '',
+    this.manufacturer = '',
+    this.photoBytes,
     this.batchNumber = '',
     this.productionDate,
     this.expiryDate,
@@ -641,6 +647,8 @@ class MedicineBatchInput {
 
   final String medicineName;
   final String specification;
+  final String manufacturer;
+  final List<int>? photoBytes;
   final String batchNumber;
   final DateTime? productionDate;
   final DateTime? expiryDate;
@@ -679,6 +687,7 @@ class MedicineBatchEntrySheet extends StatefulWidget {
     this.voiceInputController,
     this.onCapture,
     this.onCreate,
+    this.onCapturePhoto,
     this.onParseDescription,
     this.onCancel,
     super.key,
@@ -690,6 +699,7 @@ class MedicineBatchEntrySheet extends StatefulWidget {
   final VoiceInputController? voiceInputController;
   final Future<void> Function()? onCapture;
   final Future<bool> Function(MedicineBatchInput input)? onCreate;
+  final Future<List<int>?> Function()? onCapturePhoto;
   final Future<MedicineDescriptionDraft> Function(String text)?
       onParseDescription;
   final VoidCallback? onCancel;
@@ -703,6 +713,7 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
   final _descriptionController = TextEditingController();
   final _nameController = TextEditingController();
   final _specificationController = TextEditingController();
+  final _manufacturerController = TextEditingController();
   final _batchNumberController = TextEditingController();
   final _productionDateController = TextEditingController();
   final _expiryDateController = TextEditingController();
@@ -714,6 +725,8 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
   String? _voiceActionError;
   String? _parseError;
   List<String> _ambiguities = const [];
+  List<int>? _photoBytes;
+  bool _isTakingPhoto = false;
 
   VoiceInputController? get _voice => widget.voiceInputController;
 
@@ -741,6 +754,7 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
     _descriptionController.dispose();
     _nameController.dispose();
     _specificationController.dispose();
+    _manufacturerController.dispose();
     _batchNumberController.dispose();
     _productionDateController.dispose();
     _expiryDateController.dispose();
@@ -780,6 +794,9 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
       }
       if (draft.specification != null) {
         _specificationController.text = draft.specification!;
+      }
+      if (draft.manufacturer != null) {
+        _manufacturerController.text = draft.manufacturer!;
       }
       if (draft.batchNumber != null) {
         _batchNumberController.text = draft.batchNumber!;
@@ -894,6 +911,8 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
       final created = await onCreate(MedicineBatchInput(
         medicineName: name,
         specification: _specificationController.text.trim(),
+        manufacturer: _manufacturerController.text.trim(),
+        photoBytes: _photoBytes,
         batchNumber: _batchNumberController.text.trim(),
         productionDate: productionDate,
         expiryDate: expiryDate,
@@ -903,6 +922,20 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
       Navigator.of(context).pop(true);
     } finally {
       if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  Future<void> _takePhoto() async {
+    final capture = widget.onCapturePhoto;
+    if (capture == null || _isTakingPhoto) return;
+    setState(() => _isTakingPhoto = true);
+    try {
+      final bytes = await capture();
+      if (mounted && bytes != null) setState(() => _photoBytes = bytes);
+    } catch (_) {
+      if (mounted) setState(() => _error = '拍照失败，请检查相机权限后重试');
+    } finally {
+      if (mounted) setState(() => _isTakingPhoto = false);
     }
   }
 
@@ -1077,6 +1110,80 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
                         decoration: const InputDecoration(
                           labelText: '规格',
                           border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        key: const Key('medicine-entry-manufacturer'),
+                        controller: _manufacturerController,
+                        textInputAction: TextInputAction.next,
+                        decoration: const InputDecoration(
+                          labelText: '生产公司（选填）',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Semantics(
+                        label: _photoBytes == null ? '添加药品照片' : '已添加药品照片',
+                        child: Container(
+                          constraints: const BoxConstraints(minHeight: 120),
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color:
+                                  Theme.of(context).colorScheme.outlineVariant,
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: _photoBytes == null
+                              ? TextButton.icon(
+                                  key: const Key('medicine-entry-photo'),
+                                  onPressed: widget.onCapturePhoto == null ||
+                                          _isTakingPhoto
+                                      ? null
+                                      : _takePhoto,
+                                  icon: const Icon(LucideIcons.camera),
+                                  label: Text(
+                                      _isTakingPhoto ? '正在打开相机' : '添加药品照片（选填）'),
+                                )
+                              : Stack(
+                                  alignment: Alignment.topRight,
+                                  children: [
+                                    SizedBox(
+                                      height: 180,
+                                      width: double.infinity,
+                                      child: Image.memory(
+                                        Uint8List.fromList(_photoBytes!),
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.all(8),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          IconButton.filledTonal(
+                                            tooltip: '重新拍摄',
+                                            onPressed: _isTakingPhoto
+                                                ? null
+                                                : _takePhoto,
+                                            icon:
+                                                const Icon(LucideIcons.camera),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          IconButton.filledTonal(
+                                            tooltip: '移除照片',
+                                            onPressed: () => setState(
+                                              () => _photoBytes = null,
+                                            ),
+                                            icon:
+                                                const Icon(LucideIcons.trash2),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
                         ),
                       ),
                       const SizedBox(height: 12),

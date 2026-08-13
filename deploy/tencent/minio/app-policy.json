@@ -9,7 +9,10 @@
     {
       "Effect": "Allow",
       "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"],
-      "Resource": ["arn:aws:s3:::smart-reminder-private/ocr/tmp/*"]
+      "Resource": [
+        "arn:aws:s3:::smart-reminder-private/ocr/tmp/*",
+        "arn:aws:s3:::smart-reminder-private/medicine-photos/*"
+      ]
     }
   ]
 }

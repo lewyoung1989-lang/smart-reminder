@@ -19,6 +19,8 @@ abstract interface class MedicineCabinetDataSource {
   Future<InventoryBatch> createBatch({
     required String medicineName,
     String specification = '',
+    String manufacturer = '',
+    List<int>? photoBytes,
     String batchNumber = '',
     DateTime? productionDate,
     DateTime? expiryDate,
@@ -104,11 +106,15 @@ class MedicineCabinetApi implements MedicineCabinetDataSource {
   Future<InventoryBatch> createBatch({
     required String medicineName,
     String specification = '',
+    String manufacturer = '',
+    List<int>? photoBytes,
     String batchNumber = '',
     DateTime? productionDate,
     DateTime? expiryDate,
     int quantity = 1,
   }) async {
+    final photoObjectKey =
+        photoBytes == null ? null : await _uploadMedicinePhoto(photoBytes);
     final response = await _client.post(
       _baseUri.resolve('/api/v1/inventory-batches'),
       headers: {
@@ -118,6 +124,8 @@ class MedicineCabinetApi implements MedicineCabinetDataSource {
       body: jsonEncode({
         'medicine_name': medicineName.trim(),
         'specification': specification.trim(),
+        'manufacturer': manufacturer.trim(),
+        'photo_object_key': photoObjectKey,
         'batch_number': batchNumber.trim(),
         'production_date':
             productionDate == null ? null : _formatDate(productionDate),
@@ -131,6 +139,33 @@ class MedicineCabinetApi implements MedicineCabinetDataSource {
     return InventoryBatch.fromJson(
       jsonDecode(response.body) as Map<String, dynamic>,
     );
+  }
+
+  Future<String> _uploadMedicinePhoto(List<int> bytes) async {
+    final grantResponse = await _client.post(
+      _baseUri.resolve('/api/v1/medicine-photos/uploads'),
+      headers: {..._headers, 'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'content_type': 'image/jpeg',
+        'byte_length': bytes.length,
+      }),
+    );
+    if (grantResponse.statusCode != 201) {
+      throw MedicineCabinetApiException(
+        grantResponse.statusCode,
+        grantResponse.body,
+      );
+    }
+    final grant = jsonDecode(grantResponse.body) as Map<String, dynamic>;
+    final response = await _client.put(
+      Uri.parse(grant['upload_url'] as String),
+      headers: Map<String, String>.from(grant['headers'] as Map),
+      body: bytes,
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw MedicineCabinetApiException(response.statusCode, response.body);
+    }
+    return grant['object_key'] as String;
   }
 
   @override

@@ -22,6 +22,9 @@ class FakeClient:
     def delete_object(self, *, Bucket, Key):
         self.calls.append(("delete_object", Bucket, Key))
 
+    def copy_object(self, *, Bucket, Key, CopySource):
+        self.calls.append(("copy_object", Bucket, Key, CopySource))
+
 
 def test_presign_uses_public_client_and_reads_use_internal_client(settings):
     settings.S3_BUCKET = "smart-reminder-private"
@@ -37,13 +40,24 @@ def test_presign_uses_public_client_and_reads_use_internal_client(settings):
         content_type="image/jpeg",
         expires_in=600,
     )
+    download_url = storage.presign_get(
+        key="medicine-photos/user/photo.jpg",
+        expires_in=3600,
+    )
     image = storage.get_bytes("ocr/tmp/user/front.jpg")
+    storage.copy(
+        source_key="ocr/tmp/user/front.jpg",
+        destination_key="medicine-photos/user/photo.jpg",
+    )
     storage.delete("ocr/tmp/user/front.jpg")
 
     assert signed["url"].startswith("https://files.invalid/")
     assert public.calls[0][0] == "put_object"
+    assert download_url.startswith("https://files.invalid/")
+    assert public.calls[1][0] == "get_object"
     assert image == b"image-bytes"
     assert [call[0] for call in internal.calls] == [
         "get_object",
+        "copy_object",
         "delete_object",
     ]

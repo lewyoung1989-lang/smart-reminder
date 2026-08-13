@@ -52,12 +52,38 @@ class MedicineDetailScreen extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.xl),
               _StatusSummary(summary: summary),
+              if (summary.photoUrl != null) ...[
+                const SizedBox(height: AppSpacing.xl),
+                Semantics(
+                  image: true,
+                  label: '${summary.name}药品照片',
+                  child: AspectRatio(
+                    aspectRatio: 4 / 3,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+                      child: Image.network(
+                        summary.photoUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => ColoredBox(
+                          color: Theme.of(context).colorScheme.surfaceContainer,
+                          child: const Center(child: Icon(LucideIcons.image)),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: AppSpacing.xl),
               _DetailSection(
                 title: '药品信息',
                 children: <Widget>[
                   AppPropertyRow(
                       label: '规格', value: Text(summary.specification)),
+                  if (summary.manufacturer.isNotEmpty)
+                    AppPropertyRow(
+                      label: '生产公司',
+                      value: Text(summary.manufacturer),
+                    ),
                   AppPropertyRow(
                     label: '库存',
                     value: Text('${summary.totalQuantity} 件'),

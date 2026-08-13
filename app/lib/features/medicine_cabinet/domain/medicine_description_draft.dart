@@ -2,6 +2,7 @@ class MedicineDescriptionDraft {
   const MedicineDescriptionDraft({
     this.medicineName,
     this.specification,
+    this.manufacturer,
     this.batchNumber,
     this.productionDate,
     this.expiryDate,
@@ -13,6 +14,7 @@ class MedicineDescriptionDraft {
       MedicineDescriptionDraft(
         medicineName: json['medicine_name'] as String?,
         specification: json['specification'] as String?,
+        manufacturer: json['manufacturer'] as String?,
         batchNumber: json['batch_number'] as String?,
         productionDate: _parseDate(json['production_date']),
         expiryDate: _parseDate(json['expiry_date']),
@@ -23,6 +25,7 @@ class MedicineDescriptionDraft {
 
   final String? medicineName;
   final String? specification;
+  final String? manufacturer;
   final String? batchNumber;
   final DateTime? productionDate;
   final DateTime? expiryDate;

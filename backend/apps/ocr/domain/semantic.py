@@ -13,6 +13,7 @@ class EvidenceField(StrictSchema):
 class MedicineSemanticData(StrictSchema):
     medicine_name: EvidenceField | None
     specification: EvidenceField | None
+    manufacturer: EvidenceField | None = None
     batch_number: EvidenceField | None
     production_date_text: EvidenceField | None
     expiry_date_text: EvidenceField | None

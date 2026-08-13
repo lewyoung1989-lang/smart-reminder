@@ -60,6 +60,45 @@ def test_confirm_creates_edited_inventory_once(
 
 
 @pytest.mark.django_db
+def test_confirm_retains_front_photo_for_future_purchase(
+    api_client,
+    user,
+    mocker,
+    django_capture_on_commit_callbacks,
+):
+    storage = mocker.Mock()
+    mocker.patch(
+        "apps.ocr.services.confirmation.get_object_storage",
+        return_value=storage,
+    )
+    mocker.patch("apps.ocr.api.views.delete_ocr_job_images.delay")
+    front_key = f"ocr/tmp/{user.id}/front.jpg"
+    job = OCRJob.objects.create(
+        user=user,
+        status=OCRJob.Status.SUCCEEDED,
+        image_keys={"front": front_key},
+    )
+    OCRCandidate.objects.create(job=job, medicine_name="布洛芬胶囊")
+    api_client.force_authenticate(user)
+
+    with django_capture_on_commit_callbacks(execute=True):
+        response = api_client.post(
+            f"/api/v1/ocr/jobs/{job.id}/confirm",
+            {**confirm_payload(), "manufacturer": "华北制药股份有限公司"},
+            format="json",
+        )
+
+    assert response.status_code == 201
+    medicine = MedicineItem.objects.get()
+    assert medicine.manufacturer == "华北制药股份有限公司"
+    assert medicine.photo_object_key.startswith(f"medicine-photos/{user.id}/")
+    storage.copy.assert_called_once_with(
+        source_key=front_key,
+        destination_key=medicine.photo_object_key,
+    )
+
+
+@pytest.mark.django_db
 def test_confirm_rejects_job_before_ocr_succeeds(api_client, user):
     job = OCRJob.objects.create(user=user, image_keys={"front": "front"})
     api_client.force_authenticate(user)

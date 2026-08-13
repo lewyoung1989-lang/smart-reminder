@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'app/shell/app_shell.dart';
 import 'app/theme/app_theme.dart';
@@ -259,6 +260,74 @@ class _SmartReminderAppState extends State<SmartReminderApp>
     return image?.readAsBytes();
   }
 
+  Future<List<int>?> _captureMedicinePhoto() async {
+    final context = _navigatorKey.currentContext;
+    if (context == null || !context.mounted) return null;
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(LucideIcons.camera),
+              title: const Text('拍照'),
+              onTap: () => Navigator.of(sheetContext).pop(ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(LucideIcons.image),
+              title: const Text('从相册选择'),
+              onTap: () => Navigator.of(sheetContext).pop(ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null || !mounted) return null;
+    if (source == ImageSource.gallery) {
+      final image = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 82,
+        maxWidth: 2048,
+      );
+      return image?.readAsBytes();
+    }
+
+    var permission = await _cameraPermissionGateway.current();
+    if (!mounted) return null;
+    _updateCameraPermission(permission);
+    if (permission == CameraPermissionState.permanentlyDenied ||
+        permission == CameraPermissionState.unavailable) {
+      return null;
+    }
+    if (permission == CameraPermissionState.denied) {
+      final context = _navigatorKey.currentContext;
+      if (context == null || !context.mounted) return null;
+      final accepted = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('允许使用相机？'),
+          content: const Text('用于拍摄药品外包装，方便以后购买同款。'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('暂不允许'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('继续'),
+            ),
+          ],
+        ),
+      );
+      if (accepted != true) return null;
+      permission = await _cameraPermissionGateway.request();
+      _updateCameraPermission(permission);
+      if (permission != CameraPermissionState.ready) return null;
+    }
+    return _captureMedicineImage('front');
+  }
+
   Future<bool> _openMedicineOcr() async {
     if (!_medicineOcrEnabled) return false;
     var permission = await _cameraPermissionGateway.current();
@@ -421,6 +490,8 @@ class _SmartReminderAppState extends State<SmartReminderApp>
               await _medicineCabinetApi.createBatch(
                 medicineName: input.medicineName,
                 specification: input.specification,
+                manufacturer: input.manufacturer,
+                photoBytes: input.photoBytes,
                 batchNumber: input.batchNumber,
                 productionDate: input.productionDate,
                 expiryDate: input.expiryDate,
@@ -429,6 +500,7 @@ class _SmartReminderAppState extends State<SmartReminderApp>
             },
             onParseMedicineDescription: _medicineCabinetApi.parseDescription,
             onCaptureMedicine: _openMedicineOcr,
+            onCaptureMedicinePhoto: _captureMedicinePhoto,
             captureAvailability: _medicineCaptureAvailability,
             onOpenSystemSettings: _openCameraSettings,
             actionCenterActions: _actionCenterApi,
