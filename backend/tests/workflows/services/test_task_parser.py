@@ -76,6 +76,15 @@ def test_leading_brand_name_is_not_confused_with_daily_count():
     assert task.ambiguities == ["请补充每天 3 次的具体服药时间"]
 
 
+def test_extracts_name_after_generic_three_times_medicine_phrase():
+    task = parse("我每天吃三次药，伐昔洛韦，7点，下午2点，晚上9点")
+
+    assert task.template_hint == "medication_cycle"
+    assert task.slots["medicine_name"] == "伐昔洛韦"
+    assert task.slots["times"] == ["07:00", "14:00", "21:00"]
+    assert task.ambiguities == ["请补充药品剂量和服药周期"]
+
+
 def test_parses_medication_when_dose_immediately_follows_the_name():
     task = parse("每天早上八点服药阿莫西林0.5g")
 

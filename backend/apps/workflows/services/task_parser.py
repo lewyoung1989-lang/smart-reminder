@@ -28,6 +28,12 @@ _MEDICINE_BEFORE_DAILY_PATTERN = re.compile(
     r"^(?P<name>[\u4e00-\u9fffA-Za-z][\u4e00-\u9fffA-Za-z()（）-]{0,30})"
     r"(?=(?:每天|每日|一天|一日))"
 )
+_MEDICINE_AFTER_GENERIC_PATTERN = re.compile(
+    r"(?:吃|服用|服药)\s*"
+    r"(?:[零〇一二三四五六七八九十两\d]{1,3}\s*次\s*)?"
+    r"(?:药|药品|药物)\s*[，,、:：\s]+"
+    r"(?P<name>[\u4e00-\u9fffA-Za-z][\u4e00-\u9fffA-Za-z()（）-]{0,30})"
+)
 _MEDICINE_FALLBACK_STOP = re.compile(
     r"(?:吃药|服药|服用|提醒|长期|连续|每天|每日|一天|一次|一周|以后|今后|之后|开始"
     r"|早上|上午|中午|下午|晚上|睡前|饭前|饭后|记得|帮我|帮忙|需要|想要"
@@ -136,7 +142,8 @@ class WorkflowTaskParser:
             None,
         )
         if medicine_name is not None and re.fullmatch(
-            r"[零〇一二三四五六七八九十两\d]+次", medicine_name
+            r"[零〇一二三四五六七八九十两\d]+次(?:药|药品|药物)?",
+            medicine_name,
         ):
             medicine_name = None
         if medicine_name is None:
@@ -152,6 +159,12 @@ class WorkflowTaskParser:
                 or medicine_name in _GENERIC_MEDICINE_NAMES
             ):
                 medicine_name = None
+        if medicine_name is None:
+            generic_match = _MEDICINE_AFTER_GENERIC_PATTERN.search(text)
+            if generic_match is not None:
+                medicine_name = _DOSE_PATTERN.sub(
+                    "", generic_match.group("name")
+                ).strip()
         if medicine_name is None:
             medicine_name = _fallback_medicine_name(text)
         explicit_medication_request = any(

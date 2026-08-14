@@ -231,6 +231,78 @@ void main() {
       expect(tester.getTopLeft(firstRow).dy, lessThan(initialRowTop));
       expect(tester.takeException(), isNull);
     });
+
+    testWidgets('left swipe deletes a periodic plan after confirmation',
+        (tester) async {
+      final repository = _DeletablePlanRepository();
+      await pumpPlansScreen(
+        tester,
+        repository,
+        surfaceSize: const Size(390, 844),
+      );
+      await tester.pumpAndSettle();
+
+      final row = find.byKey(
+        const ValueKey('dismiss-plan-workday-departure'),
+      );
+      await tester.drag(row, const Offset(-320, 0));
+      await tester.pumpAndSettle();
+
+      expect(find.text('删除这个计划？'), findsOneWidget);
+      expect(repository.deletedIds, isEmpty);
+
+      await tester.tap(find.byKey(const ValueKey('confirm-delete-plan')));
+      await tester.pumpAndSettle();
+
+      expect(repository.deletedIds, ['workday-departure']);
+      expect(find.text('工作日出门'), findsNothing);
+      expect(find.text('计划已删除'), findsOneWidget);
+    });
+
+    testWidgets('cancelling swipe deletion keeps the periodic plan',
+        (tester) async {
+      final repository = _DeletablePlanRepository();
+      await pumpPlansScreen(
+        tester,
+        repository,
+        surfaceSize: const Size(390, 844),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.drag(
+        find.byKey(const ValueKey('dismiss-plan-workday-departure')),
+        const Offset(-320, 0),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, '取消'));
+      await tester.pumpAndSettle();
+
+      expect(repository.deletedIds, isEmpty);
+      expect(find.text('工作日出门'), findsOneWidget);
+    });
+
+    testWidgets('failed swipe deletion restores the periodic plan row',
+        (tester) async {
+      final repository = _DeletablePlanRepository(shouldFail: true);
+      await pumpPlansScreen(
+        tester,
+        repository,
+        surfaceSize: const Size(390, 844),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.drag(
+        find.byKey(const ValueKey('dismiss-plan-workday-departure')),
+        const Offset(-320, 0),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('confirm-delete-plan')));
+      await tester.pumpAndSettle();
+
+      expect(repository.deletedIds, isEmpty);
+      expect(find.text('工作日出门'), findsOneWidget);
+      expect(find.text('删除失败，请稍后重试'), findsOneWidget);
+    });
   });
 }
 
@@ -357,4 +429,33 @@ class _UnavailableDetailPlanRepository implements PlanRepository {
   Future<PlanCollection> load() async {
     return PlanCollection(items: [departureDetail.summary]);
   }
+}
+
+class _DeletablePlanRepository implements PlanRepository, PlanActions {
+  _DeletablePlanRepository({this.shouldFail = false});
+
+  final bool shouldFail;
+  final deletedIds = <String>[];
+
+  @override
+  Future<PlanDetail> getById(String id) async => departureDetail;
+
+  @override
+  Future<PlanCollection> load() async => PlanCollection(
+        items: deletedIds.contains(departureDetail.summary.id)
+            ? const []
+            : [departureDetail.summary],
+      );
+
+  @override
+  Future<void> delete(String id) async {
+    if (shouldFail) throw StateError('delete failed');
+    deletedIds.add(id);
+  }
+
+  @override
+  Future<PlanDetail> pause(String id) async => departureDetail;
+
+  @override
+  Future<PlanDetail> resume(String id) async => departureDetail;
 }

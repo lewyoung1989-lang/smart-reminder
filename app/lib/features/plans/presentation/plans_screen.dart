@@ -253,6 +253,71 @@ class _PlansScreenState extends State<PlansScreen> {
     await _finishMutation(compact: compact, message: '计划已删除');
   }
 
+  Future<bool> _confirmAndDeleteFromList(
+    PlanActions actions,
+    PlanSummary plan,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('删除这个计划？'),
+        content: Text('“${plan.title}”删除后无法恢复。'),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            key: const ValueKey('confirm-delete-plan'),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return false;
+    try {
+      await actions.delete(plan.id);
+      await _cancelPlanNotification(
+        plan.id,
+        failureMessage: '计划已删除，但手机通知取消失败',
+      );
+      return true;
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('删除失败，请稍后重试')),
+        );
+      }
+      return false;
+    }
+  }
+
+  void _finishListDeletion(PlanSummary plan) {
+    final collection = _collection;
+    if (collection != null) {
+      setState(() {
+        _collection = PlanCollection(
+          items: collection.items
+              .where((item) => item.id != plan.id)
+              .toList(growable: false),
+          isOffline: collection.isOffline,
+        );
+        if (_selectedPlanId == plan.id) {
+          _selectedPlanId = null;
+          _selectedDetail = null;
+        }
+      });
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('计划已删除')),
+    );
+    _load();
+  }
+
   void _editPlan(PlanDetail detail, {required bool compact}) {
     if (compact) Navigator.of(context).pop();
     widget.onEditPlan?.call(detail.sourceText);
@@ -514,10 +579,10 @@ class _PlansScreenState extends State<PlansScreen> {
           child: Column(
             children: <Widget>[
               for (var index = 0; index < visible.length; index += 1)
-                _PlanRow(
-                  plan: visible[index],
+                _dismissiblePlanRow(
+                  visible[index],
                   position: _positionFor(index, visible.length),
-                  onTap: () => _openPlan(visible[index], expanded),
+                  expanded: expanded,
                 ),
             ],
           ),
@@ -525,6 +590,38 @@ class _PlansScreenState extends State<PlansScreen> {
       ),
     );
     return slivers;
+  }
+
+  Widget _dismissiblePlanRow(
+    PlanSummary plan, {
+    required AppListRowPosition position,
+    required bool expanded,
+  }) {
+    final row = _PlanRow(
+      plan: plan,
+      position: position,
+      onTap: () => _openPlan(plan, expanded),
+    );
+    final actions = widget.repository is PlanActions
+        ? widget.repository as PlanActions
+        : null;
+    if (actions == null) return row;
+    return Dismissible(
+      key: ValueKey('dismiss-plan-${plan.id}'),
+      direction: DismissDirection.endToStart,
+      confirmDismiss: (_) => _confirmAndDeleteFromList(actions, plan),
+      onDismissed: (_) => _finishListDeletion(plan),
+      background: Container(
+        color: Theme.of(context).colorScheme.error,
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+        child: Semantics(
+          label: '删除计划',
+          child: const Icon(LucideIcons.trash2, color: Colors.white),
+        ),
+      ),
+      child: row,
+    );
   }
 
   List<Widget> _stateSlivers(Widget state) => <Widget>[
