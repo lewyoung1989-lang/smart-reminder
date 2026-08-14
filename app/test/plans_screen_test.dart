@@ -205,6 +205,32 @@ void main() {
       expect(find.text('工作日出门'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
+
+    testWidgets('keeps the plan header and status tabs fixed while rows scroll',
+        (tester) async {
+      await pumpPlansScreen(
+        tester,
+        _ManyActivePlansRepository(),
+        surfaceSize: const Size(393, 700),
+      );
+      await tester.pumpAndSettle();
+
+      final scroll = find.byKey(const PageStorageKey('plans-list-scroll'));
+      final header = find.byKey(const ValueKey('plans-fixed-header'));
+      final tabs = find.byKey(const ValueKey('plans-status-tabs'));
+      final firstRow = find.text('计划 1');
+      final initialHeaderTop = tester.getTopLeft(header).dy;
+      final initialTabsTop = tester.getTopLeft(tabs).dy;
+      final initialRowTop = tester.getTopLeft(firstRow).dy;
+
+      await tester.drag(scroll, const Offset(0, -240));
+      await tester.pumpAndSettle();
+
+      expect(tester.getTopLeft(header).dy, initialHeaderTop);
+      expect(tester.getTopLeft(tabs).dy, initialTabsTop);
+      expect(tester.getTopLeft(firstRow).dy, lessThan(initialRowTop));
+      expect(tester.takeException(), isNull);
+    });
   });
 }
 
@@ -283,6 +309,26 @@ class _TwoActivePlansRepository implements PlanRepository {
   Future<PlanCollection> load() async {
     return PlanCollection(items: [_otherSummary, departureDetail.summary]);
   }
+}
+
+class _ManyActivePlansRepository implements PlanRepository {
+  late final List<PlanSummary> _items = List<PlanSummary>.generate(
+    12,
+    (index) => PlanSummary(
+      id: 'plan-${index + 1}',
+      title: '计划 ${index + 1}',
+      subtitle: '每日提醒',
+      nextRunAt: DateTime(2026, 8, 6, 8 + index),
+      status: PlanStatus.active,
+      kind: PlanKind.reminder,
+    ),
+  );
+
+  @override
+  Future<PlanDetail> getById(String id) => Future.error(StateError('unused'));
+
+  @override
+  Future<PlanCollection> load() async => PlanCollection(items: _items);
 }
 
 class _RetryDetailPlanRepository implements PlanRepository {

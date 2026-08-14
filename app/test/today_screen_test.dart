@@ -574,7 +574,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('scrolls the whole today surface with compact decision actions',
+    testWidgets('keeps the today header fixed while its content scrolls',
         (tester) async {
       await pumpTodayScreen(
         tester,
@@ -584,16 +584,20 @@ void main() {
       await tester.pumpAndSettle();
 
       final scroll = find.byKey(const ValueKey('today-scroll'));
+      final header = find.byKey(const ValueKey('today-fixed-header'));
       final sectionTitle = find.text('需要你决定');
+      final initialHeaderTop = tester.getTopLeft(header).dy;
       final initialTop = tester.getTopLeft(sectionTitle).dy;
 
       expect(scroll, findsOneWidget);
+      expect(header, findsOneWidget);
       expect(find.widgetWithText(FilledButton, '确认'), findsNothing);
       expect(find.widgetWithText(TextButton, '确认'), findsOneWidget);
 
       await tester.drag(scroll, const Offset(0, -240));
       await tester.pumpAndSettle();
 
+      expect(tester.getTopLeft(header).dy, initialHeaderTop);
       expect(tester.getTopLeft(sectionTitle).dy, lessThan(initialTop));
       expect(tester.takeException(), isNull);
     });

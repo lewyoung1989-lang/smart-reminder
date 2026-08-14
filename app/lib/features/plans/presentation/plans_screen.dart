@@ -384,37 +384,80 @@ class _PlansScreenState extends State<PlansScreen> {
   }
 
   Widget _collectionContent(BuildContext context, bool expanded) {
-    return CustomScrollView(
-      slivers: <Widget>[
-        SliverPadding(
+    final collection = _collection;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Padding(
+          key: const ValueKey('plans-fixed-header'),
           padding: const EdgeInsets.fromLTRB(
             AppSpacing.lg,
             AppSpacing.xxl,
             AppSpacing.lg,
             AppSpacing.lg,
           ),
-          sliver: SliverToBoxAdapter(
-            child: AppPageHeader(
-              title: '周期计划',
-              largeTitle: true,
-              actions: <Widget>[
-                IconButton(
-                  tooltip: '打开设置',
-                  onPressed: widget.onOpenSettings,
-                  icon: const Icon(LucideIcons.settings),
-                ),
-                IconButton(
-                  tooltip: '筛选计划',
-                  onPressed: _showKindFilter,
-                  icon: const Icon(LucideIcons.listFilter),
-                ),
-              ],
-            ),
+          child: AppPageHeader(
+            title: '周期计划',
+            largeTitle: true,
+            actions: <Widget>[
+              IconButton(
+                tooltip: '打开设置',
+                onPressed: widget.onOpenSettings,
+                icon: const Icon(LucideIcons.settings),
+              ),
+              IconButton(
+                tooltip: '筛选计划',
+                onPressed: _showKindFilter,
+                icon: const Icon(LucideIcons.listFilter),
+              ),
+            ],
           ),
         ),
-        ..._contentSlivers(context, expanded),
+        if (collection != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+            child: AppSegmentedControl<PlanStatus>(
+              key: const ValueKey('plans-status-tabs'),
+              value: _selectedStatus,
+              options: _statusOptions(collection),
+              onChanged: _setStatus,
+            ),
+          ),
+        Expanded(
+          child: CustomScrollView(
+            key: const PageStorageKey('plans-list-scroll'),
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
+            ),
+            slivers: _contentSlivers(context, expanded),
+          ),
+        ),
       ],
     );
+  }
+
+  List<AppSegment<PlanStatus>> _statusOptions(PlanCollection collection) {
+    final counts = <PlanStatus, int>{
+      for (final status in PlanStatus.values)
+        status: collection.items.where((plan) => plan.status == status).length,
+    };
+    return <AppSegment<PlanStatus>>[
+      AppSegment(
+        value: PlanStatus.active,
+        label: '运行中',
+        count: counts[PlanStatus.active],
+      ),
+      AppSegment(
+        value: PlanStatus.pending,
+        label: '待确认',
+        count: counts[PlanStatus.pending],
+      ),
+      AppSegment(
+        value: PlanStatus.paused,
+        label: '已暂停',
+        count: counts[PlanStatus.paused],
+      ),
+    ];
   }
 
   List<Widget> _contentSlivers(BuildContext context, bool expanded) {
@@ -439,34 +482,7 @@ class _PlansScreenState extends State<PlansScreen> {
       return _stateSlivers(const AppContentState.loading());
     }
     final visible = _filtered(collection.items);
-    final counts = <PlanStatus, int>{
-      for (final status in PlanStatus.values)
-        status: collection.items.where((plan) => plan.status == status).length,
-    };
     final slivers = <Widget>[
-      SliverPadding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-        sliver: SliverToBoxAdapter(
-          child: AppSegmentedControl<PlanStatus>(
-            value: _selectedStatus,
-            options: <AppSegment<PlanStatus>>[
-              AppSegment(
-                  value: PlanStatus.active,
-                  label: '运行中',
-                  count: counts[PlanStatus.active]),
-              AppSegment(
-                  value: PlanStatus.pending,
-                  label: '待确认',
-                  count: counts[PlanStatus.pending]),
-              AppSegment(
-                  value: PlanStatus.paused,
-                  label: '已暂停',
-                  count: counts[PlanStatus.paused]),
-            ],
-            onChanged: _setStatus,
-          ),
-        ),
-      ),
       const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.lg)),
     ];
     if (collection.isOffline) {

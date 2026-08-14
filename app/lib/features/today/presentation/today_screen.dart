@@ -95,44 +95,50 @@ class _TodayScreenState extends State<TodayScreen> {
 
     return Scaffold(
       body: SafeArea(
-        child: CustomScrollView(
-          key: const ValueKey('today-scroll'),
-          physics: const AlwaysScrollableScrollPhysics(
-            parent: BouncingScrollPhysics(),
-          ),
-          slivers: <Widget>[
-            SliverPadding(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Padding(
+              key: const ValueKey('today-fixed-header'),
               padding: const EdgeInsets.fromLTRB(
                 AppSpacing.lg,
                 AppSpacing.xl,
                 AppSpacing.lg,
                 AppSpacing.xxl,
               ),
-              sliver: SliverToBoxAdapter(
-                child: AppPageHeader(
-                  eyebrow: _formatDate(now),
-                  title: '今天',
-                  largeTitle: true,
-                  actions: <Widget>[
-                    IconButton(
-                      tooltip: '管理提醒',
-                      onPressed: widget.onOpenReminderManager,
-                      icon: const Icon(LucideIcons.bell),
-                    ),
-                    IconButton(
-                      tooltip: '打开设置',
-                      onPressed: widget.onOpenSettings,
-                      icon: const Icon(LucideIcons.settings),
-                    ),
-                  ],
-                ),
+              child: AppPageHeader(
+                eyebrow: _formatDate(now),
+                title: '今天',
+                largeTitle: true,
+                actions: <Widget>[
+                  IconButton(
+                    tooltip: '管理提醒',
+                    onPressed: widget.onOpenReminderManager,
+                    icon: const Icon(LucideIcons.bell),
+                  ),
+                  IconButton(
+                    tooltip: '打开设置',
+                    onPressed: widget.onOpenSettings,
+                    icon: const Icon(LucideIcons.settings),
+                  ),
+                ],
               ),
             ),
-            ..._contentSlivers(context),
-            if (widget.bottomContentPadding > 0)
-              SliverToBoxAdapter(
-                child: SizedBox(height: widget.bottomContentPadding),
+            Expanded(
+              child: CustomScrollView(
+                key: const ValueKey('today-scroll'),
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: BouncingScrollPhysics(),
+                ),
+                slivers: <Widget>[
+                  ..._contentSlivers(context),
+                  if (widget.bottomContentPadding > 0)
+                    SliverToBoxAdapter(
+                      child: SizedBox(height: widget.bottomContentPadding),
+                    ),
+                ],
               ),
+            ),
           ],
         ),
       ),
