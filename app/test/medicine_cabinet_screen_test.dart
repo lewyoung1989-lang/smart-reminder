@@ -345,6 +345,83 @@ void main() {
     expect(find.text('药品已录入'), findsOneWidget);
   });
 
+  testWidgets('save automatically parses an unsubmitted brand-name description',
+      (tester) async {
+    final created = <MedicineBatchInput>[];
+    var parseCalls = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MedicineCabinetScreen(
+          repository: _Repository(),
+          onCreateBatch: (input) async => created.add(input),
+          onParseDescription: (_) async {
+            parseCalls += 1;
+            return MedicineDescriptionDraft(
+              medicineName: '拜新同',
+              quantity: 1,
+              expiryDate: DateTime(2026, 10, 28),
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('录入'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('medicine-entry-description')),
+      '拜新同 1盒，每盒7片，20261028到期',
+    );
+    await tester.ensureVisible(find.byKey(const Key('medicine-entry-save')));
+    await tester.tap(find.byKey(const Key('medicine-entry-save')));
+    await tester.pumpAndSettle();
+
+    expect(parseCalls, 1);
+    expect(created, hasLength(1));
+    expect(created.single.medicineName, '拜新同');
+    expect(created.single.quantity, 1);
+    expect(created.single.expiryDate, DateTime(2026, 10, 28));
+    expect(find.text('请填写药品名称'), findsNothing);
+  });
+
+  testWidgets('requires review before saving an ambiguous parsed quantity',
+      (tester) async {
+    final created = <MedicineBatchInput>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MedicineCabinetScreen(
+          repository: _Repository(),
+          onCreateBatch: (input) async => created.add(input),
+          onParseDescription: (_) async => const MedicineDescriptionDraft(
+            medicineName: '测试药品',
+            ambiguities: ['总片数与每盒片数冲突，请确认包装数'],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('录入'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('medicine-entry-description')),
+      '测试药品 8片，每盒7片',
+    );
+    await tester.ensureVisible(find.byKey(const Key('medicine-entry-save')));
+    await tester.tap(find.byKey(const Key('medicine-entry-save')));
+    await tester.pumpAndSettle();
+
+    expect(created, isEmpty);
+    expect(find.textContaining('请先核对上方提示'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('medicine-entry-save')));
+    await tester.pumpAndSettle();
+
+    expect(created, hasLength(1));
+    expect(created.single.medicineName, '测试药品');
+  });
+
   testWidgets(
       'submits a medicine description from the keyboard and dismisses it',
       (tester) async {
@@ -436,6 +513,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('药品名称 *'), findsOneWidget);
+    expect(find.text('包装数量 *'), findsOneWidget);
     expect(find.text('规格'), findsOneWidget);
     expect(find.text('有效期'), findsOneWidget);
     expect(find.text('生产日期（选填）'), findsOneWidget);

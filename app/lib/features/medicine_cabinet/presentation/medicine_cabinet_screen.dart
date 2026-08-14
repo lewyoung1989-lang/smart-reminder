@@ -819,7 +819,9 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
   String? _error;
   String? _voiceActionError;
   String? _parseError;
+  String? _lastParsedDescription;
   List<String> _ambiguities = const [];
+  bool _ambiguitiesAcknowledged = false;
   List<int>? _photoBytes;
   bool _isTakingPhoto = false;
 
@@ -869,12 +871,12 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _parseDescription() async {
+  Future<bool> _parseDescription() async {
     final parse = widget.onParseDescription;
     final text = _descriptionController.text.trim();
     if (parse == null || _isParsing || text.isEmpty) {
       if (text.isEmpty) setState(() => _parseError = '请先输入或说出药品描述');
-      return;
+      return false;
     }
     setState(() {
       _isParsing = true;
@@ -883,7 +885,7 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
     });
     try {
       final draft = await parse(text);
-      if (!mounted) return;
+      if (!mounted) return false;
       if (draft.medicineName != null) {
         _nameController.text = draft.medicineName!;
       }
@@ -905,9 +907,16 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
       if (draft.quantity != null) {
         _quantityController.text = draft.quantity!.toString();
       }
-      setState(() => _ambiguities = draft.ambiguities);
+      setState(() {
+        _lastParsedDescription = text;
+        _ambiguities = draft.ambiguities;
+        _ambiguitiesAcknowledged = false;
+        _error = null;
+      });
+      return true;
     } catch (_) {
       if (mounted) setState(() => _parseError = '智能解析失败，请稍后重试');
+      return false;
     } finally {
       if (mounted) setState(() => _isParsing = false);
     }
@@ -975,7 +984,23 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
 
   Future<void> _save() async {
     final onCreate = widget.onCreate;
-    if (onCreate == null || _isSaving) return;
+    if (onCreate == null || _isSaving || _isParsing) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    final description = _descriptionController.text.trim();
+    if (_nameController.text.trim().isEmpty &&
+        description.isNotEmpty &&
+        description != _lastParsedDescription &&
+        widget.onParseDescription != null) {
+      final parsed = await _parseDescription();
+      if (!parsed || !mounted) return;
+    }
+    if (_ambiguities.isNotEmpty && !_ambiguitiesAcknowledged) {
+      setState(() {
+        _ambiguitiesAcknowledged = true;
+        _error = '请先核对上方提示，确认无误后再次点击保存';
+      });
+      return;
+    }
     final quantity = int.tryParse(_quantityController.text.trim());
     final productionDate = _parseDateInput(_productionDateController.text);
     final expiryDate = _parseDateInput(_expiryDateController.text);
@@ -1151,6 +1176,17 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
                                   onSubmitted: (_) {
                                     unawaited(_submitDescription());
                                   },
+                                  onChanged: (_) {
+                                    if (_error != null ||
+                                        _parseError != null ||
+                                        _ambiguitiesAcknowledged) {
+                                      setState(() {
+                                        _error = null;
+                                        _parseError = null;
+                                        _ambiguitiesAcknowledged = false;
+                                      });
+                                    }
+                                  },
                                   decoration: const InputDecoration(
                                     hintText: '例如：依巴斯汀 20片，1盒，下个月底到期',
                                   ),
@@ -1309,14 +1345,15 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
                                 ),
                               ),
                               _EntryField(
-                                label: '数量',
+                                label: '包装数量',
                                 required: true,
                                 child: TextField(
                                   key: const Key('medicine-entry-quantity'),
                                   controller: _quantityController,
                                   keyboardType: TextInputType.number,
-                                  decoration:
-                                      const InputDecoration(hintText: '1'),
+                                  decoration: const InputDecoration(
+                                    hintText: '例如：2（盒、瓶或袋）',
+                                  ),
                                 ),
                               ),
                             ],
@@ -1344,10 +1381,11 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
                         ],
                         FilledButton(
                           key: const Key('medicine-entry-save'),
-                          onPressed: widget.canCreateBatch && !_isSaving
-                              ? _save
-                              : null,
-                          child: _isSaving
+                          onPressed:
+                              widget.canCreateBatch && !_isSaving && !_isParsing
+                                  ? _save
+                                  : null,
+                          child: _isSaving || _isParsing
                               ? const SizedBox.square(
                                   dimension: 18,
                                   child: CircularProgressIndicator(

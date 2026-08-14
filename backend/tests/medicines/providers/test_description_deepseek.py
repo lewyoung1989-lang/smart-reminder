@@ -63,6 +63,9 @@ def test_parses_description_as_strict_draft_without_executing():
     assert transport.payload["response_format"] == {"type": "json_object"}
     assert transport.payload["thinking"] == {"type": "disabled"}
     assert "不执行任何写入" in transport.payload["messages"][0]["content"]
+    assert "商品名、品牌名或通用名" in transport.payload["messages"][0]["content"]
+    assert "quantity 只表示完整包装数" in transport.payload["messages"][0]["content"]
+    assert "不要为未提供的可选字段逐项追问" in transport.payload["messages"][0]["content"]
 
 
 @pytest.mark.parametrize(
