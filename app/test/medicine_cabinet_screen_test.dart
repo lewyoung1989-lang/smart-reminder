@@ -329,8 +329,10 @@ void main() {
       '录入布洛芬胶囊 0.3g 2盒，有效期到2027年1月1日',
     );
     await tester.pump();
+    expect(tester.testTextInput.isVisible, isTrue);
     await tester.tap(find.byKey(const Key('medicine-entry-parse')));
     await tester.pumpAndSettle();
+    expect(tester.testTextInput.isVisible, isFalse);
     await tester.ensureVisible(find.byKey(const Key('medicine-entry-save')));
     await tester.tap(find.byKey(const Key('medicine-entry-save')));
     await tester.pumpAndSettle();
@@ -341,6 +343,42 @@ void main() {
     expect(created.single.expiryDate, DateTime(2027, 1, 1));
     expect(repository.loadCalls, 2);
     expect(find.text('药品已录入'), findsOneWidget);
+  });
+
+  testWidgets(
+      'submits a medicine description from the keyboard and dismisses it',
+      (tester) async {
+    var parseCalls = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MedicineCabinetScreen(
+          repository: _Repository(),
+          onCreateBatch: (_) async {},
+          onParseDescription: (_) async {
+            parseCalls += 1;
+            return const MedicineDescriptionDraft(
+              medicineName: '依巴斯汀',
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('录入'));
+    await tester.pumpAndSettle();
+    final description = find.byKey(const Key('medicine-entry-description'));
+    await tester.tap(description);
+    await tester.enterText(description, '依巴斯汀 20片，下个月底到期');
+    expect(tester.testTextInput.isVisible, isTrue);
+
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+
+    expect(parseCalls, 1);
+    expect(tester.testTextInput.isVisible, isFalse);
+    expect(find.text('依巴斯汀'), findsWidgets);
+    expect(find.text('提交并解析'), findsOneWidget);
   });
 
   testWidgets('keeps medicine input visible and explains a save failure',

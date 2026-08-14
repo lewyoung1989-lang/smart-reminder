@@ -913,6 +913,11 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
     }
   }
 
+  Future<void> _submitDescription() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    await _parseDescription();
+  }
+
   Future<void> _handleVoiceAction() async {
     final voice = _voice;
     if (voice == null) {
@@ -943,7 +948,7 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
         }
         _descriptionController.text = transcript.trim();
         setState(() => _error = null);
-        await _parseDescription();
+        await _submitDescription();
       }
     } catch (_) {
       if (mounted) setState(() => _voiceActionError = '语音输入失败，请重试');
@@ -1108,6 +1113,8 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
                 ),
                 Expanded(
                   child: SingleChildScrollView(
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
                     padding: const EdgeInsets.fromLTRB(
                       AppSpacing.lg,
                       AppSpacing.lg,
@@ -1140,6 +1147,10 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
                                   minLines: 3,
                                   maxLines: 5,
                                   maxLength: 300,
+                                  textInputAction: TextInputAction.done,
+                                  onSubmitted: (_) {
+                                    unawaited(_submitDescription());
+                                  },
                                   decoration: const InputDecoration(
                                     hintText: '例如：依巴斯汀 20片，1盒，下个月底到期',
                                   ),
@@ -1154,7 +1165,7 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
                                           widget.onParseDescription != null &&
                                                   !_isParsing &&
                                                   !_isSaving
-                                              ? _parseDescription
+                                              ? _submitDescription
                                               : null,
                                       icon: _isParsing
                                           ? const SizedBox.square(
@@ -1165,7 +1176,7 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
                                             )
                                           : const Icon(LucideIcons.sparkles),
                                       label: Text(
-                                        _isParsing ? '正在解析' : '智能解析',
+                                        _isParsing ? '正在解析' : '提交并解析',
                                       ),
                                     ),
                                   ),
