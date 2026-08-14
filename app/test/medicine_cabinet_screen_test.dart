@@ -345,7 +345,8 @@ void main() {
     expect(find.text('药品已录入'), findsOneWidget);
   });
 
-  testWidgets('save automatically parses an unsubmitted brand-name description',
+  testWidgets(
+      'save parses an unsubmitted brand-name description without creating it',
       (tester) async {
     final created = <MedicineBatchInput>[];
     var parseCalls = 0;
@@ -374,6 +375,14 @@ void main() {
       '拜新同 1盒，每盒7片，20261028到期',
     );
     await tester.ensureVisible(find.byKey(const Key('medicine-entry-save')));
+    await tester.tap(find.byKey(const Key('medicine-entry-save')));
+    await tester.pumpAndSettle();
+
+    expect(parseCalls, 1);
+    expect(created, isEmpty);
+    expect(find.text('拜新同'), findsWidgets);
+    expect(find.textContaining('智能解析已完成'), findsOneWidget);
+
     await tester.tap(find.byKey(const Key('medicine-entry-save')));
     await tester.pumpAndSettle();
 

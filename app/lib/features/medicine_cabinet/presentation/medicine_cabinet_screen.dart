@@ -821,7 +821,6 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
   String? _parseError;
   String? _lastParsedDescription;
   List<String> _ambiguities = const [];
-  bool _ambiguitiesAcknowledged = false;
   List<int>? _photoBytes;
   bool _isTakingPhoto = false;
 
@@ -910,7 +909,6 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
       setState(() {
         _lastParsedDescription = text;
         _ambiguities = draft.ambiguities;
-        _ambiguitiesAcknowledged = false;
         _error = null;
       });
       return true;
@@ -993,11 +991,10 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
         widget.onParseDescription != null) {
       final parsed = await _parseDescription();
       if (!parsed || !mounted) return;
-    }
-    if (_ambiguities.isNotEmpty && !_ambiguitiesAcknowledged) {
       setState(() {
-        _ambiguitiesAcknowledged = true;
-        _error = '请先核对上方提示，确认无误后再次点击保存';
+        _error = _ambiguities.isEmpty
+            ? '智能解析已完成，请核对后再次点击保存'
+            : '请先核对上方提示，确认无误后再次点击保存';
       });
       return;
     }
@@ -1177,13 +1174,10 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
                                     unawaited(_submitDescription());
                                   },
                                   onChanged: (_) {
-                                    if (_error != null ||
-                                        _parseError != null ||
-                                        _ambiguitiesAcknowledged) {
+                                    if (_error != null || _parseError != null) {
                                       setState(() {
                                         _error = null;
                                         _parseError = null;
-                                        _ambiguitiesAcknowledged = false;
                                       });
                                     }
                                   },
