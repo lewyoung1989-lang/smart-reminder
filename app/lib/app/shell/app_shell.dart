@@ -303,6 +303,8 @@ class _AppShellState extends State<AppShell> {
   Widget build(BuildContext context) {
     final compact =
         MediaQuery.sizeOf(context).width < AppSpacing.breakpointMedium;
+    final canQuickCreate =
+        widget.createDraft != null && widget.reminderCreationService != null;
     final tabs = [
       KeyedSubtree(
         key: const PageStorageKey<String>('today-tab'),
@@ -311,6 +313,7 @@ class _AppShellState extends State<AppShell> {
           onOpenReminderManager: widget.onOpenReminderManager,
           onOpenSettings: _openSettings,
           onOpenAttention: _handleAttentionAction,
+          bottomContentPadding: compact && canQuickCreate ? 72 : 0,
         ),
       ),
       KeyedSubtree(
@@ -344,39 +347,18 @@ class _AppShellState extends State<AppShell> {
     final content = IndexedStack(index: _selectedIndex, children: tabs);
     final showQuickCreate = _selectedIndex == 0;
     final quickCreate = _QuickCreateBar(
-      enabled:
-          widget.createDraft != null && widget.reminderCreationService != null,
+      enabled: canQuickCreate,
       onPressed: _openQuickCreate,
-      compact: compact,
     );
 
     if (compact) {
       return Scaffold(
-        body: Column(
-          children: [
-            Expanded(child: content),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                border: Border(
-                  top: BorderSide(
-                    color: Theme.of(context).colorScheme.outline,
-                  ),
-                ),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (showQuickCreate) quickCreate,
-                  NavigationBar(
-                    selectedIndex: _selectedIndex,
-                    onDestinationSelected: _selectDestination,
-                    destinations: _destinations,
-                  ),
-                ],
-              ),
-            ),
-          ],
+        body: content,
+        floatingActionButton: showQuickCreate ? quickCreate : null,
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _selectedIndex,
+          onDestinationSelected: _selectDestination,
+          destinations: _destinations,
         ),
       );
     }
@@ -395,7 +377,11 @@ class _AppShellState extends State<AppShell> {
                     destinations: _railDestinations,
                   ),
                 ),
-                if (showQuickCreate) quickCreate,
+                if (showQuickCreate)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+                    child: quickCreate,
+                  ),
               ],
             ),
           ),
@@ -432,41 +418,31 @@ class _QuickCreateBar extends StatelessWidget {
   const _QuickCreateBar({
     required this.enabled,
     required this.onPressed,
-    required this.compact,
   });
 
   final bool enabled;
   final VoidCallback onPressed;
-  final bool compact;
 
   @override
-  Widget build(BuildContext context) => SizedBox(
+  Widget build(BuildContext context) => Semantics(
         key: const Key('quick-create-bar'),
-        height: compact ? 64 : 56,
-        child: Padding(
-          padding: compact
-              ? const EdgeInsets.fromLTRB(
-                  AppSpacing.lg,
-                  AppSpacing.sm,
-                  AppSpacing.lg,
-                  AppSpacing.sm,
-                )
-              : EdgeInsets.zero,
-          child: compact
-              ? FilledButton.icon(
-                  key: const Key('quick-create-action'),
-                  onPressed: enabled ? onPressed : null,
-                  icon: const Icon(LucideIcons.plus),
-                  label: const Text('创建提醒'),
-                )
-              : Center(
-                  child: IconButton(
-                    key: const Key('quick-create-action'),
-                    tooltip: '创建提醒',
-                    onPressed: enabled ? onPressed : null,
-                    icon: const Icon(LucideIcons.plus),
-                  ),
-                ),
+        label: '创建提醒',
+        button: true,
+        enabled: enabled,
+        excludeSemantics: true,
+        child: FloatingActionButton(
+          key: const Key('quick-create-action'),
+          tooltip: '创建提醒',
+          onPressed: enabled ? onPressed : null,
+          backgroundColor: enabled
+              ? Theme.of(context).colorScheme.primary
+              : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.12),
+          foregroundColor: enabled
+              ? Theme.of(context).colorScheme.onPrimary
+              : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.38),
+          elevation: 0,
+          shape: const CircleBorder(),
+          child: const Icon(LucideIcons.plus),
         ),
       );
 }

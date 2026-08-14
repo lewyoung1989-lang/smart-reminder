@@ -46,9 +46,9 @@ void main() {
       expect(find.text('已完成'), findsWidgets);
       expect(find.text('即将开始'), findsWidgets);
       expect(find.byKey(const ValueKey('today-overview')), findsOneWidget);
-      expect(find.text('待决定'), findsOneWidget);
-      expect(find.text('今日日程'), findsOneWidget);
-      expect(find.text('下一项'), findsOneWidget);
+      expect(find.textContaining('项待决定'), findsOneWidget);
+      expect(find.textContaining('项日程'), findsOneWidget);
+      expect(find.textContaining('下一项'), findsOneWidget);
     });
 
     testWidgets(
@@ -516,7 +516,7 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.tap(find.byTooltip('打开设置'));
-      await tester.tap(find.widgetWithText(FilledButton, '确认'));
+      await tester.tap(find.widgetWithText(TextButton, '确认'));
       await tester.tap(find.byType(AppListRow).first);
 
       expect(settingsCalls, 1);
@@ -543,7 +543,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('需要记录服药'), findsOneWidget);
-      await tester.tap(find.widgetWithText(FilledButton, '确认'));
+      await tester.tap(find.widgetWithText(TextButton, '确认'));
       await tester.pumpAndSettle();
 
       expect(completedActions, ['需要记录服药']);
@@ -571,6 +571,30 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('早间用药'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('scrolls the whole today surface with compact decision actions',
+        (tester) async {
+      await pumpTodayScreen(
+        tester,
+        FakeTodayRepository.success(),
+        surfaceSize: const Size(393, 700),
+      );
+      await tester.pumpAndSettle();
+
+      final scroll = find.byKey(const ValueKey('today-scroll'));
+      final sectionTitle = find.text('需要你决定');
+      final initialTop = tester.getTopLeft(sectionTitle).dy;
+
+      expect(scroll, findsOneWidget);
+      expect(find.widgetWithText(FilledButton, '确认'), findsNothing);
+      expect(find.widgetWithText(TextButton, '确认'), findsOneWidget);
+
+      await tester.drag(scroll, const Offset(0, -240));
+      await tester.pumpAndSettle();
+
+      expect(tester.getTopLeft(sectionTitle).dy, lessThan(initialTop));
       expect(tester.takeException(), isNull);
     });
   });

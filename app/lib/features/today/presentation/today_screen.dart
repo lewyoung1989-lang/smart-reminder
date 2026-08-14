@@ -21,6 +21,7 @@ class TodayScreen extends StatefulWidget {
     this.onOpenReminderManager,
     this.onOpenAttention,
     this.onOpenTimeline,
+    this.bottomContentPadding = 0,
     super.key,
   });
 
@@ -30,6 +31,7 @@ class TodayScreen extends StatefulWidget {
   final VoidCallback? onOpenReminderManager;
   final AttentionActionCallback? onOpenAttention;
   final ValueChanged<TimelineItem>? onOpenTimeline;
+  final double bottomContentPadding;
 
   @override
   State<TodayScreen> createState() => _TodayScreenState();
@@ -94,6 +96,10 @@ class _TodayScreenState extends State<TodayScreen> {
     return Scaffold(
       body: SafeArea(
         child: CustomScrollView(
+          key: const ValueKey('today-scroll'),
+          physics: const AlwaysScrollableScrollPhysics(
+            parent: BouncingScrollPhysics(),
+          ),
           slivers: <Widget>[
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(
@@ -123,6 +129,10 @@ class _TodayScreenState extends State<TodayScreen> {
               ),
             ),
             ..._contentSlivers(context),
+            if (widget.bottomContentPadding > 0)
+              SliverToBoxAdapter(
+                child: SizedBox(height: widget.bottomContentPadding),
+              ),
           ],
         ),
       ),
@@ -192,7 +202,7 @@ class _TodayScreenState extends State<TodayScreen> {
           AppSpacing.lg,
           0,
           AppSpacing.lg,
-          AppSpacing.xxxl,
+          AppSpacing.xxl,
         ),
         sliver: SliverToBoxAdapter(
           child: _TodayOverview(snapshot: snapshot),
@@ -330,48 +340,56 @@ class _DecisionRow extends StatelessWidget {
                 )
               : null,
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final compact =
-                  constraints.maxWidth < AppSpacing.breakpointMedium ||
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: enabled ? () => onOpen!(item) : null,
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final accessibilityLayout =
                       MediaQuery.textScalerOf(context).scale(14) > 20;
-              final details = _DecisionDetails(item: item, visuals: visuals);
-              final action = Semantics(
-                container: true,
-                label: actionSemantics,
-                button: true,
-                enabled: enabled,
-                onTap: enabled ? () => onOpen!(item) : null,
-                child: ExcludeSemantics(
-                  child: FilledButton(
-                    onPressed: enabled ? () => onOpen!(item) : null,
-                    child: Text(item.actionLabel),
-                  ),
-                ),
-              );
+                  final details =
+                      _DecisionDetails(item: item, visuals: visuals);
+                  final action = Semantics(
+                    container: true,
+                    label: actionSemantics,
+                    button: true,
+                    enabled: enabled,
+                    onTap: enabled ? () => onOpen!(item) : null,
+                    child: ExcludeSemantics(
+                      child: TextButton.icon(
+                        onPressed: enabled ? () => onOpen!(item) : null,
+                        iconAlignment: IconAlignment.end,
+                        icon: const Icon(LucideIcons.chevronRight),
+                        label: Text(item.actionLabel),
+                      ),
+                    ),
+                  );
 
-              if (compact) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    details,
-                    const SizedBox(height: AppSpacing.lg),
-                    SizedBox(width: double.infinity, child: action),
-                  ],
-                );
-              }
+                  if (accessibilityLayout) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: <Widget>[
+                        details,
+                        const SizedBox(height: AppSpacing.sm),
+                        Align(alignment: Alignment.centerRight, child: action),
+                      ],
+                    );
+                  }
 
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Expanded(child: details),
-                  const SizedBox(width: AppSpacing.lg),
-                  action,
-                ],
-              );
-            },
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: <Widget>[
+                      Expanded(child: details),
+                      const SizedBox(width: AppSpacing.sm),
+                      action,
+                    ],
+                  );
+                },
+              ),
+            ),
           ),
         ),
       ),
@@ -386,60 +404,46 @@ class _TodayOverview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final nextAt = _nextScheduledAt(snapshot);
-    final items = <({String label, String value})>[
-      (label: '待决定', value: '${snapshot.decisions.length}'),
-      (label: '今日日程', value: '${snapshot.timeline.length}'),
-      (label: '下一项', value: nextAt == null ? '暂无' : _formatTime(nextAt)),
+    final items =
+        <({String label, String value, bool emphasized, bool labelFirst})>[
+      (
+        label: '项待决定',
+        value: '${snapshot.decisions.length}',
+        emphasized: snapshot.decisions.isNotEmpty,
+        labelFirst: false,
+      ),
+      (
+        label: '项日程',
+        value: '${snapshot.timeline.length}',
+        emphasized: false,
+        labelFirst: false,
+      ),
+      (
+        label: '下一项',
+        value: nextAt == null ? '暂无' : _formatTime(nextAt),
+        emphasized: false,
+        labelFirst: true,
+      ),
     ];
-    final accessibilityText =
-        items.map((item) => '${item.label}${item.value}').join('，');
+    final accessibilityText = items
+        .map((item) => item.labelFirst
+            ? '${item.label}${item.value}'
+            : '${item.value}${item.label}')
+        .join('，');
 
     return Semantics(
       key: const ValueKey('today-overview'),
       container: true,
       label: '今日概览：$accessibilityText',
       child: ExcludeSemantics(
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.xl,
-              vertical: AppSpacing.lg,
-            ),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final stacked = constraints.maxWidth < 320 ||
-                    MediaQuery.textScalerOf(context).scale(14) > 20;
-                if (stacked) {
-                  return Wrap(
-                    spacing: AppSpacing.xxxl,
-                    runSpacing: AppSpacing.lg,
-                    children: [
-                      for (final item in items) _OverviewMetric(item: item),
-                    ],
-                  );
-                }
-                return Row(
-                  children: [
-                    for (var index = 0; index < items.length; index += 1) ...[
-                      Expanded(child: _OverviewMetric(item: items[index])),
-                      if (index < items.length - 1)
-                        SizedBox(
-                          height: 36,
-                          child: VerticalDivider(
-                            color: theme.colorScheme.outline,
-                          ),
-                        ),
-                    ],
-                  ],
-                );
-              },
-            ),
-          ),
+        child: Wrap(
+          spacing: AppSpacing.lg,
+          runSpacing: AppSpacing.sm,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            for (final item in items) _OverviewMetric(item: item),
+          ],
         ),
       ),
     );
@@ -449,24 +453,35 @@ class _TodayOverview extends StatelessWidget {
 class _OverviewMetric extends StatelessWidget {
   const _OverviewMetric({required this.item});
 
-  final ({String label, String value}) item;
+  final ({
+    String label,
+    String value,
+    bool emphasized,
+    bool labelFirst,
+  }) item;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          item.value,
-          style: theme.textTheme.titleLarge?.copyWith(
-            color: theme.colorScheme.primary,
-          ),
-        ),
-        const SizedBox(height: AppSpacing.xs),
-        Text(item.label, style: theme.textTheme.bodySmall),
-      ],
+    final foreground = item.emphasized
+        ? theme.colorScheme.primary
+        : theme.colorScheme.onSurfaceVariant;
+    final value = TextSpan(
+      text: item.value,
+      style: theme.textTheme.titleMedium?.copyWith(color: foreground),
+    );
+    final label = TextSpan(
+      text: item.label,
+      style: theme.textTheme.bodySmall?.copyWith(color: foreground),
+    );
+    return Text.rich(
+      TextSpan(
+        children: item.labelFirst
+            ? [label, const TextSpan(text: ' '), value]
+            : [value, const TextSpan(text: ' '), label],
+      ),
+      maxLines: 2,
+      overflow: TextOverflow.visible,
     );
   }
 }

@@ -189,6 +189,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('quick-create-bar')), findsOneWidget);
+    expect(find.byType(FloatingActionButton), findsOneWidget);
+    expect(find.bySemanticsLabel('创建提醒'), findsOneWidget);
 
     await tester.tap(find.text('周期'));
     await tester.pumpAndSettle();
@@ -499,7 +501,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FilledButton, '记录'));
+    await tester.tap(find.widgetWithText(TextButton, '记录'));
     await tester.pumpAndSettle();
 
     expect(actions.takenOccurrences, ['occurrence-1']);
