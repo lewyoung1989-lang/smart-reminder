@@ -16,6 +16,7 @@ class SettingsScreen extends StatefulWidget {
     required this.onChangePassword,
     required this.onLogout,
     this.familyApi,
+    this.onFamilyMembershipChanged,
     super.key,
   });
 
@@ -29,6 +30,7 @@ class SettingsScreen extends StatefulWidget {
   ) onChangePassword;
   final Future<void> Function() onLogout;
   final FamilyApi? familyApi;
+  final ValueChanged<bool>? onFamilyMembershipChanged;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -150,8 +152,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ? null
                         : () => Navigator.of(context).push<void>(
                               MaterialPageRoute(
-                                builder: (_) =>
-                                    FamilyScreen(api: widget.familyApi!),
+                                builder: (_) => FamilyScreen(
+                                  api: widget.familyApi!,
+                                  onMembershipChanged:
+                                      widget.onFamilyMembershipChanged,
+                                ),
                               ),
                             ),
                   ),

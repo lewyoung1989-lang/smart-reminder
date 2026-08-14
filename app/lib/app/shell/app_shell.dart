@@ -95,9 +95,19 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   var _selectedIndex = 0;
+  var _familyMembershipRevision = 0;
+  bool? _hasFamilyMembership;
 
   void _selectDestination(int index) {
     if (_selectedIndex != index) setState(() => _selectedIndex = index);
+  }
+
+  void _familyMembershipChanged(bool hasFamilyMembership) {
+    if (!mounted) return;
+    setState(() {
+      _hasFamilyMembership = hasFamilyMembership;
+      _familyMembershipRevision += 1;
+    });
   }
 
   void _openSettings() {
@@ -110,6 +120,7 @@ class _AppShellState extends State<AppShell> {
           onChangePassword: widget.onChangePassword,
           onLogout: widget.onLogout,
           familyApi: widget.familyApi,
+          onFamilyMembershipChanged: _familyMembershipChanged,
         ),
       ),
     );
@@ -325,6 +336,8 @@ class _AppShellState extends State<AppShell> {
           onParseDescription: widget.onParseMedicineDescription,
           voiceInputController: widget.voiceInputController,
           onOpenSettings: _openSettings,
+          familyMembershipRevision: _familyMembershipRevision,
+          hasFamilyMembership: _hasFamilyMembership,
         ),
       ),
     ];

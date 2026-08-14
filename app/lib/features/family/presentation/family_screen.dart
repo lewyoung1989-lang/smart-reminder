@@ -8,8 +8,14 @@ import '../data/family_api.dart';
 import '../domain/family_models.dart';
 
 class FamilyScreen extends StatefulWidget {
-  const FamilyScreen({required this.api, super.key});
+  const FamilyScreen({
+    required this.api,
+    this.onMembershipChanged,
+    super.key,
+  });
+
   final FamilyApi api;
+  final ValueChanged<bool>? onMembershipChanged;
 
   @override
   State<FamilyScreen> createState() => _FamilyScreenState();
@@ -51,7 +57,10 @@ class _FamilyScreenState extends State<FamilyScreen> {
       final family = join
           ? await widget.api.join(code: result[0], nickname: result[1])
           : await widget.api.create(name: result[0], nickname: result[1]);
-      if (mounted) setState(() => _family = family);
+      if (!mounted) return;
+      setState(() => _family = family);
+      widget.onMembershipChanged?.call(true);
+      _message(join ? '已加入家庭' : '家庭已创建，你已成为管理员');
     } catch (_) {
       _message(join ? '加入失败，请检查邀请码' : '创建家庭失败');
     }
@@ -108,7 +117,9 @@ class _FamilyScreenState extends State<FamilyScreen> {
       } else {
         await widget.api.leave();
       }
-      if (mounted) setState(() => _family = null);
+      if (!mounted) return;
+      setState(() => _family = null);
+      widget.onMembershipChanged?.call(false);
     } catch (_) {
       _message(disband ? '家庭内还有其他成员，请先转让管理员' : '退出家庭失败');
     }

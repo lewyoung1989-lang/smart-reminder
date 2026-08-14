@@ -1,8 +1,14 @@
+import 'dart:convert';
+import 'dart:ui' show Tristate;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:smart_reminder_app/app/shell/app_shell.dart';
 import 'package:smart_reminder_app/app/theme/app_theme.dart';
 import 'package:smart_reminder_app/features/auth/domain/auth_models.dart';
+import 'package:smart_reminder_app/features/family/data/family_api.dart';
 import 'package:smart_reminder_app/features/quick_create/domain/quick_create_draft.dart';
 import 'package:smart_reminder_app/features/reminder_drafts/application/reminder_creation_service.dart';
 import 'package:smart_reminder_app/features/reminder_drafts/domain/reminder_draft.dart';
@@ -229,6 +235,91 @@ void main() {
   });
 
   testWidgets(
+      'creating a family immediately selects and reloads family cabinet',
+      (tester) async {
+    final medicineRepository = _RecordingMedicineRepository();
+    final familyApi = FamilyApi(
+      baseUrl: 'https://api.invalid',
+      client: MockClient((request) async {
+        if (request.method == 'GET') {
+          return http.Response(jsonEncode({'family': null}), 200);
+        }
+        return http.Response.bytes(
+          utf8.encode(jsonEncode({
+            'id': 'family-1',
+            'name': '刘家药箱',
+            'role': 'admin',
+            'members': [
+              {
+                'id': 'member-1',
+                'nickname': '爸爸',
+                'phone_masked': '138****8000',
+                'role': 'admin',
+                'is_self': true,
+              },
+            ],
+          })),
+          201,
+          headers: {'Content-Type': 'application/json; charset=utf-8'},
+        );
+      }),
+    );
+    addTearDown(familyApi.close);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: AppShell(
+          todayRepository: const UnavailableTodayRepository(),
+          planRepository: const UnavailablePlanRepository(),
+          medicineRepository: medicineRepository,
+          familyApi: familyApi,
+          user: const AuthUser(
+            id: 'user-1',
+            phoneMasked: '138****8000',
+            phoneVerified: true,
+          ),
+          themeMode: ThemeMode.system,
+          onThemeModeChanged: (_) {},
+          onChangePassword: (_, __, ___) async {},
+          onLogout: () async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('药箱'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('打开设置'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('我的家庭'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '创建家庭'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).at(0), '刘家药箱');
+    await tester.enterText(find.byType(TextField).at(1), '爸爸');
+    await tester.tap(find.widgetWithText(FilledButton, '创建'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('刘家药箱'), findsOneWidget);
+    expect(find.textContaining('管理员'), findsWidgets);
+    expect(medicineRepository.scopes, [
+      MedicineCabinetScope.personal,
+      MedicineCabinetScope.family,
+    ]);
+
+    await tester.tap(find.byTooltip('返回设置'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('返回'));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.getSemantics(find.text('家庭药箱')).flagsCollection.isSelected,
+      Tristate.isTrue,
+    );
+  });
+
+  testWidgets(
       'quick create exits the draft after server creation when notification scheduling fails',
       (tester) async {
     final draft = QuickCreateDraft.reminder(
@@ -439,6 +530,22 @@ class _UnavailableMedicineRepository implements MedicineRepository {
       Future.value(
         MedicineCollection(items: const [], loadedBatchCount: 0),
       );
+
+  @override
+  Future<MedicineDetail> getById(String id) =>
+      Future.error(StateError('No medicine available'));
+}
+
+class _RecordingMedicineRepository implements MedicineRepository {
+  final scopes = <MedicineCabinetScope>[];
+
+  @override
+  Future<MedicineCollection> load({
+    MedicineCabinetScope scope = MedicineCabinetScope.personal,
+  }) async {
+    scopes.add(scope);
+    return MedicineCollection(items: const [], loadedBatchCount: 0);
+  }
 
   @override
   Future<MedicineDetail> getById(String id) =>
