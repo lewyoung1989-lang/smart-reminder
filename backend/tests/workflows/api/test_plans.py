@@ -135,6 +135,30 @@ def test_plan_detail_returns_business_fields(api_client, user):
 
 
 @pytest.mark.django_db
+def test_plan_detail_returns_all_daily_medication_notification_times(
+    api_client, user, mocker
+):
+    plan = create_plan(user)
+    task = plan.workflow_draft.task_spec_json
+    task["slots"]["times"] = ["08:00", "13:00", "20:00"]
+    plan.workflow_draft.task_spec_json = task
+    plan.workflow_draft.save(update_fields=["task_spec_json"])
+    mocker.patch("apps.workflows.api.plans.timezone.now", return_value=NOW)
+    api_client.force_authenticate(user)
+
+    response = api_client.get(f"/api/v1/plans/{plan.id}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["reminder_label"] == "每天 08:00、13:00、20:00 通知提醒"
+    assert body["notification_schedule"]["scheduled_times"] == [
+        "2026-08-12T00:00:00+00:00",
+        "2026-08-12T05:00:00+00:00",
+        "2026-08-11T12:00:00+00:00",
+    ]
+
+
+@pytest.mark.django_db
 def test_plan_detail_is_owner_scoped(api_client, user, django_user_model):
     other = django_user_model.objects.create_user(username="plans-owner")
     plan = create_plan(other)

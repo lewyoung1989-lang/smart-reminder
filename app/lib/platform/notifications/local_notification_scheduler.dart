@@ -37,6 +37,8 @@ abstract interface class PlanNotificationScheduler {
 
 class LocalNotificationScheduler
     implements ReminderNotificationScheduler, PlanNotificationScheduler {
+  static const _maxDailyPlanNotifications = 8;
+
   LocalNotificationScheduler({
     required this.gateway,
     DateTime Function()? now,
@@ -114,7 +116,11 @@ class LocalNotificationScheduler
     required String planId,
     required PlanNotificationSchedule schedule,
   }) async {
-    if (!schedule.scheduledAt.isAfter(_now())) {
+    if (schedule.scheduledTimes.isEmpty ||
+        schedule.scheduledTimes.length > _maxDailyPlanNotifications ||
+        schedule.scheduledTimes.any((value) => !value.isAfter(_now())) ||
+        (schedule.repeat == PlanRepeat.none &&
+            schedule.scheduledTimes.length != 1)) {
       throw const InvalidNotificationSchedule();
     }
     final permissionGranted = await gateway.requestPermissions();
@@ -125,33 +131,60 @@ class LocalNotificationScheduler
     } catch (_) {
       throw const InvalidNotificationSchedule();
     }
-    final date = tz.TZDateTime.from(schedule.scheduledAt, location);
+    final scheduledIds = <int>[];
     try {
-      if (schedule.repeat == PlanRepeat.daily) {
-        final dailyGateway = gateway;
-        if (dailyGateway is! DailyLocalNotificationGateway) {
-          throw const NotificationSchedulingFailed();
+      for (var index = 0; index < schedule.scheduledTimes.length; index++) {
+        final date =
+            tz.TZDateTime.from(schedule.scheduledTimes[index], location);
+        final id = _stableNotificationId('plan:$planId:$index');
+        if (schedule.repeat == PlanRepeat.daily) {
+          final dailyGateway = gateway;
+          if (dailyGateway is! DailyLocalNotificationGateway) {
+            throw const NotificationSchedulingFailed();
+          }
+          await (dailyGateway as DailyLocalNotificationGateway).scheduleDaily(
+            id: id,
+            title: schedule.title,
+            firstDate: date,
+          );
+        } else {
+          await gateway.schedule(
+            id: id,
+            title: schedule.title,
+            scheduledDate: date,
+          );
         }
-        await (dailyGateway as DailyLocalNotificationGateway).scheduleDaily(
-          id: _stableNotificationId('plan:$planId'),
-          title: schedule.title,
-          firstDate: date,
-        );
-      } else {
-        await gateway.schedule(
-          id: _stableNotificationId('plan:$planId'),
-          title: schedule.title,
-          scheduledDate: date,
-        );
+        scheduledIds.add(id);
       }
     } catch (_) {
+      for (final id in scheduledIds) {
+        try {
+          await gateway.cancel(id: id);
+        } catch (_) {}
+      }
       throw const NotificationSchedulingFailed();
     }
   }
 
   @override
-  Future<void> cancelPlan({required String planId}) =>
-      cancel(reminderId: 'plan:$planId');
+  Future<void> cancelPlan({required String planId}) async {
+    var failed = false;
+    final ids = <int>[
+      _stableNotificationId('plan:$planId'),
+      for (var index = 0; index < _maxDailyPlanNotifications; index++)
+        _stableNotificationId('plan:$planId:$index'),
+    ];
+    for (final id in ids) {
+      try {
+        await gateway.cancel(id: id);
+      } catch (_) {
+        failed = true;
+      }
+    }
+    if (failed) {
+      throw const NotificationCancellationFailed();
+    }
+  }
 
   static int _stableNotificationId(String reminderId) {
     var hash = 0;

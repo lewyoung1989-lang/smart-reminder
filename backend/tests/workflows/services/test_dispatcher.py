@@ -192,8 +192,54 @@ def test_daily_medication_workflow_dispatches_consecutive_occurrences(user, mock
         WorkflowRun.objects.filter(workflow=rule)
         .order_by("scheduled_for")
         .values_list("scheduled_for", flat=True)
-    ) == [NOW, NOW + timedelta(days=1)]
-    assert rule.next_run_at == NOW + timedelta(days=2)
+    ) == [
+        NOW,
+        datetime(2026, 8, 9, 8, 0, tzinfo=datetime_timezone.utc),
+    ]
+    assert rule.next_run_at == datetime(
+        2026, 8, 10, 8, 0, tzinfo=datetime_timezone.utc
+    )
+
+
+@pytest.mark.django_db
+def test_daily_medication_advances_through_multiple_times(user, mocker):
+    from apps.workflows.services.dispatcher import dispatch_due_workflows
+
+    first = datetime(2026, 8, 8, 0, 0, tzinfo=datetime_timezone.utc)
+    rule = create_compiled_rule(
+        user,
+        suffix="three-times-daily",
+        slots={
+            "medicine_name": "拜新同",
+            "dose_text": "1片",
+            "frequency": "daily",
+            "time_of_day": "08:00",
+            "times": ["08:00", "13:00", "20:00"],
+        },
+        next_run_at=first,
+    )
+    rule.timezone = "Asia/Shanghai"
+    rule.save(update_fields=["timezone"])
+    mocker.patch("apps.workflows.tasks.enqueue_outbox.delay")
+
+    dispatch_due_workflows(first, batch_size=10)
+    rule.refresh_from_db()
+    assert rule.next_run_at == datetime(
+        2026, 8, 8, 5, 0, tzinfo=datetime_timezone.utc
+    )
+
+    dispatch_due_workflows(rule.next_run_at, batch_size=10)
+    rule.refresh_from_db()
+    assert rule.next_run_at == datetime(
+        2026, 8, 8, 12, 0, tzinfo=datetime_timezone.utc
+    )
+
+    dispatch_due_workflows(rule.next_run_at, batch_size=10)
+    rule.refresh_from_db()
+    assert rule.next_run_at == datetime(
+        2026, 8, 9, 0, 0, tzinfo=datetime_timezone.utc
+    )
+    assert WorkflowRun.objects.filter(workflow=rule).count() == 3
 
 
 @pytest.mark.django_db

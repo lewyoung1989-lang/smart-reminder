@@ -98,6 +98,18 @@ class WorkflowDraft {
 
   String? get timeOfDay => slots['time_of_day'] as String?;
 
+  List<String> get times {
+    final values = slots['times'];
+    if (values is List) {
+      final parsed = values.whereType<String>().toList(growable: false);
+      if (parsed.isNotEmpty) return parsed;
+    }
+    final legacy = timeOfDay;
+    return legacy == null ? const [] : [legacy];
+  }
+
+  String? get timeLabel => times.isEmpty ? null : times.join('、');
+
   String? get medicineName {
     final value = slots['medicine_name'];
     return value is String && value.trim().isNotEmpty ? value : null;

@@ -115,6 +115,47 @@ void main() {
     expect(detail.notificationSchedule?.timezone, 'Asia/Shanghai');
   });
 
+  test('loads all daily notification times from plan detail', () async {
+    final client = RecordingClient([
+      jsonResponse(200, {
+        'summary': {
+          'id': 'plan-3-times',
+          'title': '用药提醒',
+          'subtitle': '拜新同 · 1片',
+          'next_run_at': '2026-08-11T12:00:00+00:00',
+          'status': 'active',
+          'kind': 'medication',
+        },
+        'queried_sources': <String>[],
+        'reminder_label': '每天 08:00、13:00、20:00 通知提醒',
+        'executions': <Object>[],
+        'notification_schedule': {
+          'scheduled_at': '2026-08-11T12:00:00+00:00',
+          'scheduled_times': [
+            '2026-08-12T00:00:00+00:00',
+            '2026-08-12T05:00:00+00:00',
+            '2026-08-11T12:00:00+00:00',
+          ],
+          'repeat': 'daily',
+          'title': '用药提醒',
+          'timezone': 'Asia/Shanghai',
+        },
+      }),
+    ]);
+    final repository = ApiPlanRepository(
+      baseUrl: 'https://api.invalid',
+      client: client,
+    );
+
+    final detail = await repository.getById('plan-3-times');
+
+    expect(detail.notificationSchedule?.scheduledTimes, hasLength(3));
+    expect(
+      detail.notificationSchedule?.scheduledTimes.map((value) => value.hour),
+      [0, 5, 12],
+    );
+  });
+
   test('pauses resumes and deletes a periodic plan', () async {
     Map<String, Object?> detail(String status) => {
           'summary': {

@@ -94,8 +94,11 @@ class ApiPlanRepository implements PlanRepository, PlanActions {
       sourceText: payload['source_text'] as String? ?? '',
       notificationSchedule: notification is Map<String, dynamic>
           ? PlanNotificationSchedule(
-              scheduledAt:
-                  DateTime.parse(notification['scheduled_at'] as String),
+              scheduledTimes: (notification['scheduled_times'] as List?)
+                      ?.whereType<String>()
+                      .map(DateTime.parse)
+                      .toList(growable: false) ??
+                  [DateTime.parse(notification['scheduled_at'] as String)],
               repeat: notification['repeat'] == 'daily'
                   ? PlanRepeat.daily
                   : PlanRepeat.none,

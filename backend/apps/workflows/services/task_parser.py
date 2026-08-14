@@ -18,6 +18,16 @@ _DOSE_PATTERN = re.compile(
 _MEDICINE_PATTERN = re.compile(
     r"(?:吃药|服药|吃)\s*(?:[:：]\s*)?(?P<name>[\u4e00-\u9fffA-Za-z][\u4e00-\u9fffA-Za-z()（）-]{0,30})"
 )
+_MEDICINE_AFTER_DAILY_COUNT_PATTERN = re.compile(
+    r"(?:每天|每日|一天|一日)\s*(?:要|需|需要)?\s*(?:吃|服用|服药)?\s*"
+    r"[零〇一二三四五六七八九十两\d]{1,3}\s*次[，,\s]*"
+    r"(?:吃|服用|服药)?\s*"
+    r"(?P<name>[\u4e00-\u9fffA-Za-z][\u4e00-\u9fffA-Za-z()（）-]{0,30})"
+)
+_MEDICINE_BEFORE_DAILY_PATTERN = re.compile(
+    r"^(?P<name>[\u4e00-\u9fffA-Za-z][\u4e00-\u9fffA-Za-z()（）-]{0,30})"
+    r"(?=(?:每天|每日|一天|一日))"
+)
 _MEDICINE_FALLBACK_STOP = re.compile(
     r"(?:吃药|服药|服用|提醒|长期|连续|每天|每日|一天|一次|一周|以后|今后|之后|开始"
     r"|早上|上午|中午|下午|晚上|睡前|饭前|饭后|记得|帮我|帮忙|需要|想要"
@@ -28,6 +38,13 @@ _THRESHOLD_PATTERN = re.compile(r"提前\s*(?P<days>\d{1,3})\s*天")
 _TIME_PATTERN = re.compile(
     r"(?P<hour>[零〇一二三四五六七八九十两\d]{1,3})点"
     r"(?:(?P<half>半)|(?P<minute>[零〇一二三四五六七八九十两\d]{1,3})分?)?"
+)
+_CLOCK_TIME_PATTERN = re.compile(
+    r"(?<!\d)(?P<hour>[01]?\d|2[0-3])[:：](?P<minute>[0-5]\d)(?!\d)"
+)
+_DAILY_COUNT_PATTERN = re.compile(
+    r"(?:每天|每日|一天|一日)\s*(?:要|需|需要)?\s*(?:吃|服用|服药)?\s*"
+    r"(?P<count>[零〇一二三四五六七八九十两\d]{1,3})\s*次"
 )
 _DESTINATION_PATTERN = re.compile(r"(?:到|去)\s*(?P<destination>[^，。,.；;]+)")
 _DIGITS = {
@@ -44,7 +61,17 @@ _DIGITS = {
     "八": 8,
     "九": 9,
 }
-_GENERIC_MEDICINE_NAMES = {"药", "药品", "药物"}
+_GENERIC_MEDICINE_NAMES = {
+    "药",
+    "药品",
+    "药物",
+    "吃",
+    "服用",
+    "服药",
+    "每次",
+    "一次",
+    "次",
+}
 _MEDICINE_NAME_MARKERS = (
     "药",
     "片",
@@ -108,31 +135,63 @@ class WorkflowTaskParser:
             ),
             None,
         )
+        if medicine_name is not None and re.fullmatch(
+            r"[零〇一二三四五六七八九十两\d]+次", medicine_name
+        ):
+            medicine_name = None
+        if medicine_name is None:
+            positioned_match = _MEDICINE_BEFORE_DAILY_PATTERN.search(text)
+            if positioned_match is None:
+                positioned_match = _MEDICINE_AFTER_DAILY_COUNT_PATTERN.search(text)
+            medicine_name = (
+                positioned_match.group("name") if positioned_match is not None else None
+            )
+            if medicine_name is not None and (
+                medicine_name.startswith(("每次", "一次"))
+                or _MEDICINE_FALLBACK_STOP.fullmatch(medicine_name) is not None
+                or medicine_name in _GENERIC_MEDICINE_NAMES
+            ):
+                medicine_name = None
         if medicine_name is None:
             medicine_name = _fallback_medicine_name(text)
         explicit_medication_request = any(
             marker in text for marker in ("吃药", "服药", "服用", "药")
         )
+        dose_match = _DOSE_PATTERN.search(text)
+        has_cycle_marker = any(
+            marker in text
+            for marker in ("每天", "每日", "一天", "一日", "长期", "连续")
+        )
         medication_request = explicit_medication_request or (
             bool(medication_matches) and looks_like_medicine_name(medicine_name)
+        ) or (
+            bool(medication_matches) and dose_match is not None and has_cycle_marker
+        ) or (
+            dose_match is not None
+            and has_cycle_marker
+            and any(marker in text for marker in ("吃", "服用", "服药"))
         )
         if not medication_request:
             return None
-        dose_match = _DOSE_PATTERN.search(text)
-        frequency = "daily" if any(
-            marker in text for marker in ("每天", "每日", "长期", "连续")
+        daily_count = _parse_daily_count(text)
+        frequency = "daily" if daily_count is not None or any(
+            marker in text
+            for marker in ("每天", "每日", "一天", "一日", "长期", "连续")
         ) else None
-        time_of_day = _parse_time_of_day(text)
+        times = _parse_times_of_day(text)
 
-        slots: dict[str, str] = {}
+        slots: dict[str, str | list[str]] = {}
         if medicine_name is not None:
             slots["medicine_name"] = medicine_name
         if dose_match is not None:
             slots["dose_text"] = dose_match.group(0).replace(" ", "")
         if frequency is not None:
             slots["frequency"] = frequency
-        if time_of_day is not None:
-            slots["time_of_day"] = time_of_day
+        if times:
+            # time_of_day remains for workflows created before multi-time support.
+            slots["time_of_day"] = times[0]
+            if len(times) > 1:
+                slots["times"] = times
 
         if dose_match is None or frequency is None:
             return _clarification(
@@ -140,7 +199,13 @@ class WorkflowTaskParser:
                 template_hint="medication_cycle",
                 slots=slots,
             )
-        if time_of_day is None:
+        if daily_count is not None and daily_count != len(times):
+            return _clarification(
+                f"请补充每天 {daily_count} 次的具体服药时间",
+                template_hint="medication_cycle",
+                slots=slots,
+            )
+        if not times:
             return _clarification(
                 "请补充服药时间",
                 template_hint="medication_cycle",
@@ -247,6 +312,7 @@ def _fallback_medicine_name(text: str) -> str | None:
     """
     stripped = _DOSE_PATTERN.sub(" ", text)
     stripped = _TIME_PATTERN.sub(" ", stripped)
+    stripped = _CLOCK_TIME_PATTERN.sub(" ", stripped)
     tokens: list[str] = []
     remainder = stripped
     while remainder:
@@ -277,7 +343,7 @@ def looks_like_medicine_name(value: object) -> bool:
 def _clarification(
     question: str,
     template_hint: str | None = None,
-    slots: dict[str, str] | None = None,
+    slots: dict[str, str | list[str]] | None = None,
 ) -> TaskSpec:
     return TaskSpec(
         title="提醒草稿",
@@ -325,24 +391,49 @@ def _parse_arrival_time(
     )
 
 
+def _parse_times_of_day(text: str) -> list[str]:
+    parsed: list[tuple[int, str]] = []
+    for time_match in _TIME_PATTERN.finditer(text):
+        hour = _chinese_number(time_match.group("hour"))
+        minute_group = time_match.group("minute")
+        minute = (
+            30
+            if time_match.group("half")
+            else _chinese_number(minute_group)
+            if minute_group
+            else 0
+        )
+        if hour is not None:
+            hour = _normalize_hour_for_period(text, time_match, hour)
+        if hour is None or minute is None or not 0 <= hour <= 23 or not 0 <= minute <= 59:
+            continue
+        parsed.append((time_match.start(), f"{hour:02d}:{minute:02d}"))
+    for time_match in _CLOCK_TIME_PATTERN.finditer(text):
+        parsed.append(
+            (
+                time_match.start(),
+                f"{int(time_match.group('hour')):02d}:{int(time_match.group('minute')):02d}",
+            )
+        )
+
+    times: list[str] = []
+    for _, value in sorted(parsed):
+        if value not in times:
+            times.append(value)
+    return sorted(times)
+
+
 def _parse_time_of_day(text: str) -> str | None:
-    time_match = _TIME_PATTERN.search(text)
-    if time_match is None:
+    times = _parse_times_of_day(text)
+    return times[0] if times else None
+
+
+def _parse_daily_count(text: str) -> int | None:
+    match = _DAILY_COUNT_PATTERN.search(text)
+    if match is None:
         return None
-    hour = _chinese_number(time_match.group("hour"))
-    minute_group = time_match.group("minute")
-    minute = (
-        30
-        if time_match.group("half")
-        else _chinese_number(minute_group)
-        if minute_group
-        else 0
-    )
-    if hour is not None:
-        hour = _normalize_hour_for_period(text, time_match, hour)
-    if hour is None or minute is None or not 0 <= hour <= 23 or not 0 <= minute <= 59:
-        return None
-    return f"{hour:02d}:{minute:02d}"
+    count = _chinese_number(match.group("count"))
+    return count if count is not None and count > 0 else None
 
 
 def _normalize_hour_for_period(text: str, time_match: re.Match[str], hour: int) -> int:

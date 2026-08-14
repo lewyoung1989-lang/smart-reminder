@@ -228,6 +228,39 @@ void main() {
     expect(confirmedId, 'workflow-draft-1');
   });
 
+  testWidgets('workflow draft displays all daily medication times', (
+    tester,
+  ) async {
+    final draft = WorkflowDraft(
+      id: 'workflow-draft-3-times',
+      title: '用药提醒',
+      templateHint: 'medication_cycle',
+      slots: const {
+        'medicine_name': '拜新同',
+        'dose_text': '1片',
+        'frequency': 'daily',
+        'time_of_day': '08:00',
+        'times': ['08:00', '13:00', '20:00'],
+      },
+      ambiguities: const [],
+      policyDecision: 'needs_confirmation',
+      riskLevel: 'R2',
+      policyQuestion: null,
+    );
+    await tester.pumpWidget(
+      testApp(
+        createDraft: (_) async => QuickCreateDraft.workflow(workflow: draft),
+      ),
+    );
+
+    await tester.enterText(find.byType(TextField), '每天三次吃拜新同');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, '继续'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('08:00、13:00、20:00'), findsOneWidget);
+  });
+
   testWidgets('answering a clarification refreshes the workflow draft', (
     tester,
   ) async {

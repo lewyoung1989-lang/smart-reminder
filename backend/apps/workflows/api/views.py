@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
 
 from django.db import transaction
 from django.utils import timezone
@@ -19,6 +18,10 @@ from apps.medication.services.workflow_plans import ensure_medication_plan_for_w
 from apps.workflows.domain.schemas import TaskSpec, WorkflowSpec
 from apps.workflows.models import TrustGrant, WorkflowDraft
 from apps.workflows.services.compiler import WorkflowCompileError, WorkflowCompiler
+from apps.workflows.services.medication_schedule import (
+    medication_times_from_workflow,
+    next_medication_run_at,
+)
 from apps.workflows.services.policy import PolicyDecision, evaluate
 from apps.workflows.services.smart_departure import initial_departure_run_at
 from apps.workflows.services.task_parser import WorkflowTaskParser
@@ -55,29 +58,11 @@ def _initial_next_run_at(workflow: WorkflowSpec, now):
     if workflow.template_key == "medicine_expiry":
         return now
     if workflow.template_key == "medication_cycle":
-        for node in workflow.nodes:
-            if (
-                node.id == "medication-schedule"
-                and node.type == "trigger.medication_schedule"
-            ):
-                time_of_day = node.config.get("time_of_day")
-                if not isinstance(time_of_day, str):
-                    break
-                try:
-                    hour_text, minute_text = time_of_day.split(":", maxsplit=1)
-                    hour, minute = int(hour_text), int(minute_text)
-                except ValueError:
-                    break
-                if not 0 <= hour <= 23 or not 0 <= minute <= 59:
-                    break
-                local_now = now.astimezone(ZoneInfo(workflow.timezone))
-                next_run_at = local_now.replace(
-                    hour=hour, minute=minute, second=0, microsecond=0
-                )
-                if next_run_at <= local_now:
-                    next_run_at += timedelta(days=1)
-                return next_run_at
-        raise ValueError("medication workflow is missing time_of_day")
+        return next_medication_run_at(
+            times=medication_times_from_workflow(workflow),
+            timezone_name=workflow.timezone,
+            after=now,
+        )
     if workflow.template_key == "smart_departure":
         return initial_departure_run_at(workflow)
     raise ValueError(f"unsupported workflow template: {workflow.template_key}")

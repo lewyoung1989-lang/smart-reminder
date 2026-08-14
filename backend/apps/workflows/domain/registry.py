@@ -70,7 +70,7 @@ WORKFLOW_TEMPLATES: Mapping[str, WorkflowTemplate] = MappingProxyType(
             required_slots=frozenset(
                 {"medicine_name", "dose_text", "frequency", "time_of_day"}
             ),
-            optional_slots=frozenset(),
+            optional_slots=frozenset({"times"}),
             capability_manifest=frozenset(
                 {"medicine.schedule", "notification.important"}
             ),
@@ -111,6 +111,7 @@ WORKFLOW_TEMPLATES: Mapping[str, WorkflowTemplate] = MappingProxyType(
                 SlotConfigBinding("dose_text", "medication-schedule", "dose_text"),
                 SlotConfigBinding("frequency", "medication-schedule", "frequency"),
                 SlotConfigBinding("time_of_day", "medication-schedule", "time_of_day"),
+                SlotConfigBinding("times", "medication-schedule", "times"),
             ),
         ),
         "medicine_expiry": WorkflowTemplate(

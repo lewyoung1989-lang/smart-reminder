@@ -28,6 +28,54 @@ def test_parses_complete_medication_schedule():
     assert task.ambiguities == []
 
 
+def test_parses_three_daily_medication_times_without_brand_hardcoding():
+    task = parse("每天早上8点、中午1点、晚上8点吃拜新同1片")
+
+    assert task.template_hint == "medication_cycle"
+    assert task.slots == {
+        "medicine_name": "拜新同",
+        "dose_text": "1片",
+        "frequency": "daily",
+        "time_of_day": "08:00",
+        "times": ["08:00", "13:00", "20:00"],
+    }
+    assert task.ambiguities == []
+
+
+def test_parses_three_colon_formatted_daily_medication_times():
+    task = parse("每天3次，08:00、13:00、20:00吃拜新同1片")
+
+    assert task.slots["times"] == ["08:00", "13:00", "20:00"]
+    assert task.ambiguities == []
+
+
+def test_asks_for_exact_times_when_only_daily_dose_count_is_given():
+    task = parse("每天3次吃拜新同1片")
+
+    assert task.template_hint == "medication_cycle"
+    assert task.slots == {
+        "medicine_name": "拜新同",
+        "dose_text": "1片",
+        "frequency": "daily",
+    }
+    assert task.ambiguities == ["请补充每天 3 次的具体服药时间"]
+
+
+def test_asks_for_all_times_when_daily_count_and_times_do_not_match():
+    task = parse("每天3次，早上8点、晚上8点吃拜新同1片")
+
+    assert task.slots["times"] == ["08:00", "20:00"]
+    assert task.ambiguities == ["请补充每天 3 次的具体服药时间"]
+
+
+def test_leading_brand_name_is_not_confused_with_daily_count():
+    task = parse("拜新同一天吃三次，每次一片")
+
+    assert task.slots["medicine_name"] == "拜新同"
+    assert task.slots["dose_text"] == "一片"
+    assert task.ambiguities == ["请补充每天 3 次的具体服药时间"]
+
+
 def test_parses_medication_when_dose_immediately_follows_the_name():
     task = parse("每天早上八点服药阿莫西林0.5g")
 

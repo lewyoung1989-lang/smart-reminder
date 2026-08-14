@@ -11,6 +11,10 @@ from apps.medication.models import MedicationPlan
 from apps.medication.services.occurrences import materialize_occurrences
 from apps.workflows.models import WorkflowRun
 from apps.workflows.domain.schemas import WorkflowSpec
+from apps.workflows.services.medication_schedule import (
+    medication_times_from_config,
+    next_daily_occurrences,
+)
 
 from .views import _initial_next_run_at
 
@@ -108,14 +112,27 @@ def _execution_message(status_value: str) -> str:
 def _notification_schedule(rule: ReminderRule) -> dict | None:
     slots = _slots(rule)
     if rule.template_key == "medication_cycle":
-        time_of_day = slots.get("time_of_day")
-        if isinstance(time_of_day, str) and rule.next_run_at is not None:
-            return {
+        try:
+            times = medication_times_from_config(slots)
+        except ValueError:
+            times = []
+        if times and rule.next_run_at is not None:
+            scheduled_times = next_daily_occurrences(
+                times=times,
+                timezone_name=rule.timezone,
+                after=timezone.now(),
+            )
+            schedule = {
                 "scheduled_at": rule.next_run_at.isoformat(),
                 "repeat": "daily",
                 "title": rule.title,
                 "timezone": rule.timezone,
             }
+            if len(scheduled_times) > 1:
+                schedule["scheduled_times"] = [
+                    value.isoformat() for value in scheduled_times
+                ]
+            return schedule
     if rule.next_run_at is not None:
         return {
             "scheduled_at": rule.next_run_at.isoformat(),
@@ -172,9 +189,12 @@ def _reminder_label(rule: ReminderRule) -> str:
     slots = _slots(rule)
     if rule.template_key == "medication_cycle":
         frequency = slots.get("frequency")
-        time_of_day = slots.get("time_of_day")
-        if frequency == "daily" and isinstance(time_of_day, str):
-            return f"每天 {time_of_day} 通知提醒"
+        try:
+            times = medication_times_from_config(slots)
+        except ValueError:
+            times = []
+        if frequency == "daily" and times:
+            return f"每天 {'、'.join(times)} 通知提醒"
         if frequency == "daily":
             return "每天通知提醒"
         return "按用药周期通知提醒"

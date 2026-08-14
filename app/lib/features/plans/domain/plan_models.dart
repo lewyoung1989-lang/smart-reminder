@@ -14,17 +14,23 @@ enum PlanExecutionStatus {
 enum PlanRepeat { none, daily }
 
 class PlanNotificationSchedule {
-  const PlanNotificationSchedule({
-    required this.scheduledAt,
+  PlanNotificationSchedule({
+    DateTime? scheduledAt,
+    List<DateTime>? scheduledTimes,
     required this.repeat,
     required this.title,
     required this.timezone,
-  });
+  })  : assert(scheduledAt != null || scheduledTimes != null),
+        scheduledTimes = List.unmodifiable(
+          scheduledTimes ?? <DateTime>[scheduledAt!],
+        );
 
-  final DateTime scheduledAt;
+  final List<DateTime> scheduledTimes;
   final PlanRepeat repeat;
   final String title;
   final String timezone;
+
+  DateTime get scheduledAt => scheduledTimes.first;
 }
 
 class PlanSummary {

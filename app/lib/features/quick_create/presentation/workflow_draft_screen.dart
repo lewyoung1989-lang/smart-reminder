@@ -159,8 +159,7 @@ class _WorkflowDraftScreenState extends State<WorkflowDraftScreen> {
                   ? AppStatusSeverity.info
                   : AppStatusSeverity.warning,
               title: draft.canConfirm ? '请确认计划内容' : '请补充计划信息',
-              message:
-                  draft.canConfirm ? '请检查计划内容后确认创建' : '补充信息后再确认创建',
+              message: draft.canConfirm ? '请检查计划内容后确认创建' : '补充信息后再确认创建',
             ),
             const SizedBox(height: AppSpacing.xl),
             if (_isEditing) ...[
@@ -204,14 +203,14 @@ class _WorkflowDraftScreenState extends State<WorkflowDraftScreen> {
                 const SizedBox(height: AppSpacing.lg),
                 AppPropertyRow(
                   label: '时间',
-                  value: Text(draft.timeOfDay ?? '待补充'),
+                  value: Text(draft.timeLabel ?? '待补充'),
                 ),
               ],
               const SizedBox(height: AppSpacing.lg),
               AppPropertyRow(
                 label: '风险等级',
-                value:
-                    Text(draft.riskLevel == 'R2' ? 'R2（每次确认）' : draft.riskLevel),
+                value: Text(
+                    draft.riskLevel == 'R2' ? 'R2（每次确认）' : draft.riskLevel),
               ),
               const SizedBox(height: AppSpacing.lg),
               AppPropertyRow(
@@ -298,8 +297,9 @@ class _WorkflowDraftScreenState extends State<WorkflowDraftScreen> {
                     const SizedBox(width: AppSpacing.md),
                     Expanded(
                       child: FilledButton.icon(
-                        onPressed:
-                            draft.canConfirm && !_isConfirming ? _confirm : null,
+                        onPressed: draft.canConfirm && !_isConfirming
+                            ? _confirm
+                            : null,
                         icon: _isConfirming
                             ? const SizedBox.square(
                                 dimension: 18,

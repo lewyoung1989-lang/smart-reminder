@@ -7,6 +7,10 @@ from apps.medicines.models import ExpiryAlertState, InventoryBatch
 from apps.medicines.services.expiry_alerts import refresh_expiry_alerts
 from apps.reminders.models import ReminderRule
 from apps.workflows.domain.schemas import WorkflowSpec
+from apps.workflows.services.medication_schedule import (
+    medication_times_from_workflow,
+    next_medication_run_at,
+)
 from apps.workflows.models import NotificationOutbox, WorkflowRun
 from apps.workflows.services.smart_departure import (
     build_departure_payload,
@@ -21,18 +25,6 @@ def _enqueue_outbox(outbox_id):
     from apps.workflows.tasks import enqueue_outbox
 
     enqueue_outbox.delay(str(outbox_id))
-
-
-def _next_daily_run_at(rule, scheduled_for):
-    rule_timezone = ZoneInfo(rule.timezone)
-    local_scheduled_for = scheduled_for.astimezone(rule_timezone)
-    next_local_date = local_scheduled_for.date() + timedelta(days=1)
-    next_local = datetime.combine(
-        next_local_date,
-        local_scheduled_for.timetz().replace(tzinfo=None),
-        tzinfo=rule_timezone,
-    )
-    return next_local.astimezone(datetime_timezone.utc)
 
 
 def _next_run_at(rule, scheduled_for):
@@ -52,7 +44,11 @@ def _next_run_at(rule, scheduled_for):
             ):
                 frequency = node.config.get("frequency")
                 if frequency == "daily":
-                    return _next_daily_run_at(rule, scheduled_for)
+                    return next_medication_run_at(
+                        times=medication_times_from_workflow(workflow),
+                        timezone_name=rule.timezone,
+                        after=scheduled_for,
+                    )
                 raise ValueError(
                     f"unsupported medication frequency: {frequency}"
                 )

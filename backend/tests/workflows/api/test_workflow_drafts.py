@@ -168,6 +168,29 @@ def test_medication_confirmation_links_inventory_and_creates_occurrences(
 
 
 @pytest.mark.django_db
+def test_three_times_daily_confirmation_creates_one_plan_and_90_occurrences(
+    api_client, user, mocker
+):
+    medicine = MedicineItem.objects.create(owner=user, name="拜新同")
+    mocker.patch("apps.workflows.api.views.timezone.now", return_value=NOW)
+    api_client.force_authenticate(user)
+    created = create_draft(
+        api_client,
+        "每天3次，08:00、13:00、20:00吃拜新同1片",
+    ).json()
+
+    response = api_client.post(f"{CREATE_URL}/{created['id']}/confirm")
+
+    assert response.status_code == 201
+    plan = MedicationPlan.objects.get(source_workflow_draft_id=created["id"])
+    assert plan.medicine == medicine
+    assert plan.schedule_json == {"times": ["08:00", "13:00", "20:00"]}
+    assert MedicationOccurrence.objects.filter(plan=plan).count() == 90
+    rule = ReminderRule.objects.get(id=response.json()["reminder_id"])
+    assert rule.next_run_at == datetime.fromisoformat("2026-08-08T20:00:00+08:00")
+
+
+@pytest.mark.django_db
 def test_legacy_reminder_api_hides_and_refuses_workflow_rules(api_client, user):
     api_client.force_authenticate(user)
     created = create_draft(api_client).json()

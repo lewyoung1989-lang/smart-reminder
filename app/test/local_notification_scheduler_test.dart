@@ -164,6 +164,37 @@ void main() {
 
     expect(gateway.daily.single.title, '用药提醒');
     expect(gateway.daily.single.date.hour, 20);
-    expect(gateway.cancelled.single, gateway.daily.single.id);
+    expect(gateway.cancelled, contains(gateway.daily.single.id));
+  });
+
+  test('schedules and cancels three daily plan notifications', () async {
+    final gateway = RecordingNotificationGateway();
+    final scheduler = LocalNotificationScheduler(
+      gateway: gateway,
+      now: () => now,
+    );
+
+    await scheduler.schedulePlan(
+      planId: 'plan-3-times',
+      schedule: PlanNotificationSchedule(
+        scheduledTimes: [
+          DateTime(2026, 8, 5, 8),
+          DateTime(2026, 8, 4, 13),
+          DateTime(2026, 8, 4, 20),
+        ],
+        repeat: PlanRepeat.daily,
+        title: '拜新同用药提醒',
+        timezone: 'Asia/Shanghai',
+      ),
+    );
+    await scheduler.cancelPlan(planId: 'plan-3-times');
+
+    expect(gateway.permissionRequestCount, 1);
+    expect(gateway.daily.map((item) => item.date.hour), [8, 13, 20]);
+    expect(gateway.daily.map((item) => item.id).toSet(), hasLength(3));
+    expect(
+      gateway.daily.every((item) => gateway.cancelled.contains(item.id)),
+      isTrue,
+    );
   });
 }

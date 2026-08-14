@@ -16,6 +16,11 @@ def ensure_medication_plan_for_workflow(*, draft, task, now):
     dosage_text = slots["dose_text"]
     dose_quantity, dose_unit = parse_structured_dose(dosage_text)
     medicine = _resolve_medicine(draft.user, medicine_name)
+    times = slots.get("times")
+    if not isinstance(times, list) or not all(
+        isinstance(value, str) for value in times
+    ):
+        times = [slots["time_of_day"]]
     plan = MedicationPlan(
         owner=draft.user,
         medicine=medicine,
@@ -25,7 +30,7 @@ def ensure_medication_plan_for_workflow(*, draft, task, now):
         dose_quantity=dose_quantity,
         dose_unit=dose_unit,
         timezone="Asia/Shanghai",
-        schedule_json={"times": [slots["time_of_day"]]},
+        schedule_json={"times": times},
     )
     plan.full_clean()
     plan.save()
