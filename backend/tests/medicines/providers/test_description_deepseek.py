@@ -42,6 +42,10 @@ def test_parses_description_as_strict_draft_without_executing():
                 "production_date": None,
                 "expiry_date": "2027-01-01",
                 "quantity": 2,
+                "package_unit": "盒",
+                "units_per_package": 20,
+                "unit_name": "粒",
+                "loose_units": 0,
                 "ambiguities": ["批号未提供"],
             }
         )
@@ -58,6 +62,9 @@ def test_parses_description_as_strict_draft_without_executing():
 
     assert draft.medicine_name == "布洛芬胶囊"
     assert draft.quantity == 2
+    assert draft.package_unit == "盒"
+    assert draft.units_per_package == 20
+    assert draft.unit_name == "粒"
     assert draft.manufacturer == "华北制药股份有限公司"
     assert draft.expiry_date == date(2027, 1, 1)
     assert transport.payload["response_format"] == {"type": "json_object"}
@@ -65,6 +72,7 @@ def test_parses_description_as_strict_draft_without_executing():
     assert "不执行任何写入" in transport.payload["messages"][0]["content"]
     assert "商品名、品牌名或通用名" in transport.payload["messages"][0]["content"]
     assert "quantity 只表示完整包装数" in transport.payload["messages"][0]["content"]
+    assert "units_per_package 表示每个完整包装含量" in transport.payload["messages"][0]["content"]
     assert "不要为未提供的可选字段逐项追问" in transport.payload["messages"][0]["content"]
 
 

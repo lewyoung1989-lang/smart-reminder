@@ -1,4 +1,5 @@
 from datetime import timedelta
+from decimal import Decimal
 from functools import cached_property
 from zoneinfo import ZoneInfo
 
@@ -66,6 +67,32 @@ class InventoryBatchCreateSerializer(serializers.Serializer):
     production_date = serializers.DateField(required=False, allow_null=True)
     expiry_date = serializers.DateField(required=False, allow_null=True)
     quantity = serializers.IntegerField(required=False, min_value=1, max_value=9999)
+    package_unit = serializers.CharField(
+        max_length=16,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+    )
+    units_per_package = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=3,
+        required=False,
+        allow_null=True,
+        min_value=Decimal("0.001"),
+    )
+    unit_name = serializers.CharField(
+        max_length=16,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+    )
+    loose_units = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=3,
+        required=False,
+        min_value=Decimal("0"),
+        default=Decimal("0"),
+    )
 
     def validate(self, attrs):
         production_date = attrs.get("production_date")
@@ -73,6 +100,25 @@ class InventoryBatchCreateSerializer(serializers.Serializer):
         if production_date and expiry_date and expiry_date < production_date:
             raise serializers.ValidationError(
                 {"expiry_date": ["有效期不能早于生产日期。"]}
+            )
+        precision_values = (
+            bool(attrs.get("package_unit", "")),
+            attrs.get("units_per_package") is not None,
+            bool(attrs.get("unit_name", "")),
+        )
+        if any(precision_values) and not all(precision_values):
+            raise serializers.ValidationError(
+                {"units_per_package": ["包装单位、每包装含量和计量单位必须同时填写。"]}
+            )
+        units_per_package = attrs.get("units_per_package")
+        loose_units = attrs.get("loose_units", Decimal("0"))
+        if units_per_package is None and loose_units != Decimal("0"):
+            raise serializers.ValidationError(
+                {"loose_units": ["填写已开封剩余量前需要先填写精确包装信息。"]}
+            )
+        if units_per_package is not None and loose_units >= units_per_package:
+            raise serializers.ValidationError(
+                {"loose_units": ["已开封剩余量必须小于每包装含量。"]}
             )
         return attrs
 
@@ -122,6 +168,10 @@ class InventoryBatchCreateSerializer(serializers.Serializer):
             production_date=self.validated_data.get("production_date"),
             expiry_date=self.validated_data.get("expiry_date"),
             quantity=self.validated_data.get("quantity", 1),
+            package_unit=self.validated_data.get("package_unit", "").strip(),
+            units_per_package=self.validated_data.get("units_per_package"),
+            unit_name=self.validated_data.get("unit_name", "").strip(),
+            loose_units=self.validated_data.get("loose_units", Decimal("0")),
             created_by=user,
             updated_by=user,
         )
@@ -174,12 +224,19 @@ class InventoryBatchSerializer(serializers.ModelSerializer):
             "opened_use_before",
             "effective_deadline",
             "quantity",
+            "package_unit",
+            "units_per_package",
+            "unit_name",
+            "loose_units",
+            "total_remaining_units",
             "expiry_status",
             "days_until_expiry",
             "scope",
             "can_delete",
             "version",
         )
+
+    total_remaining_units = serializers.SerializerMethodField()
 
     @cached_property
     def today(self):
@@ -232,6 +289,10 @@ class InventoryBatchSerializer(serializers.ModelSerializer):
             and membership.family_id == batch.medicine.family_id
             and membership.role == "admin"
         )
+
+    def get_total_remaining_units(self, batch):
+        value = batch.total_remaining_units
+        return format(value.normalize(), "f") if value is not None else None
 
 
 class MedicinePhotoUploadSerializer(serializers.Serializer):

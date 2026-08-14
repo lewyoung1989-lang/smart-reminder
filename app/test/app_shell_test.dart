@@ -573,8 +573,10 @@ class _RecordingActionCenterActions implements ActionCenterActions {
   final handledBatches = <String>[];
 
   @override
-  Future<void> markMedicationTaken(String occurrenceId) async {
+  Future<MedicationActionResult> markMedicationTaken(
+      String occurrenceId) async {
     takenOccurrences.add(occurrenceId);
+    return const MedicationActionResult(message: '已记录服药');
   }
 
   @override

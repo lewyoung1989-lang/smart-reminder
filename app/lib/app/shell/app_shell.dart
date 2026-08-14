@@ -278,8 +278,8 @@ class _AppShellState extends State<AppShell> {
 
     try {
       if (target.resource == 'medication_occurrence') {
-        await actions.markMedicationTaken(target.id);
-        _showSnackBar('已记录服药');
+        final result = await actions.markMedicationTaken(target.id);
+        _showSnackBar(result.message);
       } else if (target.resource == 'inventory_batch') {
         await actions.handleExpiryBatch(target.id);
         _showSnackBar('已处理有效期提醒');

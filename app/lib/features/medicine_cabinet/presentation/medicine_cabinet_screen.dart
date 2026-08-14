@@ -68,6 +68,7 @@ class MedicineCabinetScreen extends StatefulWidget {
 }
 
 class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
+  final _searchController = TextEditingController();
   late MedicineRepository _repository;
   MedicineCollection? _collection;
   MedicineDetail? _selectedDetail;
@@ -92,6 +93,12 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
     _repository = widget.repository ??
         ApiMedicineRepository.fromLoader(widget.listBatches!);
     _load();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   @override
@@ -210,19 +217,28 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
 
   List<MedicineSummary> _filtered(List<MedicineSummary> medicines) {
     final query = _query.trim().toLowerCase();
-    return medicines
-        .where((medicine) => switch (_filter) {
-              _ExpiryFilter.all => true,
-              _ExpiryFilter.expiring =>
-                medicine.status == MedicineStatus.expiring,
-              _ExpiryFilter.expired =>
-                medicine.status == MedicineStatus.expired,
-            })
-        .where((medicine) =>
-            query.isEmpty ||
-            medicine.name.toLowerCase().contains(query) ||
-            medicine.specification.toLowerCase().contains(query))
-        .toList();
+    return _filterByExpiry(_filterByQuery(medicines, query), _filter).toList();
+  }
+
+  Iterable<MedicineSummary> _filterByQuery(
+    Iterable<MedicineSummary> medicines,
+    String query,
+  ) {
+    if (query.isEmpty) return medicines;
+    return medicines.where((medicine) =>
+        medicine.name.toLowerCase().contains(query) ||
+        medicine.specification.toLowerCase().contains(query));
+  }
+
+  Iterable<MedicineSummary> _filterByExpiry(
+    Iterable<MedicineSummary> medicines,
+    _ExpiryFilter filter,
+  ) {
+    return medicines.where((medicine) => switch (filter) {
+          _ExpiryFilter.all => true,
+          _ExpiryFilter.expiring => medicine.status == MedicineStatus.expiring,
+          _ExpiryFilter.expired => medicine.status == MedicineStatus.expired,
+        });
   }
 
   void _setFilter(_ExpiryFilter filter) {
@@ -243,6 +259,11 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
     if (MediaQuery.sizeOf(context).width >= AppSpacing.breakpointExpanded) {
       _loadSelectedDetail();
     }
+  }
+
+  void _clearQuery() {
+    _searchController.clear();
+    _setQuery('');
   }
 
   void _reconcileSelection() {
@@ -470,10 +491,18 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
             child: TextField(
               key: const Key('medicine-search'),
+              controller: _searchController,
               onChanged: _setQuery,
               decoration: InputDecoration(
                 hintText: '搜索药品或规格',
                 prefixIcon: const Icon(LucideIcons.search, size: 20),
+                suffixIcon: _query.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: '清除搜索',
+                        onPressed: _clearQuery,
+                        icon: const Icon(LucideIcons.x, size: 20),
+                      ),
                 filled: true,
                 fillColor: Theme.of(context).colorScheme.surfaceContainer,
                 contentPadding: const EdgeInsets.symmetric(vertical: 10),
@@ -519,12 +548,16 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
   List<AppSegment<_ExpiryFilter>> _filterOptions(
     MedicineCollection collection,
   ) {
+    final queryMatches = _filterByQuery(
+      collection.items,
+      _query.trim().toLowerCase(),
+    ).toList();
     final counts = <_ExpiryFilter, int>{
-      _ExpiryFilter.all: collection.items.length,
-      _ExpiryFilter.expiring: collection.items
+      _ExpiryFilter.all: queryMatches.length,
+      _ExpiryFilter.expiring: queryMatches
           .where((item) => item.status == MedicineStatus.expiring)
           .length,
-      _ExpiryFilter.expired: collection.items
+      _ExpiryFilter.expired: queryMatches
           .where((item) => item.status == MedicineStatus.expired)
           .length,
     };
@@ -734,6 +767,10 @@ class MedicineBatchInput {
     this.batchNumber = '',
     this.productionDate,
     this.expiryDate,
+    this.packageUnit = '',
+    this.unitsPerPackage,
+    this.unitName = '',
+    this.looseUnits = 0,
     this.scope = MedicineCabinetScope.personal,
   });
 
@@ -745,6 +782,10 @@ class MedicineBatchInput {
   final DateTime? productionDate;
   final DateTime? expiryDate;
   final int quantity;
+  final String packageUnit;
+  final double? unitsPerPackage;
+  final String unitName;
+  final double looseUnits;
   final MedicineCabinetScope scope;
 }
 
@@ -813,6 +854,11 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
   final _productionDateController = TextEditingController();
   final _expiryDateController = TextEditingController();
   final _quantityController = TextEditingController(text: '1');
+  final _packageUnitController = TextEditingController(text: '盒');
+  final _unitsPerPackageController = TextEditingController();
+  final _unitNameController = TextEditingController(text: '片');
+  final _looseUnitsController = TextEditingController(text: '0');
+  bool _tracksPreciseInventory = false;
   bool _isSaving = false;
   bool _isParsing = false;
   bool _isVoiceActionInFlight = false;
@@ -855,6 +901,10 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
     _productionDateController.dispose();
     _expiryDateController.dispose();
     _quantityController.dispose();
+    _packageUnitController.dispose();
+    _unitsPerPackageController.dispose();
+    _unitNameController.dispose();
+    _looseUnitsController.dispose();
     super.dispose();
   }
 
@@ -906,7 +956,19 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
       if (draft.quantity != null) {
         _quantityController.text = draft.quantity!.toString();
       }
+      final hasPreciseInventory = draft.packageUnit != null &&
+          draft.unitsPerPackage != null &&
+          draft.unitName != null;
+      if (hasPreciseInventory) {
+        _packageUnitController.text = draft.packageUnit!;
+        _unitsPerPackageController.text =
+            _formatInventoryInput(draft.unitsPerPackage!);
+        _unitNameController.text = draft.unitName!;
+        _looseUnitsController.text =
+            _formatInventoryInput(draft.looseUnits ?? 0);
+      }
       setState(() {
+        if (hasPreciseInventory) _tracksPreciseInventory = true;
         _lastParsedDescription = text;
         _ambiguities = draft.ambiguities;
         _error = null;
@@ -999,6 +1061,12 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
       return;
     }
     final quantity = int.tryParse(_quantityController.text.trim());
+    final unitsPerPackage = _tracksPreciseInventory
+        ? double.tryParse(_unitsPerPackageController.text.trim())
+        : null;
+    final looseUnits = _tracksPreciseInventory
+        ? double.tryParse(_looseUnitsController.text.trim())
+        : 0.0;
     final productionDate = _parseDateInput(_productionDateController.text);
     final expiryDate = _parseDateInput(_expiryDateController.text);
     final name = _nameController.text.trim();
@@ -1008,6 +1076,21 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
     }
     if (quantity == null || quantity < 1) {
       setState(() => _error = '数量需要是大于 0 的整数');
+      return;
+    }
+    if (_tracksPreciseInventory &&
+        (_packageUnitController.text.trim().isEmpty ||
+            unitsPerPackage == null ||
+            unitsPerPackage <= 0 ||
+            _unitNameController.text.trim().isEmpty)) {
+      setState(() => _error = '请完整填写包装单位、每包装含量和计量单位');
+      return;
+    }
+    if (_tracksPreciseInventory &&
+        (looseUnits == null ||
+            looseUnits < 0 ||
+            looseUnits >= unitsPerPackage!)) {
+      setState(() => _error = '已开封剩余量需要大于等于 0，且小于每包装含量');
       return;
     }
     if (_productionDateController.text.trim().isNotEmpty &&
@@ -1039,6 +1122,12 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
         productionDate: productionDate,
         expiryDate: expiryDate,
         quantity: quantity,
+        packageUnit:
+            _tracksPreciseInventory ? _packageUnitController.text.trim() : '',
+        unitsPerPackage: unitsPerPackage,
+        unitName:
+            _tracksPreciseInventory ? _unitNameController.text.trim() : '',
+        looseUnits: looseUnits ?? 0,
         scope: widget.scope,
       ));
       if (!mounted) return;
@@ -1350,6 +1439,77 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
                                   ),
                                 ),
                               ),
+                              SwitchListTile.adaptive(
+                                key: const Key('medicine-entry-precise-toggle'),
+                                contentPadding: EdgeInsets.zero,
+                                minVerticalPadding: AppSpacing.sm,
+                                title: const Text('精确剩余量'),
+                                subtitle: const Text('每包装含量与已开封余量'),
+                                value: _tracksPreciseInventory,
+                                onChanged: (value) => setState(
+                                  () => _tracksPreciseInventory = value,
+                                ),
+                              ),
+                              if (_tracksPreciseInventory) ...[
+                                _EntryField(
+                                  label: '包装单位',
+                                  required: true,
+                                  child: TextField(
+                                    key: const Key(
+                                        'medicine-entry-package-unit'),
+                                    controller: _packageUnitController,
+                                    textInputAction: TextInputAction.next,
+                                    decoration: const InputDecoration(
+                                      hintText: '例如：盒、瓶或袋',
+                                    ),
+                                  ),
+                                ),
+                                _EntryField(
+                                  label: '每包装含量',
+                                  required: true,
+                                  child: TextField(
+                                    key: const Key(
+                                        'medicine-entry-units-per-package'),
+                                    controller: _unitsPerPackageController,
+                                    keyboardType:
+                                        const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
+                                    textInputAction: TextInputAction.next,
+                                    decoration: const InputDecoration(
+                                      hintText: '例如：7',
+                                    ),
+                                  ),
+                                ),
+                                _EntryField(
+                                  label: '计量单位',
+                                  required: true,
+                                  child: TextField(
+                                    key: const Key('medicine-entry-unit-name'),
+                                    controller: _unitNameController,
+                                    textInputAction: TextInputAction.next,
+                                    decoration: const InputDecoration(
+                                      hintText: '例如：片、粒或毫升',
+                                    ),
+                                  ),
+                                ),
+                                _EntryField(
+                                  label: '已开封剩余量',
+                                  optional: true,
+                                  child: TextField(
+                                    key:
+                                        const Key('medicine-entry-loose-units'),
+                                    controller: _looseUnitsController,
+                                    keyboardType:
+                                        const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
+                                    decoration: const InputDecoration(
+                                      hintText: '未开封请填 0',
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -1400,6 +1560,13 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
     );
   }
 }
+
+String _formatInventoryInput(double value) => value == value.roundToDouble()
+    ? value.toInt().toString()
+    : value
+        .toStringAsFixed(3)
+        .replaceFirst(RegExp(r'0+$'), '')
+        .replaceFirst(RegExp(r'\.$'), '');
 
 class _EntrySection extends StatelessWidget {
   const _EntrySection({required this.title, required this.child});
@@ -1663,7 +1830,7 @@ class _MedicineRow extends StatelessWidget {
     final status = medicineStatusLabel(medicine.status);
     final subtitle = [
       if (medicine.specification.trim().isNotEmpty) medicine.specification,
-      '${medicine.totalQuantity} 件',
+      medicine.inventoryLabel,
       _formatExpiry(medicine.nearestExpiry),
     ].join(' · ');
 

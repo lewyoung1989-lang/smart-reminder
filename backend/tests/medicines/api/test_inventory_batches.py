@@ -151,6 +151,10 @@ def test_inventory_batch_create_adds_owned_medicine_and_refreshes_expiry_alert(
             "production_date": "2026-01-01",
             "expiry_date": "2027-01-01",
             "quantity": 2,
+            "package_unit": "盒",
+            "units_per_package": "20",
+            "unit_name": "粒",
+            "loose_units": "3",
         },
         format="json",
     )
@@ -162,6 +166,11 @@ def test_inventory_batch_create_adds_owned_medicine_and_refreshes_expiry_alert(
     assert payload["manufacturer"] == "华北制药股份有限公司"
     assert payload["batch_number"] == "LOT-88"
     assert payload["quantity"] == 2
+    assert payload["package_unit"] == "盒"
+    assert payload["units_per_package"] == "20.000"
+    assert payload["unit_name"] == "粒"
+    assert payload["loose_units"] == "3.000"
+    assert payload["total_remaining_units"] == "43"
     medicine = MedicineItem.objects.get(owner=user)
     assert medicine.name == "布洛芬胶囊"
     assert medicine.manufacturer == "华北制药股份有限公司"

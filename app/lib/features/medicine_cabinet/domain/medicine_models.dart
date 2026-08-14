@@ -15,6 +15,8 @@ class MedicineSummary {
     this.manufacturer = '',
     this.photoUrl,
     required this.totalQuantity,
+    this.totalRemainingUnits,
+    this.unitName = '',
     required this.nearestExpiry,
     required this.status,
   });
@@ -25,8 +27,14 @@ class MedicineSummary {
   final String manufacturer;
   final String? photoUrl;
   final int totalQuantity;
+  final double? totalRemainingUnits;
+  final String unitName;
   final DateTime? nearestExpiry;
   final MedicineStatus status;
+
+  String get inventoryLabel => totalRemainingUnits == null || unitName.isEmpty
+      ? '$totalQuantity 件'
+      : '${_formatInventoryNumber(totalRemainingUnits!)} $unitName';
 }
 
 class MedicineBatch {
@@ -37,6 +45,11 @@ class MedicineBatch {
     required this.productionDate,
     required this.expiresOn,
     required this.quantity,
+    this.packageUnit = '',
+    this.unitsPerPackage,
+    this.unitName = '',
+    this.looseUnits = 0,
+    this.totalRemainingUnits,
     required this.sourceLabel,
     this.canDelete = true,
     this.version = 1,
@@ -48,10 +61,31 @@ class MedicineBatch {
   final DateTime? productionDate;
   final DateTime? expiresOn;
   final int quantity;
+  final String packageUnit;
+  final double? unitsPerPackage;
+  final String unitName;
+  final double looseUnits;
+  final double? totalRemainingUnits;
   final String sourceLabel;
   final bool canDelete;
   final int version;
+
+  String get inventoryLabel {
+    if (unitsPerPackage == null || packageUnit.isEmpty || unitName.isEmpty) {
+      return '$quantity 件';
+    }
+    final packages = '$quantity $packageUnit';
+    if (looseUnits <= 0) return packages;
+    return '$packages + ${_formatInventoryNumber(looseUnits)} $unitName';
+  }
 }
+
+String _formatInventoryNumber(double value) => value == value.roundToDouble()
+    ? value.toInt().toString()
+    : value
+        .toStringAsFixed(3)
+        .replaceFirst(RegExp(r'0+$'), '')
+        .replaceFirst(RegExp(r'\.$'), '');
 
 class MedicineDetail {
   MedicineDetail({

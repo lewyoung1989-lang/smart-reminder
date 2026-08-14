@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 from datetime import timedelta
 
 from django.conf import settings
@@ -60,6 +61,19 @@ class InventoryBatch(models.Model):
     opened_at = models.DateField(null=True, blank=True)
     opened_shelf_life_days = models.PositiveIntegerField(null=True, blank=True)
     quantity = models.PositiveIntegerField(default=1)
+    package_unit = models.CharField(max_length=16, blank=True)
+    units_per_package = models.DecimalField(
+        max_digits=10,
+        decimal_places=3,
+        null=True,
+        blank=True,
+    )
+    unit_name = models.CharField(max_length=16, blank=True)
+    loose_units = models.DecimalField(
+        max_digits=12,
+        decimal_places=3,
+        default=Decimal("0"),
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -87,14 +101,46 @@ class InventoryBatch(models.Model):
                 ),
                 name="inventory_batch_opened_lifetime_consistent",
             ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        package_unit="",
+                        units_per_package__isnull=True,
+                        unit_name="",
+                        loose_units=0,
+                    )
+                    | (
+                        ~models.Q(package_unit="")
+                        & models.Q(units_per_package__gt=0)
+                        & ~models.Q(unit_name="")
+                        & models.Q(loose_units__gte=0)
+                    )
+                ),
+                name="inventory_batch_precision_fields_consistent",
+            ),
         ]
 
     def clean(self):
         super().clean()
+        errors = {}
         if (self.opened_at is None) != (self.opened_shelf_life_days is None):
-            raise ValidationError(
-                {"opened_shelf_life_days": "开封日期和开封后可用天数必须同时填写。"}
-            )
+            errors["opened_shelf_life_days"] = "开封日期和开封后可用天数必须同时填写。"
+        precision_values = (
+            bool(self.package_unit),
+            self.units_per_package is not None,
+            bool(self.unit_name),
+        )
+        if any(precision_values) and not all(precision_values):
+            errors["units_per_package"] = "包装单位、每包装含量和计量单位必须同时填写。"
+        if self.units_per_package is not None:
+            if self.units_per_package <= 0:
+                errors["units_per_package"] = "每包装含量必须大于 0。"
+            elif self.loose_units >= self.units_per_package:
+                errors["loose_units"] = "已开封剩余量必须小于每包装含量。"
+        elif self.loose_units != 0:
+            errors["loose_units"] = "填写已开封剩余量前需要先填写精确包装信息。"
+        if errors:
+            raise ValidationError(errors)
 
     @property
     def opened_use_before(self):
@@ -108,6 +154,12 @@ class InventoryBatch(models.Model):
             value for value in (self.expiry_date, self.opened_use_before) if value is not None
         ]
         return min(candidates) if candidates else None
+
+    @property
+    def total_remaining_units(self):
+        if self.units_per_package is None or not self.unit_name:
+            return None
+        return self.units_per_package * self.quantity + self.loose_units
 
 
 class ExpiryAlertState(models.Model):

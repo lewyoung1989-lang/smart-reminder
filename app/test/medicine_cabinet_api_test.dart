@@ -44,6 +44,10 @@ void main() {
         'production_date': null,
         'expiry_date': '2027-01-01',
         'quantity': 2,
+        'package_unit': '盒',
+        'units_per_package': '20.000',
+        'unit_name': '粒',
+        'loose_units': '3.000',
         'ambiguities': ['批号未提供'],
       }),
     ]);
@@ -64,8 +68,55 @@ void main() {
     });
     expect(draft.medicineName, '布洛芬胶囊');
     expect(draft.quantity, 2);
+    expect(draft.packageUnit, '盒');
+    expect(draft.unitsPerPackage, 20);
+    expect(draft.unitName, '粒');
+    expect(draft.looseUnits, 3);
     expect(draft.expiryDate, DateTime(2027, 1, 1));
     expect(draft.ambiguities, ['批号未提供']);
+  });
+
+  test('creates precise inventory fields for medication linkage', () async {
+    final client = RecordingClient([
+      jsonResponse(201, {
+        'id': 'batch-1',
+        'medicine_id': 'medicine-1',
+        'medicine_name': '拜新同',
+        'specification': '30mg*7片',
+        'batch_number': '',
+        'production_date': null,
+        'expiry_date': '2027-01-01',
+        'quantity': 2,
+        'package_unit': '盒',
+        'units_per_package': '7.000',
+        'unit_name': '片',
+        'loose_units': '3.000',
+        'total_remaining_units': '17',
+        'expiry_status': 'valid',
+        'days_until_expiry': 140,
+      }),
+    ]);
+    final api = MedicineCabinetApi(
+      baseUrl: 'https://api.invalid',
+      client: client,
+    );
+
+    final batch = await api.createBatch(
+      medicineName: '拜新同',
+      specification: '30mg*7片',
+      expiryDate: DateTime(2027, 1, 1),
+      quantity: 2,
+      packageUnit: '盒',
+      unitsPerPackage: 7,
+      unitName: '片',
+      looseUnits: 3,
+    );
+
+    expect(jsonDecode(client.requestBodies.single), containsPair('package_unit', '盒'));
+    expect(jsonDecode(client.requestBodies.single), containsPair('units_per_package', 7.0));
+    expect(jsonDecode(client.requestBodies.single), containsPair('unit_name', '片'));
+    expect(jsonDecode(client.requestBodies.single), containsPair('loose_units', 3.0));
+    expect(batch.totalRemainingUnits, 17);
   });
 
   test('lists searched inventory and parses expiry state', () async {

@@ -86,7 +86,7 @@ class MedicineDetailScreen extends StatelessWidget {
                     ),
                   AppPropertyRow(
                     label: '库存',
-                    value: Text('${summary.totalQuantity} 件'),
+                    value: Text(summary.inventoryLabel),
                   ),
                   AppPropertyRow(
                     label: '最近有效期',
@@ -517,7 +517,7 @@ class _BatchRow extends StatelessWidget {
             Text('批号 ${batch.batchNumber}'),
             const SizedBox(height: AppSpacing.xs),
           ],
-          Text('${batch.sourceLabel} · ${batch.quantity} 件'),
+          Text('${batch.sourceLabel} · ${batch.inventoryLabel}'),
           const SizedBox(height: AppSpacing.xs),
           Text('生产日期 ${_formatDate(batch.productionDate)}'),
           const SizedBox(height: AppSpacing.xs),

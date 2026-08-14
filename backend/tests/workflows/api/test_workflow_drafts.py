@@ -4,6 +4,8 @@ import pytest
 from django.utils import timezone
 
 from apps.reminders.models import ReminderRule
+from apps.medication.models import MedicationOccurrence, MedicationPlan
+from apps.medicines.models import InventoryBatch, MedicineItem
 from apps.workflows.models import TrustGrant, WorkflowDraft, WorkflowRun
 
 
@@ -137,6 +139,32 @@ def test_medication_and_expiry_confirmations_get_template_schedule(
         assert rule.next_run_at == datetime.fromisoformat("2026-08-09T08:00:00+08:00")
     else:
         assert rule.next_run_at == NOW
+
+
+@pytest.mark.django_db
+def test_medication_confirmation_links_inventory_and_creates_occurrences(
+    api_client, user, mocker
+):
+    medicine = MedicineItem.objects.create(owner=user, name="阿莫西林")
+    InventoryBatch.objects.create(
+        medicine=medicine,
+        quantity=1,
+        package_unit="盒",
+        units_per_package="12",
+        unit_name="粒",
+    )
+    mocker.patch("apps.workflows.api.views.timezone.now", return_value=NOW)
+    api_client.force_authenticate(user)
+    created = create_draft(api_client, "每天早上八点吃阿莫西林 1粒").json()
+
+    response = api_client.post(f"{CREATE_URL}/{created['id']}/confirm")
+
+    assert response.status_code == 201
+    plan = MedicationPlan.objects.get(source_workflow_draft_id=created["id"])
+    assert plan.medicine == medicine
+    assert plan.dose_quantity == 1
+    assert plan.dose_unit == "粒"
+    assert MedicationOccurrence.objects.filter(plan=plan).count() == 30
 
 
 @pytest.mark.django_db

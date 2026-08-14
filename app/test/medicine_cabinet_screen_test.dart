@@ -187,6 +187,33 @@ void main() {
         find.byKey(const ValueKey('medicine-row-medicine-1')), findsOneWidget);
   });
 
+  testWidgets('keeps no-result search text and updates filter counts',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: MedicineCabinetScreen(repository: _Repository()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const Key('medicine-search')), '拜新同');
+    await tester.pumpAndSettle();
+
+    final search = tester.widget<TextField>(
+      find.byKey(const Key('medicine-search')),
+    );
+    expect(search.controller?.text, '拜新同');
+    expect(find.text('没有符合条件的药品'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('cabinet-filter-tabs')),
+        matching: find.text('0'),
+      ),
+      findsNWidgets(3),
+    );
+  });
+
   testWidgets('cabinet tabs remain usable at narrow width and 200 percent text',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(320, 800));
@@ -360,6 +387,9 @@ void main() {
             return MedicineDescriptionDraft(
               medicineName: '拜新同',
               quantity: 1,
+              packageUnit: '盒',
+              unitsPerPackage: 7,
+              unitName: '片',
               expiryDate: DateTime(2026, 10, 28),
             );
           },
@@ -390,6 +420,10 @@ void main() {
     expect(created, hasLength(1));
     expect(created.single.medicineName, '拜新同');
     expect(created.single.quantity, 1);
+    expect(created.single.packageUnit, '盒');
+    expect(created.single.unitsPerPackage, 7);
+    expect(created.single.unitName, '片');
+    expect(created.single.looseUnits, 0);
     expect(created.single.expiryDate, DateTime(2026, 10, 28));
     expect(find.text('请填写药品名称'), findsNothing);
   });
@@ -531,6 +565,16 @@ void main() {
       findsNothing,
     );
     expect(find.byKey(const Key('medicine-entry-save')), findsOneWidget);
+    await tester.ensureVisible(
+      find.byKey(const Key('medicine-entry-precise-toggle')),
+    );
+    await tester.tap(find.byKey(const Key('medicine-entry-precise-toggle')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('medicine-entry-units-per-package')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('medicine-entry-unit-name')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

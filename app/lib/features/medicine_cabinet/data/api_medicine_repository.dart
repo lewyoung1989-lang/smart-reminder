@@ -35,6 +35,8 @@ class ApiMedicineRepository implements MedicineRepository {
         photoUrl: batches.first.photoUrl,
         totalQuantity:
             batches.fold(0, (total, batch) => total + batch.quantity),
+        totalRemainingUnits: _totalRemainingUnits(batches),
+        unitName: _sharedUnitName(batches),
         nearestExpiry: _nearestExpiry(batches),
         status: _mostSevereStatus(batches),
       );
@@ -49,6 +51,11 @@ class ApiMedicineRepository implements MedicineRepository {
                 productionDate: batch.productionDate,
                 expiresOn: batch.expiryDate,
                 quantity: batch.quantity,
+                packageUnit: batch.packageUnit,
+                unitsPerPackage: batch.unitsPerPackage,
+                unitName: batch.unitName,
+                looseUnits: batch.looseUnits,
+                totalRemainingUnits: batch.totalRemainingUnits,
                 sourceLabel: batch.scope.label,
                 canDelete: batch.canDelete,
                 version: batch.version,
@@ -113,6 +120,22 @@ class ApiMedicineRepository implements MedicineRepository {
     }
     return MedicineStatus.active;
   }
+
+  static String _sharedUnitName(List<InventoryBatch> batches) {
+    final units = batches.map((batch) => batch.unitName).toSet();
+    return units.length == 1 && units.single.isNotEmpty ? units.single : '';
+  }
+
+  static double? _totalRemainingUnits(List<InventoryBatch> batches) {
+    if (_sharedUnitName(batches).isEmpty ||
+        batches.any((batch) => batch.totalRemainingUnits == null)) {
+      return null;
+    }
+    return batches.fold<double>(
+      0,
+      (total, batch) => total + batch.totalRemainingUnits!,
+    );
+  }
 }
 
 class _LoaderDataSource implements MedicineCabinetDataSource {
@@ -130,6 +153,10 @@ class _LoaderDataSource implements MedicineCabinetDataSource {
     DateTime? productionDate,
     DateTime? expiryDate,
     int quantity = 1,
+    String packageUnit = '',
+    double? unitsPerPackage,
+    String unitName = '',
+    double looseUnits = 0,
     MedicineCabinetScope scope = MedicineCabinetScope.personal,
   }) =>
       Future.error(UnsupportedError('Batch creation is not configured.'));

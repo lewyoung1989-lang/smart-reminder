@@ -36,11 +36,17 @@ void main() {
   test('marks a medication occurrence as taken through the verified action',
       () async {
     final client = RecordingClient([
-      jsonResponse(200, {'status': 'ok'})
+      jsonResponse(200, {
+        'status': 'taken',
+        'inventory_deduction': {
+          'status': 'deducted',
+          'message': '已记录服药，已扣减1片，精确库存剩余13片',
+        },
+      })
     ]);
     final api = ActionCenterApi(baseUrl: 'https://api.invalid', client: client);
 
-    await api.markMedicationTaken('occurrence-1');
+    final result = await api.markMedicationTaken('occurrence-1');
 
     expect(client.requests.single.method, 'POST');
     expect(
@@ -50,6 +56,7 @@ void main() {
     expect(client.requests.single.headers['Accept'], 'application/json');
     expect(client.requests.single.headers['Content-Type'], 'application/json');
     expect(jsonDecode(client.requestBodies.single), {'action': 'taken'});
+    expect(result.message, '已记录服药，已扣减1片，精确库存剩余13片');
   });
 
   test('handles an inventory batch expiry through the verified action',

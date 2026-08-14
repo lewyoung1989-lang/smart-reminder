@@ -1,5 +1,6 @@
 import re
 import uuid
+from decimal import Decimal
 from datetime import timezone as datetime_timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -30,6 +31,14 @@ class MedicationPlan(models.Model):
         blank=True,
     )
     dosage_text = models.CharField(max_length=200)
+    dose_quantity = models.DecimalField(
+        max_digits=10,
+        decimal_places=3,
+        null=True,
+        blank=True,
+    )
+    dose_unit = models.CharField(max_length=16, blank=True)
+    auto_deduct_inventory = models.BooleanField(default=True)
     timezone = models.CharField(max_length=64)
     schedule_json = models.JSONField()
     enabled = models.BooleanField(default=True)
@@ -41,6 +50,13 @@ class MedicationPlan(models.Model):
             models.CheckConstraint(
                 condition=~models.Q(dosage_text=""),
                 name="medication_plan_dosage_text_nonempty",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(dose_quantity__isnull=True, dose_unit="")
+                    | (models.Q(dose_quantity__gt=0) & ~models.Q(dose_unit=""))
+                ),
+                name="medication_plan_structured_dose_consistent",
             ),
         ]
 
@@ -55,6 +71,10 @@ class MedicationPlan(models.Model):
             )
             if not is_personal and not is_family:
                 errors["medicine"] = "The medicine must be available to the plan owner."
+        if (self.dose_quantity is None) != (self.dose_unit == ""):
+            errors["dose_quantity"] = "剂量数值和计量单位必须同时填写。"
+        elif self.dose_quantity is not None and self.dose_quantity <= 0:
+            errors["dose_quantity"] = "每次剂量必须大于 0。"
         try:
             ZoneInfo(self.timezone)
         except (ZoneInfoNotFoundError, ValueError):
@@ -161,3 +181,73 @@ class IntakeEvent(models.Model):
                 errors["action"] = "The intake event action must match the occurrence status."
         if errors:
             raise ValidationError(errors)
+
+
+class InventoryDeductionAttempt(models.Model):
+    class Status(models.TextChoices):
+        DEDUCTED = "deducted", "Deducted"
+        DISABLED = "disabled", "Disabled"
+        MEDICINE_UNLINKED = "medicine_unlinked", "Medicine unlinked"
+        NOT_CONFIGURED = "not_configured", "Inventory not configured"
+        UNIT_MISMATCH = "unit_mismatch", "Unit mismatch"
+        INSUFFICIENT = "insufficient", "Insufficient inventory"
+        ACCESS_DENIED = "access_denied", "Access denied"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    intake_event = models.OneToOneField(
+        IntakeEvent,
+        on_delete=models.CASCADE,
+        related_name="inventory_deduction_attempt",
+    )
+    status = models.CharField(max_length=32, choices=Status)
+    requested_quantity = models.DecimalField(
+        max_digits=10,
+        decimal_places=3,
+        null=True,
+        blank=True,
+    )
+    deducted_quantity = models.DecimalField(
+        max_digits=10,
+        decimal_places=3,
+        default=Decimal("0"),
+    )
+    unit_name = models.CharField(max_length=16, blank=True)
+    remaining_quantity = models.DecimalField(
+        max_digits=12,
+        decimal_places=3,
+        null=True,
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class InventoryDeductionEntry(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    attempt = models.ForeignKey(
+        InventoryDeductionAttempt,
+        on_delete=models.CASCADE,
+        related_name="entries",
+    )
+    batch = models.ForeignKey(
+        "medicines.InventoryBatch",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="medication_deductions",
+    )
+    quantity = models.DecimalField(max_digits=10, decimal_places=3)
+    before_quantity = models.DecimalField(max_digits=12, decimal_places=3)
+    after_quantity = models.DecimalField(max_digits=12, decimal_places=3)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["attempt", "batch"],
+                name="inventory_deduction_attempt_batch_unique",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(quantity__gt=0),
+                name="inventory_deduction_entry_quantity_positive",
+            ),
+        ]

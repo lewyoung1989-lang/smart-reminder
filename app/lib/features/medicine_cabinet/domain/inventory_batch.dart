@@ -19,6 +19,11 @@ class InventoryBatch {
     required this.productionDate,
     required this.expiryDate,
     required this.quantity,
+    this.packageUnit = '',
+    this.unitsPerPackage,
+    this.unitName = '',
+    this.looseUnits = 0,
+    this.totalRemainingUnits,
     required this.expiryStatus,
     required this.daysUntilExpiry,
     this.scope = MedicineCabinetScope.personal,
@@ -37,6 +42,11 @@ class InventoryBatch {
         productionDate: _parseDate(json['production_date']),
         expiryDate: _parseDate(json['expiry_date']),
         quantity: json['quantity'] as int,
+        packageUnit: json['package_unit'] as String? ?? '',
+        unitsPerPackage: _parseNumber(json['units_per_package']),
+        unitName: json['unit_name'] as String? ?? '',
+        looseUnits: _parseNumber(json['loose_units']) ?? 0,
+        totalRemainingUnits: _parseNumber(json['total_remaining_units']),
         expiryStatus: _parseStatus(json['expiry_status'] as String?),
         daysUntilExpiry: json['days_until_expiry'] as int?,
         scope: json['scope'] == 'family'
@@ -56,6 +66,11 @@ class InventoryBatch {
   final DateTime? productionDate;
   final DateTime? expiryDate;
   final int quantity;
+  final String packageUnit;
+  final double? unitsPerPackage;
+  final String unitName;
+  final double looseUnits;
+  final double? totalRemainingUnits;
   final InventoryExpiryStatus expiryStatus;
   final int? daysUntilExpiry;
   final MedicineCabinetScope scope;
@@ -64,6 +79,12 @@ class InventoryBatch {
 
   static DateTime? _parseDate(Object? value) =>
       value == null ? null : DateTime.parse(value as String);
+
+  static double? _parseNumber(Object? value) => switch (value) {
+        num number => number.toDouble(),
+        String text => double.tryParse(text),
+        _ => null,
+      };
 
   static InventoryExpiryStatus _parseStatus(String? value) => switch (value) {
         'expired' => InventoryExpiryStatus.expired,

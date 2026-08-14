@@ -191,6 +191,10 @@ class _InventorySource implements MedicineCabinetDataSource {
     DateTime? productionDate,
     DateTime? expiryDate,
     int quantity = 1,
+    String packageUnit = '',
+    double? unitsPerPackage,
+    String unitName = '',
+    double looseUnits = 0,
     MedicineCabinetScope scope = MedicineCabinetScope.personal,
   }) =>
       Future.error(UnsupportedError('unused'));

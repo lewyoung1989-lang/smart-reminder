@@ -11,7 +11,8 @@ from apps.workflows.domain.schemas import TaskSpec
 
 _URL_PATTERN = re.compile(r"[a-z][a-z0-9+.-]*://", re.IGNORECASE)
 _DOSE_PATTERN = re.compile(
-    r"(?:\d+(?:\.\d+)?|[零〇一二三四五六七八九十两]+)\s*(?:mg|g|ml|毫克|克|片|粒)",
+    r"(?:\d+(?:\.\d+)?|半|[零〇一二三四五六七八九十两]+)\s*"
+    r"(?:mg|g|ml|毫克|克|毫升|片|粒|袋|支|丸|滴)",
     re.IGNORECASE,
 )
 _MEDICINE_PATTERN = re.compile(

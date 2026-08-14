@@ -16,6 +16,7 @@ from apps.families.services import (
     require_membership,
 )
 from apps.medication.models import MedicationPlan
+from apps.reminders.models import ReminderRule
 from apps.ocr.providers.storage import get_object_storage
 
 from .serializers import (
@@ -99,6 +100,9 @@ class CurrentFamilyView(APIView):
         MedicationPlan.objects.filter(medicine__family=family).update(
             enabled=False, updated_at=timezone.now()
         )
+        ReminderRule.objects.filter(
+            workflow_draft__medication_plan__medicine__family=family,
+        ).update(enabled=False, paused_reason="family_access_lost")
         family.delete()
         storage = get_object_storage()
         transaction.on_commit(lambda: _delete_photos(storage, photo_keys))
@@ -145,6 +149,10 @@ class FamilyMembershipView(APIView):
         MedicationPlan.objects.filter(
             owner=request.user, medicine__family=family, enabled=True
         ).update(enabled=False, updated_at=timezone.now())
+        ReminderRule.objects.filter(
+            owner=request.user,
+            workflow_draft__medication_plan__medicine__family=family,
+        ).update(enabled=False, paused_reason="family_access_lost")
         record_event(family=family, actor=request.user, event_type="member_left")
         membership.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -189,6 +197,10 @@ class FamilyMemberDetailView(APIView):
         MedicationPlan.objects.filter(
             owner=target.user, medicine__family=current.family, enabled=True
         ).update(enabled=False, updated_at=timezone.now())
+        ReminderRule.objects.filter(
+            owner=target.user,
+            workflow_draft__medication_plan__medicine__family=current.family,
+        ).update(enabled=False, paused_reason="family_access_lost")
         record_event(
             family=current.family,
             actor=request.user,

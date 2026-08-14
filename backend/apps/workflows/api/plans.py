@@ -1,3 +1,5 @@
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -5,6 +7,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.reminders.models import ReminderRule
+from apps.medication.models import MedicationPlan
+from apps.medication.services.occurrences import materialize_occurrences
 from apps.workflows.models import WorkflowRun
 from apps.workflows.domain.schemas import WorkflowSpec
 
@@ -235,11 +239,13 @@ class PlanDetailView(APIView):
                 {"detail": "未找到该周期计划"},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        rule.enabled = False
-        rule.cancelled_at = timezone.now()
-        rule.paused_reason = "user_deleted"
-        rule.revision = (rule.revision or 0) + 1
-        rule.save(update_fields=["enabled", "cancelled_at", "paused_reason", "revision"])
+        with transaction.atomic():
+            rule.enabled = False
+            rule.cancelled_at = timezone.now()
+            rule.paused_reason = "user_deleted"
+            rule.revision = (rule.revision or 0) + 1
+            rule.save(update_fields=["enabled", "cancelled_at", "paused_reason", "revision"])
+            _set_medication_plan_enabled(rule, False)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -254,10 +260,12 @@ class PlanPauseView(APIView):
                 {"detail": "未找到该周期计划"},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        rule.enabled = False
-        rule.paused_reason = "user_paused"
-        rule.revision = (rule.revision or 0) + 1
-        rule.save(update_fields=["enabled", "paused_reason", "revision"])
+        with transaction.atomic():
+            rule.enabled = False
+            rule.paused_reason = "user_paused"
+            rule.revision = (rule.revision or 0) + 1
+            rule.save(update_fields=["enabled", "paused_reason", "revision"])
+            _set_medication_plan_enabled(rule, False)
         return Response(_detail(rule), status=status.HTTP_200_OK)
 
 
@@ -277,10 +285,32 @@ class PlanResumeView(APIView):
                 {"code": "plan_invalid", "detail": "计划配置已失效，请重新创建"},
                 status=status.HTTP_409_CONFLICT,
             )
-        rule.enabled = True
-        rule.paused_reason = None
-        rule.revision = (rule.revision or 0) + 1
-        rule.save(
-            update_fields=["enabled", "paused_reason", "next_run_at", "revision"]
-        )
+        medication_plan = MedicationPlan.objects.filter(
+            source_workflow_draft=rule.workflow_draft
+        ).select_related("medicine__family").first()
+        if medication_plan is not None:
+            medication_plan.enabled = True
+            try:
+                medication_plan.full_clean()
+            except DjangoValidationError:
+                return Response(
+                    {"code": "medicine_access_lost", "detail": "已无法访问计划关联的药品"},
+                    status=status.HTTP_409_CONFLICT,
+                )
+        with transaction.atomic():
+            rule.enabled = True
+            rule.paused_reason = None
+            rule.revision = (rule.revision or 0) + 1
+            rule.save(
+                update_fields=["enabled", "paused_reason", "next_run_at", "revision"]
+            )
+            if medication_plan is not None:
+                medication_plan.save(update_fields=["enabled", "updated_at"])
+                materialize_occurrences(medication_plan, now=timezone.now())
         return Response(_detail(rule), status=status.HTTP_200_OK)
+
+
+def _set_medication_plan_enabled(rule, enabled):
+    MedicationPlan.objects.filter(
+        source_workflow_draft=rule.workflow_draft
+    ).update(enabled=enabled, updated_at=timezone.now())

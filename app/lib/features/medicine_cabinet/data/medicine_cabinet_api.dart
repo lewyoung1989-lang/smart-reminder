@@ -26,6 +26,10 @@ abstract interface class MedicineCabinetDataSource {
     DateTime? productionDate,
     DateTime? expiryDate,
     int quantity = 1,
+    String packageUnit = '',
+    double? unitsPerPackage,
+    String unitName = '',
+    double looseUnits = 0,
     MedicineCabinetScope scope = MedicineCabinetScope.personal,
   });
 
@@ -117,6 +121,10 @@ class MedicineCabinetApi implements MedicineCabinetDataSource {
     DateTime? productionDate,
     DateTime? expiryDate,
     int quantity = 1,
+    String packageUnit = '',
+    double? unitsPerPackage,
+    String unitName = '',
+    double looseUnits = 0,
     MedicineCabinetScope scope = MedicineCabinetScope.personal,
   }) async {
     final photoObjectKey =
@@ -138,6 +146,12 @@ class MedicineCabinetApi implements MedicineCabinetDataSource {
             productionDate == null ? null : _formatDate(productionDate),
         'expiry_date': expiryDate == null ? null : _formatDate(expiryDate),
         'quantity': quantity,
+        if (unitsPerPackage != null) ...{
+          'package_unit': packageUnit.trim(),
+          'units_per_package': unitsPerPackage,
+          'unit_name': unitName.trim(),
+          'loose_units': looseUnits,
+        },
       }),
     );
     if (response.statusCode != 201) {

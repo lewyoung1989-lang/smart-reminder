@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 abstract interface class ActionCenterActions {
-  Future<void> markMedicationTaken(String occurrenceId);
+  Future<MedicationActionResult> markMedicationTaken(String occurrenceId);
 
   Future<void> handleExpiryBatch(String batchId);
 }
@@ -21,24 +21,26 @@ class ActionCenterApi implements ActionCenterActions {
   final bool _ownsClient;
 
   @override
-  Future<void> markMedicationTaken(String occurrenceId) {
-    return _postVerifiedAction(
+  Future<MedicationActionResult> markMedicationTaken(
+      String occurrenceId) async {
+    final payload = await _postVerifiedAction(
       path:
           '/api/v1/medication/occurrences/${Uri.encodeComponent(occurrenceId)}/actions',
       action: 'taken',
     );
+    return MedicationActionResult.fromJson(payload);
   }
 
   @override
-  Future<void> handleExpiryBatch(String batchId) {
-    return _postVerifiedAction(
+  Future<void> handleExpiryBatch(String batchId) async {
+    await _postVerifiedAction(
       path:
           '/api/v1/inventory-batches/${Uri.encodeComponent(batchId)}/expiry-actions',
       action: 'handled',
     );
   }
 
-  Future<void> _postVerifiedAction({
+  Future<Map<String, dynamic>> _postVerifiedAction({
     required String path,
     required String action,
   }) async {
@@ -53,11 +55,26 @@ class ActionCenterApi implements ActionCenterActions {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw ActionCenterApiException(response.statusCode, response.body);
     }
+    return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
   void close() {
     if (_ownsClient) _client.close();
   }
+}
+
+class MedicationActionResult {
+  const MedicationActionResult({required this.message});
+
+  factory MedicationActionResult.fromJson(Map<String, dynamic> json) {
+    final deduction = json['inventory_deduction'];
+    final message = deduction is Map<String, dynamic>
+        ? deduction['message'] as String?
+        : null;
+    return MedicationActionResult(message: message ?? '已记录服药');
+  }
+
+  final String message;
 }
 
 class ActionCenterApiException implements Exception {

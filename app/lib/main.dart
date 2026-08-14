@@ -507,6 +507,10 @@ class _SmartReminderAppState extends State<SmartReminderApp>
                 productionDate: input.productionDate,
                 expiryDate: input.expiryDate,
                 quantity: input.quantity,
+                packageUnit: input.packageUnit,
+                unitsPerPackage: input.unitsPerPackage,
+                unitName: input.unitName,
+                looseUnits: input.looseUnits,
                 scope: input.scope,
               );
             },

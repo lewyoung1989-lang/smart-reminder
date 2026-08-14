@@ -15,6 +15,7 @@ from apps.reminders.api.serializers import (
     CreateWorkflowDraftSerializer,
 )
 from apps.reminders.models import ReminderRule
+from apps.medication.services.workflow_plans import ensure_medication_plan_for_workflow
 from apps.workflows.domain.schemas import TaskSpec, WorkflowSpec
 from apps.workflows.models import TrustGrant, WorkflowDraft
 from apps.workflows.services.compiler import WorkflowCompileError, WorkflowCompiler
@@ -266,6 +267,17 @@ class WorkflowDraftConfirmView(APIView):
 
             existing_rule = ReminderRule.objects.filter(workflow_draft=draft).first()
             if existing_rule is not None:
+                if draft.status == WorkflowDraft.Status.CONFIRMED:
+                    try:
+                        existing_task = TaskSpec.model_validate(draft.task_spec_json)
+                    except PydanticValidationError:
+                        existing_task = None
+                    if existing_task is not None:
+                        ensure_medication_plan_for_workflow(
+                            draft=draft,
+                            task=existing_task,
+                            now=timezone.now(),
+                        )
                 return Response(
                     {"reminder_id": str(existing_rule.id), "status": "confirmed"},
                     status=status.HTTP_200_OK,
@@ -372,6 +384,7 @@ class WorkflowDraftConfirmView(APIView):
             draft.status = WorkflowDraft.Status.CONFIRMED
             draft.confirmed_at = now
             draft.save(update_fields=["status", "confirmed_at"])
+            ensure_medication_plan_for_workflow(draft=draft, task=task, now=now)
 
         return Response(
             {"reminder_id": str(rule.id), "status": "confirmed"},
