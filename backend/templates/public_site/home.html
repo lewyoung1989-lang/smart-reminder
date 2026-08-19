@@ -1,0 +1,391 @@
+{% extends "public_site/base.html" %}
+
+{% block title %}{{ site_name }}｜让日常记得更清楚{% endblock %}
+
+{% block head %}
+<style>
+  .hero {
+    padding-block: 58px 44px;
+    overflow: hidden;
+  }
+
+  .showcase {
+    padding-bottom: 72px;
+  }
+
+  .hero-copy {
+    max-width: 760px;
+  }
+
+  .hero-copy h1 {
+    max-width: 10ch;
+    font-size: clamp(3rem, 9vw, 6rem);
+    text-wrap: balance;
+  }
+
+  .hero-copy > p {
+    max-width: 64ch;
+    margin: 24px 0 0;
+    color: #34443d;
+    font-size: clamp(1.05rem, 2vw, 1.25rem);
+  }
+
+  .release-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    margin-top: 26px;
+    padding: 7px 12px;
+    border: 1px solid #9cb1a5;
+    border-radius: 999px;
+    color: #30443b;
+    font-size: 13px;
+    font-weight: 650;
+  }
+
+  .release-status::before {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--coral);
+    content: "";
+  }
+
+  .product-stage {
+    position: relative;
+    min-height: 360px;
+    margin-top: 0;
+    padding: 42px;
+    display: grid;
+    grid-template-columns: minmax(0, 0.95fr) minmax(280px, 1.05fr);
+    gap: 54px;
+    align-items: center;
+    color: #f6fff9;
+    background: var(--green-dark);
+    overflow: hidden;
+  }
+
+  .stage-notes {
+    max-width: 420px;
+  }
+
+  .stage-notes h2 {
+    margin: 0 0 14px;
+    font-family: ui-serif, "Songti SC", "STSong", serif;
+    font-size: clamp(1.8rem, 4vw, 3.15rem);
+    line-height: 1.18;
+    letter-spacing: 0;
+  }
+
+  .stage-notes p {
+    margin: 0;
+    color: #d6e7df;
+  }
+
+  .stage-key {
+    margin-top: 30px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+
+  .stage-key span {
+    padding-top: 10px;
+    border-top: 1px solid #709084;
+    color: #d6e7df;
+    font-size: 12px;
+  }
+
+  .app-scene {
+    position: relative;
+    min-height: 276px;
+    padding: 26px 24px;
+    color: var(--ink);
+    background: var(--surface);
+    border-radius: 16px;
+    box-shadow: 0 24px 48px rgba(4, 25, 20, 0.34);
+  }
+
+  .app-scene::before {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 7px;
+    background: var(--yellow);
+    content: "";
+  }
+
+  .scene-topline {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .scene-topline strong {
+    color: var(--ink);
+    font-size: 15px;
+  }
+
+  .reminder-line {
+    margin-top: 28px;
+    display: grid;
+    grid-template-columns: 52px 1fr auto;
+    gap: 18px;
+    align-items: center;
+  }
+
+  .reminder-time {
+    font-variant-numeric: tabular-nums;
+    font-weight: 750;
+  }
+
+  .reminder-copy {
+    padding-left: 18px;
+    border-left: 1px solid var(--line);
+  }
+
+  .reminder-copy strong,
+  .reminder-copy span {
+    display: block;
+  }
+
+  .reminder-copy span {
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .reminder-mark {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: var(--coral);
+  }
+
+  .medicine-strip {
+    margin-top: 28px;
+    padding-top: 20px;
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+    border-top: 1px solid var(--line);
+    font-size: 13px;
+  }
+
+  .medicine-strip span {
+    color: var(--muted);
+  }
+
+  .medicine-strip strong {
+    color: var(--green-dark);
+  }
+
+  .capabilities {
+    background: var(--surface);
+    border-block: 1px solid var(--line);
+  }
+
+  .feature-inner {
+    padding-block: 76px 84px;
+  }
+
+  .feature-inner > h2 {
+    max-width: 18ch;
+    margin: 0;
+    font-family: ui-serif, "Songti SC", "STSong", serif;
+    font-size: clamp(2.1rem, 5vw, 4rem);
+    line-height: 1.2;
+    letter-spacing: 0;
+  }
+
+  .feature-list {
+    margin-top: 54px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .feature-item {
+    padding: 26px 30px 4px 0;
+  }
+
+  .feature-item + .feature-item {
+    padding-left: 30px;
+    border-left: 1px solid var(--line);
+  }
+
+  .feature-item h3 {
+    margin: 0 0 10px;
+    font-size: 1.05rem;
+  }
+
+  .feature-item p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  .privacy-note {
+    padding-block: 64px 72px;
+  }
+
+  .privacy-note-inner {
+    width: min(calc(100% - 40px), 860px);
+    margin-inline: auto;
+    text-align: center;
+  }
+
+  .privacy-note h2 {
+    margin: 0;
+    font-family: ui-serif, "Songti SC", "STSong", serif;
+    font-size: clamp(1.9rem, 4vw, 3rem);
+    letter-spacing: 0;
+  }
+
+  .privacy-note p {
+    max-width: 64ch;
+    margin: 16px auto 0;
+    color: var(--muted);
+  }
+
+  @media (max-width: 760px) {
+    .hero {
+      padding-block: 40px 34px;
+    }
+
+    .showcase {
+      padding-bottom: 54px;
+    }
+
+    .hero-copy h1 {
+      font-size: clamp(2.7rem, 16vw, 4.5rem);
+    }
+
+    .product-stage {
+      min-height: 0;
+      padding: 30px 22px 24px;
+      grid-template-columns: 1fr;
+      gap: 28px;
+    }
+
+    .stage-key {
+      display: none;
+    }
+
+    .app-scene {
+      min-height: 250px;
+      padding: 22px 18px;
+    }
+
+    .reminder-line {
+      grid-template-columns: 46px 1fr auto;
+      gap: 10px;
+    }
+
+    .feature-inner {
+      padding-block: 54px 62px;
+    }
+
+    .feature-list {
+      margin-top: 36px;
+      grid-template-columns: 1fr;
+    }
+
+    .feature-item,
+    .feature-item + .feature-item {
+      padding: 22px 0;
+      border-left: 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .privacy-note-inner {
+      width: min(calc(100% - 32px), 860px);
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <div class="hero-inner">
+    <div class="hero-copy">
+      <h1>让日常记得更清楚</h1>
+      <p>记录提醒、整理家庭药箱、拍照录入药品信息。识别结果由你核对后才会保存，重要决定始终留在自己手里。</p>
+      <span class="release-status">亲友内测中</span>
+    </div>
+  </div>
+</section>
+
+<section class="showcase">
+  <div class="hero-inner">
+    <div class="product-stage" aria-label="智能提醒产品界面示意">
+      <div class="stage-notes">
+        <h2>今天要做的事，集中在一处。</h2>
+        <p>从一句自然语言到具体提醒，从药盒照片到可查询的家庭药箱，让零散信息更容易找到。</p>
+        <div class="stage-key" aria-hidden="true">
+          <span>自然语言提醒</span>
+          <span>本地通知</span>
+          <span>药品信息核对</span>
+        </div>
+      </div>
+
+      <div class="app-scene">
+        <div class="scene-topline">
+          <strong>今日提醒</strong>
+          <span>示意界面</span>
+        </div>
+        <div class="reminder-line">
+          <time class="reminder-time">09:30</time>
+          <div class="reminder-copy">
+            <strong>出门前带上雨伞</strong>
+            <span>提前 10 分钟通知</span>
+          </div>
+          <span class="reminder-mark" aria-hidden="true"></span>
+        </div>
+        <div class="reminder-line">
+          <time class="reminder-time">20:00</time>
+          <div class="reminder-copy">
+            <strong>整理本周药箱</strong>
+            <span>核对药品与有效期</span>
+          </div>
+          <span class="reminder-mark" aria-hidden="true"></span>
+        </div>
+        <div class="medicine-strip">
+          <span>家庭药箱</span>
+          <strong>拍照录入后由你确认</strong>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="capabilities" id="capabilities">
+  <div class="feature-inner">
+    <h2>少一点翻找，多一点确定。</h2>
+    <div class="feature-list">
+      <article class="feature-item">
+        <h3>日常提醒</h3>
+        <p>用自然语言描述要做的事，核对时间后创建提醒，并在手机端安排通知。</p>
+      </article>
+      <article class="feature-item">
+        <h3>家庭药箱</h3>
+        <p>按药品、规格或批号查询库存，集中查看家里已有的药品信息。</p>
+      </article>
+      <article class="feature-item">
+        <h3>拍照录入</h3>
+        <p>识别药盒文字并生成候选信息，只有经过你的确认才会写入药箱。</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="privacy-note">
+  <div class="privacy-note-inner">
+    <h2>隐私边界写清楚，也做清楚。</h2>
+    <p>药盒原图仅用于本次识别，确认后会触发删除；未确认或失败任务的图片按 24 小时目标清理。完整说明请查看<a href="/privacy/">隐私政策</a>。</p>
+  </div>
+</section>
+{% endblock %}

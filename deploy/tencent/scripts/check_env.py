@@ -8,6 +8,9 @@ from urllib.parse import urlparse
 REQUIRED = {
     "DOMAIN",
     "FILES_DOMAIN",
+    "SITE_OWNER_NAME",
+    "SITE_CONTACT_EMAIL",
+    "ICP_FILING_NUMBER",
     "DJANGO_SECRET_KEY",
     "JWT_SIGNING_KEY",
     "DJANGO_DEBUG",
@@ -90,6 +93,25 @@ def validate(values: dict[str, str]) -> list[str]:
         )
     if values.get("DOMAIN") not in {None, "", "aipupu.cloud"}:
         errors.append("DOMAIN must be aipupu.cloud")
+    contact_email = values.get("SITE_CONTACT_EMAIL", "")
+    if contact_email and not re.fullmatch(
+        r"[^@\s]+@[^@\s]+\.[^@\s]+", contact_email
+    ):
+        errors.append("SITE_CONTACT_EMAIL must be a valid email address")
+    icp_number = values.get("ICP_FILING_NUMBER", "")
+    if icp_number and not re.fullmatch(
+        r"[\u4e00-\u9fff]ICP\u5907\d+\u53f7(?:-\d+)?", icp_number
+    ):
+        errors.append("ICP_FILING_NUMBER must be a valid ICP filing number")
+    security_number = values.get("PUBLIC_SECURITY_FILING_NUMBER", "")
+    security_code = values.get("PUBLIC_SECURITY_RECORD_CODE", "")
+    if bool(security_number) != bool(security_code):
+        errors.append(
+            "PUBLIC_SECURITY_FILING_NUMBER and "
+            "PUBLIC_SECURITY_RECORD_CODE must be configured together"
+        )
+    if security_code and not re.fullmatch(r"\d{14,20}", security_code):
+        errors.append("PUBLIC_SECURITY_RECORD_CODE must contain 14-20 digits")
     files_domain = values.get("FILES_DOMAIN")
     if files_domain not in {None, "", "files.aipupu.cloud"}:
         errors.append("FILES_DOMAIN must be files.aipupu.cloud")

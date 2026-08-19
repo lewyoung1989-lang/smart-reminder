@@ -96,6 +96,19 @@ INSTALLED_APPS = [
     "apps.ocr.apps.OCRConfig",
 ]
 
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [BASE_DIR / "templates"],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.request",
+            ],
+        },
+    },
+]
+
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -328,3 +341,14 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": 3600.0,
     },
 }
+
+SITE_NAME = os.environ.get("SITE_NAME", "\u667a\u80fd\u63d0\u9192").strip()
+SITE_OWNER_NAME = os.environ.get("SITE_OWNER_NAME", "").strip()
+SITE_CONTACT_EMAIL = os.environ.get("SITE_CONTACT_EMAIL", "").strip()
+ICP_FILING_NUMBER = os.environ.get("ICP_FILING_NUMBER", "").strip()
+PUBLIC_SECURITY_FILING_NUMBER = os.environ.get(
+    "PUBLIC_SECURITY_FILING_NUMBER", ""
+).strip()
+PUBLIC_SECURITY_RECORD_CODE = os.environ.get(
+    "PUBLIC_SECURITY_RECORD_CODE", ""
+).strip()
