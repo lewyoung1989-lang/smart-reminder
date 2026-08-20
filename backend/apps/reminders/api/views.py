@@ -128,6 +128,7 @@ def _workflow_draft_response(
     template, so the caller can fall back to one-time reminder parsing.
     """
     now = timezone.now()
+    task_is_deterministic = task is None
     task = task or WorkflowTaskParser().parse(
         text, now=now, timezone="Asia/Shanghai"
     )
@@ -137,8 +138,10 @@ def _workflow_draft_response(
         # Incomplete departure expressions fall back to one-time reminder
         # parsing instead of blocking on workflow clarifications.
         return None
-    if task.template_hint == "medication_cycle" and not any(
-        marker in text for marker in ("吃药", "服药", "服用", "药")
+    if (
+        not task_is_deterministic
+        and task.template_hint == "medication_cycle"
+        and not any(marker in text for marker in ("吃药", "服药", "服用", "药"))
     ):
         # Expressions like “吃火锅” must not be hijacked by the medication
         # workflow; keep them on the one-time reminder flow unless the
@@ -220,6 +223,12 @@ def _natural_language_response(*, request, text: str) -> Response:
             if response is not None:
                 return response
         if result is not None and result.reminder is not None:
+            workflow_response = _workflow_draft_response(
+                request=request,
+                text=text,
+            )
+            if workflow_response is not None:
+                return workflow_response
             created = persist_reminder_draft(
                 user=request.user,
                 text=text,

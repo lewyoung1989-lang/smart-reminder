@@ -55,7 +55,9 @@ def test_model_routes_to_registered_workflow_task_without_nodes():
 
     assert result.workflow.template_hint == "medication_cycle"
     assert "nodes" not in result.workflow.model_dump()
-    assert "禁止生成节点" in transport.payload["messages"][0]["content"]
+    prompt = transport.payload["messages"][0]["content"]
+    assert "禁止生成节点" in prompt
+    assert "用 times 数组保存全部时刻" in prompt
 
 
 @pytest.mark.parametrize(
