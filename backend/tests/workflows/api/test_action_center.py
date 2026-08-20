@@ -4,7 +4,12 @@ import pytest
 
 from apps.reminders.models import ReminderRule
 from apps.medication.models import MedicationOccurrence, MedicationPlan
-from apps.medicines.models import ExpiryAlertState, InventoryBatch, MedicineItem
+from apps.medicines.models import (
+    ExpiryAlertState,
+    InventoryBatch,
+    LowStockAlertState,
+    MedicineItem,
+)
 from apps.workflows.models import NotificationOutbox, WorkflowRun
 
 
@@ -244,6 +249,78 @@ def test_today_includes_active_expiry_alerts_only_for_the_owner(api_client, user
             },
         }
     ]
+
+
+@pytest.mark.django_db
+def test_today_includes_active_low_stock_alerts_only_for_accessible_medicines(
+    api_client, user, django_user_model, mocker
+):
+    medicine = MedicineItem.objects.create(owner=user, name="拜新同")
+    alert = LowStockAlertState.objects.create(
+        medicine=medicine,
+        unit_name="片",
+        threshold_days=3,
+        remaining_quantity="2",
+        daily_quantity="1",
+        days_remaining="2.00",
+        status=LowStockAlertState.Status.ACTIVE,
+        activated_at=NOW,
+    )
+    other = django_user_model.objects.create_user(username="low-stock-other")
+    other_medicine = MedicineItem.objects.create(owner=other, name="他人的药")
+    LowStockAlertState.objects.create(
+        medicine=other_medicine,
+        unit_name="片",
+        threshold_days=3,
+        remaining_quantity="1",
+        daily_quantity="1",
+        days_remaining="1.00",
+        status=LowStockAlertState.Status.ACTIVE,
+    )
+    mocker.patch("apps.workflows.api.action.timezone.now", return_value=NOW)
+    api_client.force_authenticate(user)
+
+    response = api_client.get("/api/v1/action-center/today")
+
+    assert response.status_code == 200
+    assert response.json()["need_decision"]["results"] == [
+        {
+            "id": str(alert.id),
+            "title": "拜新同余量不足，还能用约2天（剩余2片）",
+            "kind": "medicine_low_stock",
+            "status": "low_stock",
+            "occurred_at": "2026-08-08T09:00:00+08:00",
+            "action_target": {
+                "resource": "low_stock_alert",
+                "id": str(alert.id),
+            },
+        }
+    ]
+
+
+@pytest.mark.django_db
+def test_low_stock_alert_action_marks_alert_resolved(api_client, user):
+    medicine = MedicineItem.objects.create(owner=user, name="拜新同")
+    alert = LowStockAlertState.objects.create(
+        medicine=medicine,
+        unit_name="片",
+        threshold_days=3,
+        remaining_quantity="2",
+        daily_quantity="1",
+        days_remaining="2.00",
+        status=LowStockAlertState.Status.ACTIVE,
+    )
+    api_client.force_authenticate(user)
+
+    response = api_client.post(
+        f"/api/v1/low-stock-alerts/{alert.id}/actions",
+        {"action": "handled"},
+    )
+
+    assert response.status_code == 200
+    alert.refresh_from_db()
+    assert alert.status == LowStockAlertState.Status.RESOLVED
+    assert alert.resolved_at is not None
 
 
 @pytest.mark.django_db

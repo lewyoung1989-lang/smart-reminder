@@ -509,6 +509,59 @@ void main() {
     expect(find.text('服用布洛芬'), findsNothing);
     expect(find.text('已记录服药'), findsOneWidget);
   });
+
+  testWidgets('dispatches today low stock decisions to verified actions',
+      (tester) async {
+    final todayRepository = _SequenceTodayRepository([
+      TodaySnapshot(
+        decisions: <AttentionItem>[
+          AttentionItem(
+            id: 'attention-1',
+            title: '拜新同余量不足',
+            reason: '药箱余量不足，需要补库存',
+            dueAt: DateTime(2026, 8, 8, 8),
+            kind: AttentionKind.confirmation,
+            actionLabel: '处理',
+            actionTarget: const ActionTarget(
+              resource: 'low_stock_alert',
+              id: 'alert-1',
+            ),
+          ),
+        ],
+        timeline: const <TimelineItem>[],
+      ),
+      TodaySnapshot(decisions: const [], timeline: const []),
+    ]);
+    final actions = _RecordingActionCenterActions();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppShell(
+          todayRepository: todayRepository,
+          planRepository: const UnavailablePlanRepository(),
+          medicineRepository: _UnavailableMedicineRepository(),
+          user: const AuthUser(
+            id: 'user-1',
+            phoneMasked: '138****8000',
+            phoneVerified: true,
+          ),
+          themeMode: ThemeMode.system,
+          onThemeModeChanged: (_) {},
+          onChangePassword: (_, __, ___) async {},
+          onLogout: () async {},
+          actionCenterActions: actions,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(TextButton, '处理'));
+    await tester.pumpAndSettle();
+
+    expect(actions.handledLowStockAlerts, ['alert-1']);
+    expect(todayRepository.calls, 2);
+    expect(find.text('拜新同余量不足'), findsNothing);
+    expect(find.text('已处理买药提醒'), findsOneWidget);
+  });
 }
 
 class _ThrowingNotificationScheduler implements ReminderNotificationScheduler {
@@ -571,6 +624,7 @@ class _SequenceTodayRepository implements TodayRepository {
 class _RecordingActionCenterActions implements ActionCenterActions {
   final takenOccurrences = <String>[];
   final handledBatches = <String>[];
+  final handledLowStockAlerts = <String>[];
 
   @override
   Future<MedicationActionResult> markMedicationTaken(
@@ -582,5 +636,10 @@ class _RecordingActionCenterActions implements ActionCenterActions {
   @override
   Future<void> handleExpiryBatch(String batchId) async {
     handledBatches.add(batchId);
+  }
+
+  @override
+  Future<void> handleLowStockAlert(String alertId) async {
+    handledLowStockAlerts.add(alertId);
   }
 }

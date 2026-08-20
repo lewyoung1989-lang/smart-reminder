@@ -244,26 +244,14 @@ class _QuickCreateSheetState extends State<QuickCreateSheet> {
                       const SizedBox(height: 12),
                       Row(
                         children: [
-                          Semantics(
-                            button: true,
-                            label: '语音输入',
-                            child: IconButton(
-                              tooltip: '语音输入',
-                              onPressed: _isParsing ||
-                                      _isVoiceActionInFlight ||
-                                      phase == VoiceInputPhase.transcribing ||
-                                      hasVoiceFailure
-                                  ? null
-                                  : _handleVoiceAction,
-                              icon: Icon(
-                                phase == VoiceInputPhase.recording
-                                    ? LucideIcons.square
-                                    : LucideIcons.mic,
-                              ),
+                          Expanded(
+                            child: _buildVoiceActionButton(
+                              context: context,
+                              phase: phase,
+                              hasVoiceFailure: hasVoiceFailure,
                             ),
                           ),
-                          const SizedBox(width: 4),
-                          const Expanded(child: SizedBox.shrink()),
+                          const SizedBox(width: 12),
                           ValueListenableBuilder<TextEditingValue>(
                             valueListenable: _textController,
                             builder: (context, value, child) {
@@ -306,6 +294,46 @@ class _QuickCreateSheetState extends State<QuickCreateSheet> {
     return '$minutes:$seconds';
   }
 
+  Widget _buildVoiceActionButton({
+    required BuildContext context,
+    required VoiceInputPhase phase,
+    required bool hasVoiceFailure,
+  }) {
+    final isRecording = phase == VoiceInputPhase.recording;
+    final isDisabled = _isParsing ||
+        _isVoiceActionInFlight ||
+        phase == VoiceInputPhase.transcribing ||
+        hasVoiceFailure;
+    final onPressed = isDisabled ? null : _handleVoiceAction;
+    final duration = isRecording && _voice != null
+        ? ' ${_formatDuration(_voice!.elapsed)}'
+        : '';
+    final icon = Icon(isRecording ? LucideIcons.square : LucideIcons.mic);
+    final label = isRecording ? '结束并识别$duration' : '语音输入';
+
+    return Semantics(
+      button: true,
+      label: isRecording ? '结束并识别语音' : '语音输入',
+      child: ExcludeSemantics(
+        child: SizedBox(
+          key: const Key('quick-create-voice-action'),
+          height: 52,
+          child: isRecording
+              ? FilledButton.icon(
+                  onPressed: onPressed,
+                  icon: icon,
+                  label: _VoiceActionLabel(label),
+                )
+              : FilledButton.tonalIcon(
+                  onPressed: onPressed,
+                  icon: icon,
+                  label: const _VoiceActionLabel('语音输入'),
+                ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildStatusRegion({
     required BuildContext context,
     required VoiceInputController? voice,
@@ -333,9 +361,8 @@ class _QuickCreateSheetState extends State<QuickCreateSheet> {
           context, voice?.errorMessage ?? _voiceActionError);
     }
     return switch (phase) {
-      VoiceInputPhase.recording => Align(
-          alignment: Alignment.centerLeft,
-          child: Text('停止录音 ${_formatDuration(voice!.elapsed)}'),
+      VoiceInputPhase.recording => _RecordingStatus(
+          elapsed: _formatDuration(voice!.elapsed),
         ),
       VoiceInputPhase.transcribing => const Align(
           alignment: Alignment.centerLeft,
@@ -365,6 +392,72 @@ class _QuickCreateSheetState extends State<QuickCreateSheet> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _VoiceActionLabel extends StatelessWidget {
+  const _VoiceActionLabel(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Text(text, maxLines: 1),
+    );
+  }
+}
+
+class _RecordingStatus extends StatelessWidget {
+  const _RecordingStatus({required this.elapsed});
+
+  final String elapsed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      key: const Key('quick-create-recording-status'),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: colorScheme.errorContainer.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: colorScheme.error.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            LucideIcons.audioLines,
+            color: colorScheme.error,
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '正在录音 $elapsed',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.onErrorContainer,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '说完后点下方“结束并识别”',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onErrorContainer,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

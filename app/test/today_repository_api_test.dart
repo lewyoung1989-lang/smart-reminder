@@ -59,6 +59,17 @@ void main() {
                 'id': 'medication-1',
               },
             },
+            {
+              'id': 'low-stock-1',
+              'title': '拜新同余量不足，还能用约2天（剩余2片）',
+              'kind': 'medicine_low_stock',
+              'status': 'low_stock',
+              'occurred_at': '2026-08-08T09:00:00+08:00',
+              'action_target': {
+                'resource': 'low_stock_alert',
+                'id': 'low-stock-1',
+              },
+            },
           ],
         },
         'upcoming': {
@@ -88,19 +99,23 @@ void main() {
       'https://api.invalid/api/v1/action-center/today',
     );
     expect(client.requests.single.headers['Authorization'], isNull);
-    expect(snapshot.decisions, hasLength(2));
+    expect(snapshot.decisions, hasLength(3));
     expect(snapshot.decisions.first.id, 'expiry-alert-1');
     expect(snapshot.decisions.first.kind, AttentionKind.confirmation);
     expect(snapshot.decisions.first.actionLabel, '处理');
     expect(snapshot.decisions.first.actionTarget?.resource, 'inventory_batch');
     expect(snapshot.decisions.first.actionTarget?.id, 'batch-1');
-    expect(snapshot.decisions.last.title, '服用布洛芬（1粒）');
+    expect(snapshot.decisions[1].title, '服用布洛芬（1粒）');
     expect(
-      snapshot.decisions.last.actionTarget?.resource,
+      snapshot.decisions[1].actionTarget?.resource,
       'medication_occurrence',
     );
-    expect(snapshot.decisions.last.dueAt,
+    expect(snapshot.decisions[1].dueAt,
         DateTime.parse('2026-08-08T08:00:00+08:00').toLocal());
+    expect(snapshot.decisions.last.title, '拜新同余量不足，还能用约2天（剩余2片）');
+    expect(snapshot.decisions.last.reason, '药箱余量不足，需要补库存');
+    expect(snapshot.decisions.last.actionLabel, '处理');
+    expect(snapshot.decisions.last.actionTarget?.resource, 'low_stock_alert');
     expect(snapshot.timeline.single.id, 'departure-1');
     expect(snapshot.timeline.single.status, TimelineStatus.upcoming);
     expect(snapshot.timeline.single.scheduledAt,

@@ -116,7 +116,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.bySemanticsLabel('语音输入'));
+    await tester.tap(find.byKey(const Key('quick-create-voice-action')));
     await tester.pump();
     expect(voice.phase, VoiceInputPhase.recording);
 
@@ -139,7 +139,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.bySemanticsLabel('语音输入'));
+    await tester.tap(find.byKey(const Key('quick-create-voice-action')));
     await tester.pump();
     expect(voice.phase, VoiceInputPhase.recording);
 
@@ -194,15 +194,14 @@ void main() {
   ) async {
     await tester
         .pumpWidget(app(QuickCreateSheet(createDraft: (_) async => draft)));
-    await tester.tap(find.bySemanticsLabel('语音输入'));
+    await tester.tap(find.byKey(const Key('quick-create-voice-action')));
     await tester.pump();
 
     expect(find.text('语音输入暂不可用'), findsOneWidget);
     expect(find.text('停止录音'), findsNothing);
   });
 
-  testWidgets(
-      'voice transcript is shown before automatic parsing', (
+  testWidgets('voice transcript is shown before automatic parsing', (
     tester,
   ) async {
     final voice = _FakeVoiceInputController();
@@ -222,10 +221,12 @@ void main() {
     );
 
     expect(find.bySemanticsLabel('语音输入'), findsOneWidget);
-    await tester.tap(find.bySemanticsLabel('语音输入'));
+    await tester.tap(find.byKey(const Key('quick-create-voice-action')));
     await tester.pump();
     expect(voice.phase, VoiceInputPhase.recording);
-    expect(find.textContaining('停止录音'), findsOneWidget);
+    expect(find.textContaining('正在录音'), findsOneWidget);
+    expect(find.text('说完后点下方“结束并识别”'), findsOneWidget);
+    expect(find.text('结束并识别 00:03'), findsOneWidget);
 
     voice.setPhase(VoiceInputPhase.transcribing);
     await tester.pump();
@@ -239,9 +240,9 @@ void main() {
     expect(voice.phase, VoiceInputPhase.idle);
 
     voice.transcript = '明天提醒我喝水';
-    await tester.tap(find.bySemanticsLabel('语音输入'));
+    await tester.tap(find.byKey(const Key('quick-create-voice-action')));
     await tester.pump();
-    await tester.tap(find.bySemanticsLabel('语音输入'));
+    await tester.tap(find.byKey(const Key('quick-create-voice-action')));
     await tester.pump();
     expect(
       tester.widget<EditableText>(find.byType(EditableText)).controller.text,
@@ -265,27 +266,27 @@ void main() {
     );
 
     final panel = find.byKey(const Key('quick-create-panel'));
-    final voiceAction = find.bySemanticsLabel('语音输入');
+    final voiceAction = find.byKey(const Key('quick-create-voice-action'));
+    final voiceActionButton =
+        find.byKey(const Key('quick-create-voice-action'));
     final continueAction = find.widgetWithText(FilledButton, '继续');
     final idleHeight = tester.getSize(panel).height;
-    expect(tester.getSize(find.byType(IconButton)).height,
-        greaterThanOrEqualTo(44));
-    expect(tester.widget<IconButton>(find.byType(IconButton)).onPressed,
-        isNotNull);
+    expect(tester.getSize(voiceActionButton).height, greaterThanOrEqualTo(44));
+    expect(find.text('语音输入'), findsWidgets);
     expect(tester.widget<FilledButton>(continueAction).onPressed, isNull);
 
     await tester.tap(voiceAction);
     await tester.pump();
     expect(tester.getSize(panel).height, idleHeight);
     expect(voice.phase, VoiceInputPhase.recording);
-    expect(tester.widget<IconButton>(find.byType(IconButton)).onPressed,
-        isNotNull);
+    expect(find.text('结束并识别 00:03'), findsOneWidget);
+    expect(
+        find.byKey(const Key('quick-create-recording-status')), findsOneWidget);
 
     voice.setPhase(VoiceInputPhase.transcribing);
     await tester.pump();
     expect(tester.getSize(panel).height, idleHeight);
-    expect(
-        tester.widget<IconButton>(find.byType(IconButton)).onPressed, isNull);
+    expect(tester.getSize(voiceActionButton).height, greaterThanOrEqualTo(44));
     expect(tester.widget<FilledButton>(continueAction).onPressed, isNull);
 
     voice.setFailure('麦克风不可用');
@@ -326,7 +327,7 @@ void main() {
       ),
     );
 
-    final voiceAction = find.bySemanticsLabel('语音输入');
+    final voiceAction = find.byKey(const Key('quick-create-voice-action'));
     await tester.tap(voiceAction);
     await tester.tap(voiceAction);
     await tester.pump();
@@ -361,7 +362,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.bySemanticsLabel('语音输入'));
+    await tester.tap(find.byKey(const Key('quick-create-voice-action')));
     await tester.pumpAndSettle();
 
     expect(find.text('语音输入失败，请重试'), findsOneWidget);
@@ -407,7 +408,7 @@ void main() {
       ),
     );
 
-    final voiceAction = find.bySemanticsLabel('语音输入');
+    final voiceAction = find.byKey(const Key('quick-create-voice-action'));
     final input = find.byKey(const Key('quick-create-input'));
     await tester.tap(voiceAction);
     await tester.pump();

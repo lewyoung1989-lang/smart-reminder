@@ -179,6 +179,7 @@ AttentionKind _attentionKind(String kind, String status) {
 String _attentionActionLabel(String kind, String status) {
   if (kind == 'medication') return '记录';
   if (kind == 'medicine_expiry') return '处理';
+  if (kind == 'medicine_low_stock') return '处理';
   if (status == 'paused') return '查看';
   return '查看详情';
 }
@@ -186,6 +187,7 @@ String _attentionActionLabel(String kind, String status) {
 String _attentionReason(String kind, String status) {
   if (kind == 'medication') return '已到服药时间，请确认是否已服用';
   if (kind == 'medicine_expiry') return '药品有效期需要确认';
+  if (kind == 'medicine_low_stock') return '药箱余量不足，需要补库存';
   if (kind == 'delivery') return '通知发送失败，需要稍后重试或检查设置';
   if (status == 'paused') return '工作流已暂停，需要你确认后继续';
   return '需要你确认下一步';
@@ -201,6 +203,7 @@ TimelineStatus _timelineStatus(String status) {
 String _timelineSubtitle(String kind, String status) {
   if (kind == 'medication') return '用药计划';
   if (kind == 'medicine_expiry') return '药品有效期';
+  if (kind == 'medicine_low_stock') return '药箱余量';
   if (kind == 'delivery') return '通知队列';
   if (kind == 'workflow') return status == 'scheduled' ? '已安排' : '工作流';
   return status;

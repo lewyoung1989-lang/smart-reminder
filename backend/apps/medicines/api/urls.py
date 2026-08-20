@@ -5,6 +5,7 @@ from .views import (
     InventoryBatchExpiryActionView,
     InventoryBatchExpiryDateCorrectionView,
     InventoryBatchListView,
+    LowStockAlertActionView,
     MedicineDescriptionParseView,
     MedicinePhotoUploadView,
 )
@@ -40,5 +41,10 @@ urlpatterns = [
         "inventory-batches/<uuid:pk>/expiry-dates",
         InventoryBatchExpiryDateCorrectionView.as_view(),
         name="inventory-batch-expiry-dates",
+    ),
+    path(
+        "low-stock-alerts/<uuid:pk>/actions",
+        LowStockAlertActionView.as_view(),
+        name="low-stock-alert-actions",
     ),
 ]

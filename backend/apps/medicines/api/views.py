@@ -13,12 +13,22 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.medicines.models import ExpiryAlertState, ExpiryBatchAction, InventoryBatch
+from apps.medicines.models import (
+    ExpiryAlertState,
+    ExpiryBatchAction,
+    InventoryBatch,
+    LowStockAlertState,
+)
 from apps.medicines.providers import (
     DeepSeekMedicineDescriptionError,
     DeepSeekMedicineDescriptionProvider,
 )
 from apps.medicines.services.expiry_alerts import refresh_expiry_alerts
+from apps.medicines.services.low_stock_alerts import (
+    refresh_low_stock_alerts_for_batch,
+    refresh_low_stock_alerts_for_medicine,
+    resolve_low_stock_alert,
+)
 from apps.medicines.services.access import (
     inventory_access_query,
     require_batch_access,
@@ -34,6 +44,7 @@ from .serializers import (
     ExpiryDateCorrectionSerializer,
     InventoryBatchCreateSerializer,
     InventoryBatchSerializer,
+    LowStockAlertActionSerializer,
     MedicineDescriptionParseSerializer,
     MedicinePhotoUploadSerializer,
 )
@@ -110,6 +121,10 @@ class InventoryBatchListView(ListAPIView):
         with transaction.atomic():
             batch = serializer.create_for_user(request.user)
             refresh_expiry_alerts(batch=batch, today=timezone.localdate())
+            refresh_low_stock_alerts_for_batch(
+                batch=batch,
+                today=timezone.localdate(),
+            )
         logger.info("inventory_batch_created batch_id=%s", batch.id)
         return Response(
             InventoryBatchSerializer(
@@ -159,6 +174,7 @@ class InventoryBatchDestroyView(DestroyAPIView):
     def perform_destroy(self, instance):
         require_batch_access(instance, self.request.user, delete=True)
         batch_id = instance.id
+        medicine = instance.medicine
         family = instance.medicine.family
         if family is not None:
             record_event(
@@ -168,6 +184,10 @@ class InventoryBatchDestroyView(DestroyAPIView):
                 payload={"batch_id": str(batch_id)},
             )
         instance.delete()
+        refresh_low_stock_alerts_for_medicine(
+            medicine=medicine,
+            today=timezone.localdate(),
+        )
         logger.info("inventory_batch_deleted batch_id=%s", batch_id)
 
 
@@ -212,6 +232,33 @@ class InventoryBatchExpiryActionView(APIView):
         return Response(
             {"batch_id": str(batch.id), "action": action}, status=status.HTTP_200_OK
         )
+
+
+class LowStockAlertActionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        serializer = LowStockAlertActionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        with transaction.atomic():
+            try:
+                alert = (
+                    LowStockAlertState.objects.select_for_update()
+                    .filter(
+                        Q(medicine__owner=request.user)
+                        | Q(medicine__family__members__user=request.user)
+                    )
+                    .distinct()
+                    .get(id=pk)
+                )
+            except LowStockAlertState.DoesNotExist:
+                return Response(
+                    {"detail": "未找到低库存提醒"}, status=status.HTTP_404_NOT_FOUND
+                )
+            resolve_low_stock_alert(alert=alert)
+
+        return Response({"alert_id": str(alert.id), "action": "handled"})
 
 
 class InventoryBatchExpiryDateCorrectionView(APIView):

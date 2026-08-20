@@ -94,6 +94,22 @@ void main() {
     expect(jsonDecode(client.requestBodies.single), {'action': 'handled'});
   });
 
+  test('handles a low stock alert through the verified action', () async {
+    final client = RecordingClient([
+      jsonResponse(200, {'status': 'ok'})
+    ]);
+    final api = ActionCenterApi(baseUrl: 'https://api.invalid', client: client);
+
+    await api.handleLowStockAlert('alert-1');
+
+    expect(client.requests.single.method, 'POST');
+    expect(
+      client.requests.single.url.toString(),
+      'https://api.invalid/api/v1/low-stock-alerts/alert-1/actions',
+    );
+    expect(jsonDecode(client.requestBodies.single), {'action': 'handled'});
+  });
+
   test('throws a stable exception when a verified action is rejected',
       () async {
     final api = ActionCenterApi(

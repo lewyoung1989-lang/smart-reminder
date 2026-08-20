@@ -194,6 +194,59 @@ class ExpiryAlertState(models.Model):
         ]
 
 
+class LowStockAlertState(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        ACTIVE = "active", "Active"
+        RESOLVED = "resolved", "Resolved"
+        SUPERSEDED = "superseded", "Superseded"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    medicine = models.ForeignKey(
+        MedicineItem,
+        on_delete=models.CASCADE,
+        related_name="low_stock_alerts",
+    )
+    unit_name = models.CharField(max_length=16)
+    threshold_days = models.PositiveIntegerField()
+    remaining_quantity = models.DecimalField(max_digits=12, decimal_places=3)
+    daily_quantity = models.DecimalField(max_digits=12, decimal_places=3)
+    days_remaining = models.DecimalField(max_digits=8, decimal_places=2)
+    status = models.CharField(max_length=16, choices=Status, default=Status.PENDING)
+    activated_at = models.DateTimeField(null=True, blank=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["medicine", "unit_name", "threshold_days"],
+                name="low_stock_alert_medicine_unit_threshold_unique",
+            ),
+            models.CheckConstraint(
+                condition=~models.Q(unit_name=""),
+                name="low_stock_alert_unit_name_nonempty",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(threshold_days__gt=0),
+                name="low_stock_alert_threshold_days_positive",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(remaining_quantity__gte=0),
+                name="low_stock_alert_remaining_quantity_nonnegative",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(daily_quantity__gt=0),
+                name="low_stock_alert_daily_quantity_positive",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(days_remaining__gte=0),
+                name="low_stock_alert_days_remaining_nonnegative",
+            ),
+        ]
+
+
 class ExpiryBatchAction(models.Model):
     class Action(models.TextChoices):
         HANDLED = "handled", "Handled"

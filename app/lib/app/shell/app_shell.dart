@@ -283,6 +283,9 @@ class _AppShellState extends State<AppShell> {
       } else if (target.resource == 'inventory_batch') {
         await actions.handleExpiryBatch(target.id);
         _showSnackBar('已处理有效期提醒');
+      } else if (target.resource == 'low_stock_alert') {
+        await actions.handleLowStockAlert(target.id);
+        _showSnackBar('已处理买药提醒');
       } else {
         _showSnackBar('暂不支持直接处理这个事项');
       }

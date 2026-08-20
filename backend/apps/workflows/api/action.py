@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.medication.models import MedicationOccurrence
-from apps.medicines.models import ExpiryAlertState
+from apps.medicines.models import ExpiryAlertState, LowStockAlertState
 from apps.reminders.models import ReminderRule
 from apps.workflows.models import NotificationOutbox
 
@@ -89,6 +89,12 @@ class TodayActionCenterView(APIView):
             Q(batch__medicine__owner=request.user)
             | Q(batch__medicine__family__members__user=request.user)
         ).distinct().select_related("batch__medicine")
+        active_low_stock_alerts = LowStockAlertState.objects.filter(
+            status=LowStockAlertState.Status.ACTIVE,
+        ).filter(
+            Q(medicine__owner=request.user)
+            | Q(medicine__family__members__user=request.user)
+        ).distinct().select_related("medicine")
         upcoming_medication = MedicationOccurrence.objects.filter(
             plan__owner=request.user,
             plan__enabled=True,
@@ -148,6 +154,22 @@ class TodayActionCenterView(APIView):
                 },
             }
             for alert in active_expiry_alerts.order_by("deadline", "id")[:window]
+        )
+        need_decision.extend(
+            {
+                "id": str(alert.id),
+                "title": _low_stock_title(alert),
+                "kind": "medicine_low_stock",
+                "status": "low_stock",
+                "occurred_at": _as_local_iso(alert.activated_at or alert.created_at),
+                "action_target": {
+                    "resource": "low_stock_alert",
+                    "id": str(alert.id),
+                },
+            }
+            for alert in active_low_stock_alerts.order_by(
+                "days_remaining", "medicine__name", "id"
+            )[:window]
         )
 
         upcoming = [
@@ -218,3 +240,9 @@ def _expiry_title(alert):
     if alert.threshold_days == 0:
         return f"{alert.batch.medicine.name}已到期，请确认是否已处理"
     return f"{alert.batch.medicine.name}有效期还有{alert.threshold_days}天，请确认库存"
+
+
+def _low_stock_title(alert):
+    days = format(alert.days_remaining.normalize(), "f")
+    remaining = format(alert.remaining_quantity.normalize(), "f")
+    return f"{alert.medicine.name}余量不足，还能用约{days}天（剩余{remaining}{alert.unit_name}）"

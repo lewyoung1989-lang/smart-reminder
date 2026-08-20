@@ -19,6 +19,10 @@ class ExpiryBatchActionSerializer(serializers.Serializer):
     action = serializers.ChoiceField(choices=ExpiryBatchAction.Action.choices)
 
 
+class LowStockAlertActionSerializer(serializers.Serializer):
+    action = serializers.ChoiceField(choices=(("handled", "Handled"),))
+
+
 class ExpiryDateCorrectionSerializer(serializers.Serializer):
     expiry_date = serializers.DateField(required=False, allow_null=True)
     opened_at = serializers.DateField(required=False, allow_null=True)

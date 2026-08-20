@@ -10,7 +10,7 @@ from apps.medication.models import (
     MedicationOccurrence,
     MedicationPlan,
 )
-from apps.medicines.models import InventoryBatch, MedicineItem
+from apps.medicines.models import InventoryBatch, LowStockAlertState, MedicineItem
 from apps.workflows.models import WorkflowDraft
 
 
@@ -195,6 +195,48 @@ def test_mark_taken_deducts_precise_inventory_once(api_client, user):
     assert batch.quantity == 1
     assert batch.loose_units == 9
     assert InventoryDeductionEntry.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_mark_taken_refreshes_low_stock_alerts(api_client, user):
+    medicine = MedicineItem.objects.create(owner=user, name="拜新同")
+    InventoryBatch.objects.create(
+        medicine=medicine,
+        quantity=0,
+        package_unit="盒",
+        units_per_package="14",
+        unit_name="片",
+        loose_units="4",
+    )
+    draft = create_confirmed_medication_draft(user)
+    api_client.force_authenticate(user)
+    plan_response = api_client.post(
+        "/api/v1/medication/plans",
+        {
+            "workflow_draft_id": str(draft.id),
+            "medicine_id": str(medicine.id),
+            "dosage_text": "一次一片",
+            "timezone": "Asia/Shanghai",
+            "times": ["08:00"],
+        },
+        format="json",
+    )
+    assert LowStockAlertState.objects.count() == 0
+    occurrence = MedicationOccurrence.objects.filter(
+        plan_id=plan_response.data["id"]
+    ).earliest("scheduled_at")
+
+    response = api_client.post(
+        f"/api/v1/medication/occurrences/{occurrence.id}/actions",
+        {"action": "taken"},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    alert = LowStockAlertState.objects.get(medicine=medicine)
+    assert alert.status == LowStockAlertState.Status.ACTIVE
+    assert alert.remaining_quantity == 3
+    assert alert.days_remaining == 3
 
 
 @pytest.mark.django_db

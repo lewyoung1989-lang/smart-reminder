@@ -6,6 +6,8 @@ abstract interface class ActionCenterActions {
   Future<MedicationActionResult> markMedicationTaken(String occurrenceId);
 
   Future<void> handleExpiryBatch(String batchId);
+
+  Future<void> handleLowStockAlert(String alertId);
 }
 
 class ActionCenterApi implements ActionCenterActions {
@@ -36,6 +38,14 @@ class ActionCenterApi implements ActionCenterActions {
     await _postVerifiedAction(
       path:
           '/api/v1/inventory-batches/${Uri.encodeComponent(batchId)}/expiry-actions',
+      action: 'handled',
+    );
+  }
+
+  @override
+  Future<void> handleLowStockAlert(String alertId) async {
+    await _postVerifiedAction(
+      path: '/api/v1/low-stock-alerts/${Uri.encodeComponent(alertId)}/actions',
       action: 'handled',
     );
   }

@@ -11,6 +11,7 @@ from apps.medication.models import IntakeEvent, MedicationOccurrence, Medication
 from apps.medication.services.inventory import deduction_payload, deduct_inventory_for_intake
 from apps.medication.services.occurrences import materialize_occurrences
 from apps.medicines.models import MedicineItem
+from apps.medicines.services.low_stock_alerts import refresh_low_stock_alerts_for_medicine
 from apps.workflows.models import WorkflowDraft
 
 from .serializers import (
@@ -79,6 +80,10 @@ class MedicationPlanListCreateView(APIView):
             plan.full_clean()
             plan.save()
             materialize_occurrences(plan, now=timezone.now())
+            refresh_low_stock_alerts_for_medicine(
+                medicine=medicine,
+                today=timezone.localdate(),
+            )
         return Response(_plan_payload(plan), status=status.HTTP_201_CREATED)
 
 
@@ -125,6 +130,11 @@ class MedicationOccurrenceActionView(APIView):
                 if action == MedicationOccurrence.Status.TAKEN
                 else None
             )
+            if action == MedicationOccurrence.Status.TAKEN and occurrence.plan.medicine_id:
+                refresh_low_stock_alerts_for_medicine(
+                    medicine=occurrence.plan.medicine,
+                    today=timezone.localdate(),
+                )
 
         return Response(
             _occurrence_payload(occurrence, deduction=deduction),
