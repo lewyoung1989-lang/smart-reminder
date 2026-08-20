@@ -306,6 +306,7 @@ def test_secret_configurator_does_not_echo_or_source_production_values():
     assert "mktemp" in script
     assert "chmod 600" in script
     assert "check_env.py" in script
+    assert "ensure_value ASR_LEASE_PROVIDER redis" in script
     assert 'source "$ENV_FILE"' not in script
     assert "set -x" not in script
     assert 'echo "$DEEPSEEK_API_KEY"' not in script

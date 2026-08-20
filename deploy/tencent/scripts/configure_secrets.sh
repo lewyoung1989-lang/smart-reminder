@@ -50,6 +50,7 @@ ensure_value FILES_DOMAIN files.aipupu.cloud
 ensure_value OCR_ENABLED false
 ensure_value ASR_PROVIDER funasr
 ensure_value ASR_BASE_URL http://funasr:8000
+ensure_value ASR_LEASE_PROVIDER redis
 ensure_value ASR_MODEL paraformer-zh
 ensure_value ASR_TIMEOUT_SECONDS 75
 ensure_value ASR_MAX_AUDIO_BYTES 4194304
