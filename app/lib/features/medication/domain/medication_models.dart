@@ -14,7 +14,7 @@ class MedicationPlan {
 
   factory MedicationPlan.fromJson(Map<String, dynamic> json) => MedicationPlan(
         id: json['id'] as String,
-        medicineId: json['medicine_id'] as String,
+        medicineId: json['medicine_id'] as String?,
         dosageText: json['dosage_text'] as String,
         timezone: json['timezone'] as String,
         times: (json['times'] as List<dynamic>).cast<String>(),
@@ -22,7 +22,7 @@ class MedicationPlan {
       );
 
   final String id;
-  final String medicineId;
+  final String? medicineId;
   final String dosageText;
   final String timezone;
   final List<String> times;

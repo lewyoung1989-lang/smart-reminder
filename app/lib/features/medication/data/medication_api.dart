@@ -18,7 +18,8 @@ class MedicationApi {
 
   Future<MedicationPlan> createPlan({
     required String workflowDraftId,
-    required String medicineId,
+    String? medicineId,
+    String? medicineName,
     required String dosageText,
     required String timezone,
     required List<String> times,
@@ -28,7 +29,8 @@ class MedicationApi {
       headers: _jsonHeaders,
       body: jsonEncode({
         'workflow_draft_id': workflowDraftId,
-        'medicine_id': medicineId,
+        if (medicineId != null) 'medicine_id': medicineId,
+        if (medicineName != null) 'medicine_name': medicineName,
         'dosage_text': dosageText,
         'timezone': timezone,
         'times': times,

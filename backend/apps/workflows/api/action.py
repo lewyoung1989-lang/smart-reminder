@@ -308,7 +308,11 @@ class TodayActionCenterView(APIView):
 
 
 def _medication_title(occurrence):
-    name = occurrence.plan.medicine_name or occurrence.plan.medicine.name
+    name = occurrence.plan.medicine_name
+    if not name and occurrence.plan.medicine_id:
+        name = occurrence.plan.medicine.name
+    if not name:
+        name = "药品"
     return f"服用{name}（{occurrence.plan.dosage_text}）"
 
 

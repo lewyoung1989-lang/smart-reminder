@@ -8,7 +8,13 @@ from apps.medication.services.dosage import parse_structured_dose
 
 class CreateMedicationPlanSerializer(serializers.Serializer):
     workflow_draft_id = serializers.UUIDField(required=False)
-    medicine_id = serializers.UUIDField()
+    medicine_id = serializers.UUIDField(required=False, allow_null=True)
+    medicine_name = serializers.CharField(
+        max_length=200,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+    )
     dosage_text = serializers.CharField(max_length=200, trim_whitespace=True)
     dose_quantity = serializers.DecimalField(
         max_digits=10,
@@ -40,6 +46,10 @@ class CreateMedicationPlanSerializer(serializers.Serializer):
                 )
         if attrs["dosage_text"] == "":
             raise serializers.ValidationError({"dosage_text": "用量不能为空。"})
+        if attrs.get("medicine_id") is None and not attrs.get("medicine_name", ""):
+            raise serializers.ValidationError(
+                {"medicine_name": "未选择药箱药品时，需要保留药品名称。"}
+            )
         quantity_supplied = attrs.get("dose_quantity") is not None
         unit_supplied = bool(attrs.get("dose_unit", ""))
         if quantity_supplied != unit_supplied:

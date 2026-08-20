@@ -10,6 +10,7 @@ from rest_framework.views import APIView
 from apps.medication.models import IntakeEvent, MedicationOccurrence, MedicationPlan
 from apps.medication.services.inventory import deduction_payload, deduct_inventory_for_intake
 from apps.medication.services.occurrences import materialize_occurrences
+from apps.medication.services.workflow_plans import resolve_medicine_candidate
 from apps.medicines.models import MedicineItem
 from apps.medicines.services.low_stock_alerts import refresh_low_stock_alerts_for_medicine
 from apps.workflows.models import WorkflowDraft
@@ -59,16 +60,25 @@ class MedicationPlanListCreateView(APIView):
                 raise ValidationError(
                     {"workflow_draft_id": ["需要已确认的周期用药工作流。"]}
                 )
-            medicine = MedicineItem.objects.filter(id=data["medicine_id"]).filter(
-                models.Q(owner=request.user)
-                | models.Q(family__members__user=request.user)
-            ).distinct().first()
-            if medicine is None:
-                raise ValidationError({"medicine_id": ["药品不存在或不属于当前用户。"]})
+            medicine = None
+            medicine_id = data.get("medicine_id")
+            if medicine_id is not None:
+                medicine = MedicineItem.objects.filter(id=medicine_id).filter(
+                    models.Q(owner=request.user)
+                    | models.Q(family__members__user=request.user)
+                ).distinct().first()
+                if medicine is None:
+                    raise ValidationError({"medicine_id": ["药品不存在或不属于当前用户。"]})
+            else:
+                medicine = resolve_medicine_candidate(
+                    request.user,
+                    data.get("medicine_name", ""),
+                    dose_unit=data["dose_unit"],
+                )
             plan = MedicationPlan(
                 owner=request.user,
                 medicine=medicine,
-                medicine_name=medicine.name,
+                medicine_name=medicine.name if medicine is not None else data["medicine_name"],
                 source_workflow_draft=draft,
                 dosage_text=data["dosage_text"],
                 dose_quantity=data["dose_quantity"],
@@ -80,10 +90,11 @@ class MedicationPlanListCreateView(APIView):
             plan.full_clean()
             plan.save()
             materialize_occurrences(plan, now=timezone.now())
-            refresh_low_stock_alerts_for_medicine(
-                medicine=medicine,
-                today=timezone.localdate(),
-            )
+            if medicine is not None:
+                refresh_low_stock_alerts_for_medicine(
+                    medicine=medicine,
+                    today=timezone.localdate(),
+                )
         return Response(_plan_payload(plan), status=status.HTTP_201_CREATED)
 
 

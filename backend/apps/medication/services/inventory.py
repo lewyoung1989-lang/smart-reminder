@@ -9,6 +9,7 @@ from apps.medication.models import (
     InventoryDeductionAttempt,
     InventoryDeductionEntry,
 )
+from apps.medication.services.workflow_plans import resolve_medicine_candidate
 from apps.medicines.models import InventoryBatch, MedicineItem
 from apps.medicines.services.access import medicine_access_query
 
@@ -29,6 +30,7 @@ def deduct_inventory_for_intake(event: IntakeEvent):
         return existing
 
     plan = event.occurrence.plan
+    _link_plan_medicine_from_cabinet(plan, event.user)
     requested = plan.dose_quantity
     unit_name = plan.dose_unit
     if not plan.auto_deduct_inventory:
@@ -156,6 +158,23 @@ def deduct_inventory_for_intake(event: IntakeEvent):
             },
         )
     return attempt
+
+
+def _link_plan_medicine_from_cabinet(plan, user):
+    if plan.medicine_id is not None:
+        return
+    medicine = resolve_medicine_candidate(
+        user,
+        plan.medicine_name,
+        dose_unit=plan.dose_unit,
+    )
+    if medicine is None:
+        return
+    plan.medicine = medicine
+    if not plan.medicine_name:
+        plan.medicine_name = medicine.name
+    plan.full_clean()
+    plan.save(update_fields=["medicine", "medicine_name", "updated_at"])
 
 
 def deduction_payload(attempt: InventoryDeductionAttempt):

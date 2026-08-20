@@ -51,6 +51,31 @@ def test_create_plan_materializes_30_day_window(api_client, user):
 
 
 @pytest.mark.django_db
+def test_create_plan_without_cabinet_medicine_keeps_text_name(api_client, user):
+    draft = create_confirmed_medication_draft(user)
+    api_client.force_authenticate(user)
+
+    response = api_client.post(
+        "/api/v1/medication/plans",
+        {
+            "workflow_draft_id": str(draft.id),
+            "medicine_name": "依巴斯汀",
+            "dosage_text": "一次一片",
+            "timezone": "Asia/Shanghai",
+            "times": ["08:00"],
+        },
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.data["medicine_id"] is None
+    plan = MedicationPlan.objects.get(id=response.data["id"])
+    assert plan.medicine is None
+    assert plan.medicine_name == "依巴斯汀"
+    assert MedicationOccurrence.objects.filter(plan=plan).count() == 30
+
+
+@pytest.mark.django_db
 def test_create_plan_requires_confirmed_medication_workflow(api_client, user):
     medicine = MedicineItem.objects.create(owner=user, name="布洛芬")
     api_client.force_authenticate(user)
@@ -359,6 +384,49 @@ def test_mark_taken_records_without_deducting_unsafe_inventory(
     assert batch.quantity == batch_kwargs["quantity"]
     assert batch.loose_units == 0
     assert InventoryDeductionEntry.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_mark_taken_links_matching_cabinet_medicine_before_deducting(api_client, user):
+    plan = MedicationPlan.objects.create(
+        owner=user,
+        medicine=None,
+        medicine_name="依巴斯汀",
+        dosage_text="一次一片",
+        dose_quantity="1",
+        dose_unit="片",
+        timezone="Asia/Shanghai",
+        schedule_json={"times": ["08:00"]},
+    )
+    occurrence = MedicationOccurrence.objects.create(
+        plan=plan,
+        scheduled_at=datetime(2026, 8, 8, 0, tzinfo=timezone.utc),
+        index=0,
+        idempotency_key="late-linked-medicine",
+    )
+    medicine = MedicineItem.objects.create(owner=user, name="依巴斯汀")
+    batch = InventoryBatch.objects.create(
+        medicine=medicine,
+        quantity=1,
+        package_unit="盒",
+        units_per_package="10",
+        unit_name="片",
+    )
+    api_client.force_authenticate(user)
+
+    response = api_client.post(
+        f"/api/v1/medication/occurrences/{occurrence.id}/actions",
+        {"action": "taken"},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["inventory_deduction"]["status"] == "deducted"
+    plan.refresh_from_db()
+    batch.refresh_from_db()
+    assert plan.medicine == medicine
+    assert batch.quantity == 0
+    assert batch.loose_units == 9
 
 
 @pytest.mark.django_db

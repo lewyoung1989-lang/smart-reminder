@@ -103,8 +103,15 @@ class MedicationActionResult {
     final deductionStatus = deduction is Map<String, dynamic>
         ? deduction['status'] as String?
         : null;
+    final deductionMessage = deduction is Map<String, dynamic>
+        ? deduction['message'] as String?
+        : null;
     return MedicationActionResult(
-      message: deductionStatus == 'deducted' ? '已记录服药，药箱余量已更新' : '已记录服药',
+      message: deductionMessage != null && deductionMessage.isNotEmpty
+          ? deductionMessage
+          : deductionStatus == 'deducted'
+              ? '已记录服药，药箱余量已更新'
+              : '已记录服药',
     );
   }
 

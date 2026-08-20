@@ -72,6 +72,40 @@ void main() {
     expect(plan.enabled, isTrue);
   });
 
+  test(
+      'creates a medication plan with medicine name when cabinet item is absent',
+      () async {
+    final client = RecordingClient([
+      jsonResponse(201, {
+        'id': 'plan-1',
+        'medicine_id': null,
+        'medicine_name': '依巴斯汀',
+        'dosage_text': '一次一片',
+        'timezone': 'Asia/Shanghai',
+        'times': ['08:00'],
+        'enabled': true,
+      }),
+    ]);
+    final api = MedicationApi(baseUrl: 'https://api.invalid', client: client);
+
+    final plan = await api.createPlan(
+      workflowDraftId: 'draft-1',
+      medicineName: '依巴斯汀',
+      dosageText: '一次一片',
+      timezone: 'Asia/Shanghai',
+      times: const ['08:00'],
+    );
+
+    expect(jsonDecode(client.requestBodies.single), {
+      'workflow_draft_id': 'draft-1',
+      'medicine_name': '依巴斯汀',
+      'dosage_text': '一次一片',
+      'timezone': 'Asia/Shanghai',
+      'times': ['08:00'],
+    });
+    expect(plan.medicineId, isNull);
+  });
+
   test('lists pending medication occurrences', () async {
     final client = RecordingClient([
       jsonResponse(200, {

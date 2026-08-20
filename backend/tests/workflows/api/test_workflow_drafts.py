@@ -168,6 +168,25 @@ def test_medication_confirmation_links_inventory_and_creates_occurrences(
 
 
 @pytest.mark.django_db
+def test_medication_confirmation_allows_missing_cabinet_medicine(
+    api_client, user, mocker
+):
+    mocker.patch("apps.workflows.api.views.timezone.now", return_value=NOW)
+    api_client.force_authenticate(user)
+    created = create_draft(api_client, "每天早上八点吃依巴斯汀 1片").json()
+
+    response = api_client.post(f"{CREATE_URL}/{created['id']}/confirm")
+
+    assert response.status_code == 201
+    plan = MedicationPlan.objects.get(source_workflow_draft_id=created["id"])
+    assert plan.medicine is None
+    assert plan.medicine_name == "依巴斯汀"
+    assert plan.dose_quantity == 1
+    assert plan.dose_unit == "片"
+    assert MedicationOccurrence.objects.filter(plan=plan).count() == 30
+
+
+@pytest.mark.django_db
 def test_medication_confirmation_prefers_precise_inventory_candidate_for_deduction(
     api_client, user, mocker
 ):

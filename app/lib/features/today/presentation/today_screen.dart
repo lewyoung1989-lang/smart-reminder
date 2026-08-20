@@ -805,7 +805,7 @@ String _formatDate(DateTime value) {
   return '${value.month}月${value.day}日 ${weekdays[value.weekday - 1]}';
 }
 
-String _formatDue(DateTime value) => '${_formatTime(value)} 截止';
+String _formatDue(DateTime value) => '${_formatTime(value)} 已到';
 
 DateTime? _nextScheduledAt(
   List<AttentionItem> decisions,

@@ -18,7 +18,7 @@ def ensure_medication_plan_for_workflow(*, draft, task, now):
     medicine_name = slots["medicine_name"]
     dosage_text = slots["dose_text"]
     dose_quantity, dose_unit = parse_structured_dose(dosage_text)
-    medicine = _resolve_medicine(
+    medicine = resolve_medicine_candidate(
         draft.user,
         medicine_name,
         medicine_id=slots.get("medicine_id"),
@@ -46,7 +46,10 @@ def ensure_medication_plan_for_workflow(*, draft, task, now):
     return plan
 
 
-def _resolve_medicine(user, medicine_name, *, medicine_id=None, dose_unit=""):
+def resolve_medicine_candidate(user, medicine_name, *, medicine_id=None, dose_unit=""):
+    if not isinstance(medicine_name, str) or not medicine_name.strip():
+        return None
+    medicine_name = medicine_name.strip()
     if medicine_id:
         if not isinstance(medicine_id, str):
             return None
