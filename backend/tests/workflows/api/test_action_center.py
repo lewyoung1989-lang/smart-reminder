@@ -33,6 +33,20 @@ def create_workflow_rule(owner, *, title, **overrides):
     return ReminderRule.objects.create(**values)
 
 
+def create_ordinary_reminder(owner, *, title, scheduled_at, **overrides):
+    values = {
+        "owner": owner,
+        "title": title,
+        "timezone": "Asia/Shanghai",
+        "schedule_json": {"local_datetime": scheduled_at.isoformat()},
+        "conditions_json": {},
+        "severity": "notification",
+        "scheduled_at": scheduled_at,
+    }
+    values.update(overrides)
+    return ReminderRule.objects.create(**values)
+
+
 def create_outbox(owner, *, title, suffix, **overrides):
     rule = create_workflow_rule(owner, title=title)
     run = WorkflowRun.objects.create(
@@ -444,3 +458,57 @@ def test_today_includes_due_and_upcoming_medication_occurrences(api_client, user
         "status": "scheduled",
         "occurred_at": "2026-08-08T10:00:00+08:00",
     } in response.json()["upcoming"]["results"]
+
+
+@pytest.mark.django_db
+def test_today_includes_due_and_upcoming_ordinary_reminders(
+    api_client, user, django_user_model, mocker
+):
+    due = create_ordinary_reminder(
+        user,
+        title="给妈妈打电话",
+        scheduled_at=NOW - timedelta(minutes=5),
+    )
+    upcoming = create_ordinary_reminder(
+        user,
+        title="晚上测血压",
+        scheduled_at=NOW + timedelta(hours=1),
+    )
+    other = django_user_model.objects.create_user(username="ordinary-reminder-other")
+    create_ordinary_reminder(
+        other,
+        title="别人的提醒",
+        scheduled_at=NOW + timedelta(hours=2),
+    )
+    create_ordinary_reminder(
+        user,
+        title="已取消提醒",
+        scheduled_at=NOW + timedelta(hours=3),
+        enabled=False,
+        cancelled_at=NOW,
+    )
+    mocker.patch("apps.workflows.api.action.timezone.now", return_value=NOW)
+    api_client.force_authenticate(user)
+
+    response = api_client.get("/api/v1/action-center/today")
+
+    assert response.status_code == 200
+    assert {
+        "id": str(due.id),
+        "title": "给妈妈打电话",
+        "kind": "reminder",
+        "status": "due",
+        "occurred_at": "2026-08-08T08:55:00+08:00",
+    } in response.json()["need_decision"]["results"]
+    assert {
+        "id": str(upcoming.id),
+        "title": "晚上测血压",
+        "kind": "reminder",
+        "status": "scheduled",
+        "occurred_at": "2026-08-08T10:00:00+08:00",
+    } in response.json()["upcoming"]["results"]
+    assert all(
+        item["title"] not in {"别人的提醒", "已取消提醒"}
+        for queue in response.json().values()
+        for item in queue["results"]
+    )

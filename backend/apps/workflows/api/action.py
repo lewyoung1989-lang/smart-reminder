@@ -77,6 +77,13 @@ class TodayActionCenterView(APIView):
             enabled=True,
             next_run_at__gt=now,
         )
+        ordinary_reminders = ReminderRule.objects.filter(
+            owner=request.user,
+            workflow_draft__isnull=True,
+            enabled=True,
+            cancelled_at__isnull=True,
+            scheduled_at__isnull=False,
+        ).filter(Q(template_key__isnull=True) | Q(template_key=""))
         due_medication = MedicationOccurrence.objects.filter(
             plan__owner=request.user,
             plan__enabled=True,
@@ -143,6 +150,18 @@ class TodayActionCenterView(APIView):
         )
         need_decision.extend(
             {
+                "id": str(rule.id),
+                "title": rule.title,
+                "kind": "reminder",
+                "status": "due",
+                "occurred_at": _as_local_iso(rule.scheduled_at),
+            }
+            for rule in ordinary_reminders.filter(scheduled_at__lte=now).order_by(
+                "scheduled_at", "id"
+            )[:window]
+        )
+        need_decision.extend(
+            {
                 "id": str(alert.id),
                 "title": _expiry_title(alert),
                 "kind": "medicine_expiry",
@@ -199,6 +218,22 @@ class TodayActionCenterView(APIView):
                 },
             )
             for rule in upcoming_rules.order_by("next_run_at", "id")[:window]
+        )
+        upcoming.extend(
+            (
+                rule.scheduled_at,
+                str(rule.id),
+                {
+                    "id": str(rule.id),
+                    "title": rule.title,
+                    "kind": "reminder",
+                    "status": "scheduled",
+                    "occurred_at": _as_local_iso(rule.scheduled_at),
+                },
+            )
+            for rule in ordinary_reminders.filter(scheduled_at__gt=now).order_by(
+                "scheduled_at", "id"
+            )[:window]
         )
         upcoming.extend(
             (

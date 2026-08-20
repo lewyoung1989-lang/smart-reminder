@@ -70,6 +70,13 @@ void main() {
                 'id': 'low-stock-1',
               },
             },
+            {
+              'id': 'reminder-due-1',
+              'title': '给妈妈打电话',
+              'kind': 'reminder',
+              'status': 'due',
+              'occurred_at': '2026-08-08T08:30:00+08:00',
+            },
           ],
         },
         'upcoming': {
@@ -81,6 +88,13 @@ void main() {
               'kind': 'workflow',
               'status': 'scheduled',
               'occurred_at': '2026-08-08T09:10:00+00:00',
+            },
+            {
+              'id': 'reminder-1',
+              'title': '晚上测血压',
+              'kind': 'reminder',
+              'status': 'scheduled',
+              'occurred_at': '2026-08-08T20:00:00+08:00',
             },
           ],
         },
@@ -99,7 +113,7 @@ void main() {
       'https://api.invalid/api/v1/action-center/today',
     );
     expect(client.requests.single.headers['Authorization'], isNull);
-    expect(snapshot.decisions, hasLength(3));
+    expect(snapshot.decisions, hasLength(4));
     expect(snapshot.decisions.first.id, 'expiry-alert-1');
     expect(snapshot.decisions.first.kind, AttentionKind.confirmation);
     expect(snapshot.decisions.first.actionLabel, '处理');
@@ -112,14 +126,19 @@ void main() {
     );
     expect(snapshot.decisions[1].dueAt,
         DateTime.parse('2026-08-08T08:00:00+08:00').toLocal());
-    expect(snapshot.decisions.last.title, '拜新同余量不足，还能用约2天（剩余2片）');
-    expect(snapshot.decisions.last.reason, '药箱余量不足，需要补库存');
-    expect(snapshot.decisions.last.actionLabel, '处理');
-    expect(snapshot.decisions.last.actionTarget?.resource, 'low_stock_alert');
-    expect(snapshot.timeline.single.id, 'departure-1');
-    expect(snapshot.timeline.single.status, TimelineStatus.upcoming);
-    expect(snapshot.timeline.single.scheduledAt,
+    expect(snapshot.decisions[2].title, '拜新同余量不足，还能用约2天（剩余2片）');
+    expect(snapshot.decisions[2].reason, '药箱余量不足，需要补库存');
+    expect(snapshot.decisions[2].actionLabel, '处理');
+    expect(snapshot.decisions[2].actionTarget?.resource, 'low_stock_alert');
+    expect(snapshot.decisions.last.title, '给妈妈打电话');
+    expect(snapshot.decisions.last.reason, '提醒时间到了');
+    expect(snapshot.decisions.last.actionLabel, '查看');
+    expect(snapshot.timeline.first.id, 'departure-1');
+    expect(snapshot.timeline.first.status, TimelineStatus.upcoming);
+    expect(snapshot.timeline.first.scheduledAt,
         DateTime.parse('2026-08-08T09:10:00+00:00').toLocal());
+    expect(snapshot.timeline.last.id, 'reminder-1');
+    expect(snapshot.timeline.last.subtitle, '普通提醒');
   });
 
   test('throws a stable exception for action center server errors', () async {
