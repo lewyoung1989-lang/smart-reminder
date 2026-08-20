@@ -131,7 +131,7 @@ class _TodayScreenState extends State<TodayScreen> {
                   parent: BouncingScrollPhysics(),
                 ),
                 slivers: <Widget>[
-                  ..._contentSlivers(context),
+                  ..._contentSlivers(context, now: now),
                   if (widget.bottomContentPadding > 0)
                     SliverToBoxAdapter(
                       child: SizedBox(height: widget.bottomContentPadding),
@@ -145,7 +145,7 @@ class _TodayScreenState extends State<TodayScreen> {
     );
   }
 
-  List<Widget> _contentSlivers(BuildContext context) {
+  List<Widget> _contentSlivers(BuildContext context, {required DateTime now}) {
     final snapshot = _snapshot;
     if (snapshot == null) {
       if (_isLoading) return _stateSlivers(const AppContentState.loading());
@@ -190,7 +190,7 @@ class _TodayScreenState extends State<TodayScreen> {
       );
     }
 
-    final activeTimeline = _activeTimelineItems(snapshot.timeline);
+    final activeTimeline = _activeTimelineItems(snapshot.timeline, now: now);
     if (snapshot.decisions.isEmpty && activeTimeline.isEmpty) {
       slivers.addAll(
         _stateSlivers(
@@ -212,7 +212,7 @@ class _TodayScreenState extends State<TodayScreen> {
           AppSpacing.xxl,
         ),
         sliver: SliverToBoxAdapter(
-          child: _TodayOverview(snapshot: snapshot),
+          child: _TodayOverview(snapshot: snapshot, timeline: activeTimeline),
         ),
       ),
     );
@@ -306,12 +306,16 @@ class _TodayScreenState extends State<TodayScreen> {
     return AppListRowPosition.middle;
   }
 
-  static List<TimelineItem> _activeTimelineItems(List<TimelineItem> timeline) {
+  static List<TimelineItem> _activeTimelineItems(
+    List<TimelineItem> timeline, {
+    required DateTime now,
+  }) {
     return List<TimelineItem>.of(
       timeline.where(
         (item) =>
-            item.status == TimelineStatus.upcoming ||
-            item.status == TimelineStatus.due,
+            _isSameLocalDate(item.scheduledAt, now) &&
+            (item.status == TimelineStatus.upcoming ||
+                item.status == TimelineStatus.due),
       ),
     )..sort((left, right) => left.scheduledAt.compareTo(right.scheduledAt));
   }
@@ -360,7 +364,12 @@ class _DecisionRow extends StatelessWidget {
           child: InkWell(
             onTap: enabled ? () => onOpen!(item) : null,
             child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.lg),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.md,
+                AppSpacing.lg,
+                AppSpacing.md,
+              ),
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   final accessibilityLayout =
@@ -538,13 +547,14 @@ class _SnoozeOption extends StatelessWidget {
 }
 
 class _TodayOverview extends StatelessWidget {
-  const _TodayOverview({required this.snapshot});
+  const _TodayOverview({required this.snapshot, required this.timeline});
 
   final TodaySnapshot snapshot;
+  final List<TimelineItem> timeline;
 
   @override
   Widget build(BuildContext context) {
-    final nextAt = _nextScheduledAt(snapshot);
+    final nextAt = _nextScheduledAt(snapshot.decisions, timeline);
     final items =
         <({String label, String value, bool emphasized, bool labelFirst})>[
       (
@@ -555,7 +565,7 @@ class _TodayOverview extends StatelessWidget {
       ),
       (
         label: '项日程',
-        value: '${_visibleTimelineCount(snapshot.timeline)}',
+        value: '${timeline.length}',
         emphasized: false,
         labelFirst: false,
       ),
@@ -635,6 +645,7 @@ class _DecisionDetails extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final showReason = item.kind != AttentionKind.confirmation;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -652,9 +663,11 @@ class _DecisionDetails extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
               Text(item.title, style: theme.textTheme.titleMedium),
+              if (showReason) ...[
+                const SizedBox(height: AppSpacing.xs),
+                Text(item.reason, style: theme.textTheme.bodyMedium),
+              ],
               const SizedBox(height: AppSpacing.xs),
-              Text(item.reason, style: theme.textTheme.bodyMedium),
-              const SizedBox(height: AppSpacing.sm),
               Wrap(
                 spacing: AppSpacing.sm,
                 runSpacing: AppSpacing.xs,
@@ -794,25 +807,21 @@ String _formatDate(DateTime value) {
 
 String _formatDue(DateTime value) => '${_formatTime(value)} 截止';
 
-DateTime? _nextScheduledAt(TodaySnapshot snapshot) {
+DateTime? _nextScheduledAt(
+  List<AttentionItem> decisions,
+  List<TimelineItem> timeline,
+) {
   final candidates = <DateTime>[
-    for (final item in snapshot.decisions) item.dueAt,
-    for (final item in snapshot.timeline)
-      if (item.status == TimelineStatus.upcoming ||
-          item.status == TimelineStatus.due)
-        item.scheduledAt,
+    for (final item in decisions) item.dueAt,
+    for (final item in timeline) item.scheduledAt,
   ]..sort();
   return candidates.isEmpty ? null : candidates.first;
 }
 
-int _visibleTimelineCount(List<TimelineItem> timeline) {
-  return timeline
-      .where(
-        (item) =>
-            item.status == TimelineStatus.upcoming ||
-            item.status == TimelineStatus.due,
-      )
-      .length;
+bool _isSameLocalDate(DateTime left, DateTime right) {
+  return left.year == right.year &&
+      left.month == right.month &&
+      left.day == right.day;
 }
 
 String _formatTime(DateTime value) {

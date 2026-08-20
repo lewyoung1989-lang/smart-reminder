@@ -169,6 +169,9 @@ def test_today_separates_actionable_statuses_and_orders_each_queue(
     scheduled_next = create_workflow_rule(
         user, title="scheduled next", next_run_at=NOW + timedelta(hours=1)
     )
+    create_workflow_rule(
+        user, title="scheduled tomorrow", next_run_at=NOW + timedelta(days=1)
+    )
     due = create_outbox(
         user,
         title="retry due",
@@ -439,6 +442,12 @@ def test_today_includes_due_and_upcoming_medication_occurrences(api_client, user
         index=2,
         idempotency_key="upcoming-medication",
     )
+    MedicationOccurrence.objects.create(
+        plan=plan,
+        scheduled_at=NOW + timedelta(days=1),
+        index=3,
+        idempotency_key="tomorrow-medication",
+    )
     mocker.patch("apps.workflows.api.action.timezone.now", return_value=NOW)
     api_client.force_authenticate(user)
 
@@ -463,6 +472,10 @@ def test_today_includes_due_and_upcoming_medication_occurrences(api_client, user
         "status": "scheduled",
         "occurred_at": "2026-08-08T10:00:00+08:00",
     } in response.json()["upcoming"]["results"]
+    assert all(
+        item["occurred_at"] != "2026-08-09T09:00:00+08:00"
+        for item in response.json()["upcoming"]["results"]
+    )
 
 
 @pytest.mark.django_db
@@ -478,6 +491,11 @@ def test_today_includes_due_and_upcoming_ordinary_reminders(
         user,
         title="晚上测血压",
         scheduled_at=NOW + timedelta(hours=1),
+    )
+    create_ordinary_reminder(
+        user,
+        title="明天测血压",
+        scheduled_at=NOW + timedelta(days=1),
     )
     completed = create_ordinary_reminder(
         user,
@@ -537,7 +555,7 @@ def test_today_includes_due_and_upcoming_ordinary_reminders(
         "occurred_at": "2026-08-08T08:50:00+08:00",
     } in response.json()["upcoming"]["results"]
     assert all(
-        item["title"] not in {"别人的提醒", "已取消提醒"}
+        item["title"] not in {"别人的提醒", "已取消提醒", "明天测血压"}
         for queue in response.json().values()
         for item in queue["results"]
     )

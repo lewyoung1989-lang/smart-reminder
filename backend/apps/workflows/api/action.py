@@ -80,6 +80,7 @@ class TodayActionCenterView(APIView):
             template_key__isnull=False,
             enabled=True,
             next_run_at__gt=now,
+            next_run_at__lt=tomorrow_start,
         )
         ordinary_reminders = ReminderRule.objects.filter(
             owner=request.user,
@@ -119,6 +120,7 @@ class TodayActionCenterView(APIView):
             plan__enabled=True,
             status=MedicationOccurrence.Status.PENDING,
             scheduled_at__gt=now,
+            scheduled_at__lt=tomorrow_start,
         ).select_related("plan__medicine")
 
         need_decision = [
@@ -255,9 +257,10 @@ class TodayActionCenterView(APIView):
                     "occurred_at": _as_local_iso(rule.scheduled_at),
                 },
             )
-            for rule in ordinary_reminders.filter(scheduled_at__gt=now).order_by(
-                "scheduled_at", "id"
-            )[:window]
+            for rule in ordinary_reminders.filter(
+                scheduled_at__gt=now,
+                scheduled_at__lt=tomorrow_start,
+            ).order_by("scheduled_at", "id")[:window]
         )
         upcoming.extend(
             (

@@ -42,6 +42,7 @@ void main() {
         tester.getTopLeft(find.text('洗车计划')).dy,
         lessThan(tester.getTopLeft(find.text('药品临期')).dy),
       );
+      expect(find.text('仅用于演示待确认流程，不代表已接入生产能力'), findsNothing);
       expect(find.text('待确认'), findsOneWidget);
       expect(find.text('已完成'), findsNothing);
       expect(find.text('即将开始'), findsWidgets);
@@ -249,6 +250,13 @@ void main() {
             scheduledAt: DateTime(2026, 8, 6, 7),
             status: TimelineStatus.skipped,
           ),
+          TimelineItem(
+            id: 'tomorrow',
+            title: '明天项目',
+            subtitle: '来源 E',
+            scheduledAt: DateTime(2026, 8, 7, 9),
+            status: TimelineStatus.upcoming,
+          ),
         ],
       );
       await pumpTodayScreen(
@@ -259,8 +267,10 @@ void main() {
       expect(find.text('现在处理'), findsOneWidget);
       expect(find.text('完成项目'), findsNothing);
       expect(find.text('跳过项目'), findsNothing);
+      expect(find.text('明天项目'), findsNothing);
       expect(find.text('已完成'), findsNothing);
       expect(find.text('已跳过'), findsNothing);
+      expect(find.textContaining('2 项日程'), findsOneWidget);
     });
 
     testWidgets(
@@ -625,18 +635,45 @@ void main() {
 
     testWidgets('keeps the today header fixed while its content scrolls',
         (tester) async {
+      final tallSnapshot = TodaySnapshot(
+        decisions: <AttentionItem>[
+          AttentionItem(
+            id: 'car-wash',
+            title: '洗车计划',
+            reason: '天气晴朗，等待你确认洗车时间',
+            dueAt: DateTime(2026, 8, 6, 18),
+            kind: AttentionKind.confirmation,
+            actionLabel: '确认',
+          ),
+        ],
+        timeline: <TimelineItem>[
+          for (var index = 0; index < 12; index += 1)
+            TimelineItem(
+              id: 'timeline-$index',
+              title: '今日事项 $index',
+              subtitle: '来源 $index',
+              scheduledAt:
+                  DateTime(2026, 8, 6, 10 + index ~/ 2, index % 2 * 30),
+              status: TimelineStatus.upcoming,
+            ),
+        ],
+      );
       await pumpTodayScreen(
         tester,
-        FakeTodayRepository.success(),
+        FakeTodayRepository.success(snapshot: tallSnapshot),
         surfaceSize: const Size(393, 700),
       );
       await tester.pumpAndSettle();
 
       final scroll = find.byKey(const ValueKey('today-scroll'));
       final header = find.byKey(const ValueKey('today-fixed-header'));
-      final sectionTitle = find.text('现在要处理');
       final initialHeaderTop = tester.getTopLeft(header).dy;
-      final initialTop = tester.getTopLeft(sectionTitle).dy;
+      final position = tester
+          .state<ScrollableState>(
+            find.byType(Scrollable).first,
+          )
+          .position;
+      final initialOffset = position.pixels;
 
       expect(scroll, findsOneWidget);
       expect(header, findsOneWidget);
@@ -647,7 +684,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(tester.getTopLeft(header).dy, initialHeaderTop);
-      expect(tester.getTopLeft(sectionTitle).dy, lessThan(initialTop));
+      expect(position.pixels, greaterThan(initialOffset));
       expect(tester.takeException(), isNull);
     });
   });

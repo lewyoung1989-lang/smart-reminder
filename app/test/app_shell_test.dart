@@ -687,12 +687,13 @@ void main() {
 
   testWidgets('opens workflow reminder detail from the today timeline',
       (tester) async {
+    final now = DateTime.now();
     final detail = PlanDetail(
       summary: PlanSummary(
         id: 'plan-1',
         title: '晚间用药',
         subtitle: '拜新同 · 1片',
-        nextRunAt: DateTime(2026, 8, 8, 18, 30),
+        nextRunAt: DateTime(now.year, now.month, now.day, 18, 30),
         status: PlanStatus.active,
         kind: PlanKind.medication,
       ),
@@ -712,7 +713,7 @@ void main() {
                   id: 'plan-1',
                   title: '晚间用药',
                   subtitle: '拜新同 · 1片',
-                  scheduledAt: DateTime(2026, 8, 8, 18, 30),
+                  scheduledAt: DateTime(now.year, now.month, now.day, 18, 30),
                   status: TimelineStatus.upcoming,
                   actionTarget: const ActionTarget(
                     resource: 'workflow',
