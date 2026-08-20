@@ -93,7 +93,7 @@ class FunAsrProvider:
         *,
         base_url="http://localhost:18001",
         model="paraformer-zh",
-        timeout_seconds=20,
+        timeout_seconds=75,
         transport=None,
     ):
         self.base_url = base_url

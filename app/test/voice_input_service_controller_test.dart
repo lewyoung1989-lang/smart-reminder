@@ -48,4 +48,20 @@ void main() {
     expect(controller.phase, VoiceInputPhase.idle);
     expect(controller.errorMessage, isNull);
   });
+
+  test('explains audio duration validation failures', () async {
+    final controller = VoiceInputServiceController(
+      startRecording: () async {},
+      stopAndTranscribe: () async => throw const VoiceInputControllerException(
+        'audio_too_long',
+      ),
+      cancelRecording: () async {},
+    );
+
+    await controller.start();
+    await expectLater(controller.stopAndTranscribe(), throwsA(isA<Object>()));
+
+    expect(controller.phase, VoiceInputPhase.failure);
+    expect(controller.errorMessage, '录音超过1分钟，请缩短后重试');
+  });
 }

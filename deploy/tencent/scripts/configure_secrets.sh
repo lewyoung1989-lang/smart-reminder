@@ -51,14 +51,14 @@ ensure_value OCR_ENABLED false
 ensure_value ASR_PROVIDER funasr
 ensure_value ASR_BASE_URL http://funasr:8000
 ensure_value ASR_MODEL paraformer-zh
-ensure_value ASR_TIMEOUT_SECONDS 20
+ensure_value ASR_TIMEOUT_SECONDS 75
 ensure_value ASR_MAX_AUDIO_BYTES 4194304
 ensure_value ASR_MAX_REQUEST_BYTES 5242880
 ensure_value ASR_MIN_DURATION_SECONDS 0.3
-ensure_value ASR_MAX_DURATION_SECONDS 20
+ensure_value ASR_MAX_DURATION_SECONDS 60
 ensure_value ASR_GLOBAL_CONCURRENCY 1
 ensure_value ASR_CONCURRENCY_PER_USER 1
-ensure_value ASR_LEASE_TTL_SECONDS 25
+ensure_value ASR_LEASE_TTL_SECONDS 90
 ensure_value ASR_USER_RATE 10/min
 ensure_value ASR_IP_RATE 30/min
 ensure_value ASR_REDIS_URL redis://redis:6379/0

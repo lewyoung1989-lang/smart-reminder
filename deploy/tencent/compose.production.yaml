@@ -29,14 +29,14 @@ x-backend-environment: &production_backend_environment
   ASR_BASE_URL: ${ASR_BASE_URL:-http://funasr:8000}
   ASR_LEASE_PROVIDER: ${ASR_LEASE_PROVIDER:-redis}
   ASR_MODEL: ${ASR_MODEL:-paraformer-zh}
-  ASR_TIMEOUT_SECONDS: ${ASR_TIMEOUT_SECONDS:-20}
+  ASR_TIMEOUT_SECONDS: ${ASR_TIMEOUT_SECONDS:-75}
   ASR_MAX_AUDIO_BYTES: ${ASR_MAX_AUDIO_BYTES:-4194304}
   ASR_MAX_REQUEST_BYTES: ${ASR_MAX_REQUEST_BYTES:-5242880}
   ASR_MIN_DURATION_SECONDS: ${ASR_MIN_DURATION_SECONDS:-0.3}
-  ASR_MAX_DURATION_SECONDS: ${ASR_MAX_DURATION_SECONDS:-20}
+  ASR_MAX_DURATION_SECONDS: ${ASR_MAX_DURATION_SECONDS:-60}
   ASR_GLOBAL_CONCURRENCY: ${ASR_GLOBAL_CONCURRENCY:-1}
   ASR_CONCURRENCY_PER_USER: ${ASR_CONCURRENCY_PER_USER:-1}
-  ASR_LEASE_TTL_SECONDS: ${ASR_LEASE_TTL_SECONDS:-25}
+  ASR_LEASE_TTL_SECONDS: ${ASR_LEASE_TTL_SECONDS:-90}
   ASR_USER_RATE: ${ASR_USER_RATE:-10/min}
   ASR_IP_RATE: ${ASR_IP_RATE:-30/min}
   ASR_REDIS_URL: ${ASR_REDIS_URL:-redis://redis:6379/0}
@@ -126,7 +126,7 @@ services:
     environment: *production_ocr_environment
     command: >-
       gunicorn config.wsgi:application --bind 0.0.0.0:8000
-      --workers 2 --timeout 30 --access-logfile - --error-logfile -
+      --workers 2 --timeout 90 --access-logfile - --error-logfile -
       --access-logformat
       'level=INFO request_id=%({x-request-id}i)s method=%(m)s path=%(U)s status=%(s)s bytes=%(b)s duration_us=%(D)s'
     restart: unless-stopped

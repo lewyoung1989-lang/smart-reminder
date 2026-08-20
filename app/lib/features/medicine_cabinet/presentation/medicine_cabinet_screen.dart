@@ -934,7 +934,7 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
     });
     try {
       final draft = await parse(text);
-      if (!mounted) return false;
+      if (!mounted || _descriptionController.text.trim() != text) return false;
       if (draft.medicineName != null) {
         _nameController.text = draft.medicineName!;
       }
@@ -975,7 +975,9 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
       });
       return true;
     } catch (_) {
-      if (mounted) setState(() => _parseError = '智能解析失败，请稍后重试');
+      if (mounted && _descriptionController.text.trim() == text) {
+        setState(() => _parseError = '智能解析失败，请稍后重试');
+      }
       return false;
     } finally {
       if (mounted) setState(() => _isParsing = false);
@@ -1040,6 +1042,98 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
     } finally {
       if (mounted) setState(() => _isVoiceActionInFlight = false);
     }
+  }
+
+  Widget _buildDescriptionActions(
+    BuildContext context,
+    VoiceInputPhase phase,
+  ) {
+    final description = _descriptionController.text.trim();
+    final isCurrentDescriptionParsed = description.isNotEmpty &&
+        description == _lastParsedDescription &&
+        _parseError == null;
+    final canUseVoice = !_isSaving &&
+        !_isParsing &&
+        !_isVoiceActionInFlight &&
+        phase != VoiceInputPhase.transcribing &&
+        phase != VoiceInputPhase.failure;
+
+    late final String stage;
+    late final Widget action;
+    if (_isParsing) {
+      stage = 'parsing';
+      action = const _DescriptionProgress(label: '正在理解并填写…');
+    } else if (phase == VoiceInputPhase.transcribing) {
+      stage = 'transcribing';
+      action = const _DescriptionProgress(label: '正在转写…');
+    } else if (phase == VoiceInputPhase.recording) {
+      stage = 'recording';
+      action = OutlinedButton.icon(
+        key: const Key('medicine-entry-voice'),
+        onPressed: canUseVoice ? _handleVoiceAction : null,
+        icon: const Icon(LucideIcons.square),
+        label: Text('停止录音 ${_formatDuration(_voice!.elapsed)}'),
+      );
+    } else if (isCurrentDescriptionParsed) {
+      stage = 'parsed';
+      action = Row(
+        children: [
+          const Expanded(child: _DescriptionParsedStatus()),
+          IconButton(
+            key: const Key('medicine-entry-voice'),
+            tooltip: '重新语音输入',
+            onPressed: canUseVoice ? _handleVoiceAction : null,
+            icon: const Icon(LucideIcons.mic),
+          ),
+        ],
+      );
+    } else if (_isVoiceActionInFlight) {
+      stage = 'preparing-voice';
+      action = const _DescriptionProgress(label: '正在准备语音…');
+    } else if (description.isNotEmpty) {
+      stage = 'text-ready';
+      action = Row(
+        children: [
+          Expanded(
+            child: FilledButton.icon(
+              key: const Key('medicine-entry-parse'),
+              onPressed: widget.onParseDescription != null && !_isSaving
+                  ? _submitDescription
+                  : null,
+              icon: const Icon(LucideIcons.sparkles),
+              label: const Text('解析'),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          OutlinedButton.icon(
+            key: const Key('medicine-entry-voice'),
+            onPressed: canUseVoice ? _handleVoiceAction : null,
+            icon: const Icon(LucideIcons.mic),
+            label: const Text('语音'),
+          ),
+        ],
+      );
+    } else {
+      stage = 'voice-ready';
+      action = OutlinedButton.icon(
+        key: const Key('medicine-entry-voice'),
+        onPressed: canUseVoice ? _handleVoiceAction : null,
+        icon: const Icon(LucideIcons.mic),
+        label: const Text('语音描述'),
+      );
+    }
+
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 48),
+      child: AnimatedSwitcher(
+        duration:
+            reduceMotion ? Duration.zero : const Duration(milliseconds: 180),
+        switchInCurve: Curves.easeOut,
+        switchOutCurve: Curves.easeIn,
+        child: KeyedSubtree(key: ValueKey(stage), child: action),
+      ),
+    );
   }
 
   Future<void> _save() async {
@@ -1263,66 +1357,17 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
                                     unawaited(_submitDescription());
                                   },
                                   onChanged: (_) {
-                                    if (_error != null || _parseError != null) {
-                                      setState(() {
-                                        _error = null;
-                                        _parseError = null;
-                                      });
-                                    }
+                                    setState(() {
+                                      _error = null;
+                                      _parseError = null;
+                                    });
                                   },
                                   decoration: const InputDecoration(
                                     hintText: '例如：依巴斯汀 20片，1盒，下个月底到期',
                                   ),
                                 ),
                               ),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: FilledButton.icon(
-                                      key: const Key('medicine-entry-parse'),
-                                      onPressed:
-                                          widget.onParseDescription != null &&
-                                                  !_isParsing &&
-                                                  !_isSaving
-                                              ? _submitDescription
-                                              : null,
-                                      icon: _isParsing
-                                          ? const SizedBox.square(
-                                              dimension: 18,
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                              ),
-                                            )
-                                          : const Icon(LucideIcons.sparkles),
-                                      label: Text(
-                                        _isParsing ? '正在解析' : '提交并解析',
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: AppSpacing.sm),
-                                  OutlinedButton.icon(
-                                    key: const Key('medicine-entry-voice'),
-                                    onPressed: _isSaving ||
-                                            _isParsing ||
-                                            _isVoiceActionInFlight ||
-                                            phase ==
-                                                VoiceInputPhase.transcribing ||
-                                            phase == VoiceInputPhase.failure
-                                        ? null
-                                        : _handleVoiceAction,
-                                    icon: Icon(
-                                      phase == VoiceInputPhase.recording
-                                          ? LucideIcons.square
-                                          : LucideIcons.mic,
-                                    ),
-                                    label: Text(
-                                      phase == VoiceInputPhase.recording
-                                          ? '停止录音'
-                                          : '语音',
-                                    ),
-                                  ),
-                                ],
-                              ),
+                              _buildDescriptionActions(context, phase),
                               if (_parseError != null) ...[
                                 const SizedBox(height: AppSpacing.sm),
                                 _InlineMessage(
@@ -1339,7 +1384,6 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
                               _VoiceStatus(
                                 voice: _voice,
                                 phase: phase,
-                                inFlight: _isVoiceActionInFlight,
                                 actionError: _voiceActionError,
                                 onRetry: _retryVoice,
                               ),
@@ -1732,24 +1776,81 @@ class _InlineMessage extends StatelessWidget {
   }
 }
 
+class _DescriptionProgress extends StatelessWidget {
+  const _DescriptionProgress({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      liveRegion: true,
+      label: label,
+      child: ExcludeSemantics(
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const SizedBox.square(
+              dimension: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Flexible(child: Text(label)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DescriptionParsedStatus extends StatelessWidget {
+  const _DescriptionParsedStatus();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Semantics(
+      liveRegion: true,
+      label: '已解析，请核对下方药品信息',
+      child: ExcludeSemantics(
+        child: Row(
+          children: [
+            Icon(
+              LucideIcons.circleCheck,
+              size: 20,
+              color: theme.colorScheme.primary,
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Text(
+                '已解析，请核对',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _VoiceStatus extends StatelessWidget {
   const _VoiceStatus({
     required this.voice,
     required this.phase,
-    required this.inFlight,
     required this.actionError,
     required this.onRetry,
   });
 
   final VoiceInputController? voice;
   final VoiceInputPhase phase;
-  final bool inFlight;
   final String? actionError;
   final Future<void> Function() onRetry;
 
   @override
   Widget build(BuildContext context) {
-    if (inFlight) return const Text('正在处理语音输入');
     if (phase == VoiceInputPhase.failure || actionError != null) {
       return Row(
         children: [
@@ -1766,13 +1867,7 @@ class _VoiceStatus extends StatelessWidget {
         ],
       );
     }
-    return switch (phase) {
-      VoiceInputPhase.recording =>
-        Text('正在录音 ${_formatDuration(voice!.elapsed)}'),
-      VoiceInputPhase.transcribing => const Text('正在转写'),
-      VoiceInputPhase.idle => const SizedBox.shrink(),
-      VoiceInputPhase.failure => const SizedBox.shrink(),
-    };
+    return const SizedBox.shrink();
   }
 }
 

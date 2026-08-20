@@ -204,14 +204,14 @@ def test_example_has_complete_non_secret_asr_contract():
         "ASR_BASE_URL": "http://funasr:8000",
         "ASR_LEASE_PROVIDER": "redis",
         "ASR_MODEL": "paraformer-zh",
-        "ASR_TIMEOUT_SECONDS": "20",
+        "ASR_TIMEOUT_SECONDS": "75",
         "ASR_MAX_AUDIO_BYTES": "4194304",
         "ASR_MAX_REQUEST_BYTES": "5242880",
         "ASR_MIN_DURATION_SECONDS": "0.3",
-        "ASR_MAX_DURATION_SECONDS": "20",
+        "ASR_MAX_DURATION_SECONDS": "60",
         "ASR_GLOBAL_CONCURRENCY": "1",
         "ASR_CONCURRENCY_PER_USER": "1",
-        "ASR_LEASE_TTL_SECONDS": "25",
+        "ASR_LEASE_TTL_SECONDS": "90",
         "ASR_USER_RATE": "10/min",
         "ASR_IP_RATE": "30/min",
         "ASR_REDIS_URL": "redis://redis:6379/0",
@@ -238,7 +238,7 @@ def test_example_has_complete_non_secret_asr_contract():
         ("ASR_MAX_DURATION_SECONDS", "0.2", "ASR_MAX_DURATION_SECONDS"),
         ("ASR_GLOBAL_CONCURRENCY", "2", "ASR_GLOBAL_CONCURRENCY"),
         ("ASR_CONCURRENCY_PER_USER", "2", "ASR_CONCURRENCY_PER_USER"),
-        ("ASR_LEASE_TTL_SECONDS", "20", "ASR_LEASE_TTL_SECONDS"),
+        ("ASR_LEASE_TTL_SECONDS", "75", "ASR_LEASE_TTL_SECONDS"),
         ("ASR_USER_RATE", "unlimited", "ASR_USER_RATE"),
         ("ASR_IP_RATE", "0/min", "ASR_IP_RATE"),
         (
@@ -311,9 +311,9 @@ def test_validator_caps_asr_timeout_below_outer_proxy_timeouts(tmp_path):
     )
 
     accepted = valid_example_values()
-    accepted["ASR_TIMEOUT_SECONDS"] = "20"
+    accepted["ASR_TIMEOUT_SECONDS"] = "75"
     rejected = dict(accepted)
-    rejected["ASR_TIMEOUT_SECONDS"] = "20.1"
+    rejected["ASR_TIMEOUT_SECONDS"] = "75.1"
     below_minimum = dict(accepted)
     below_minimum["ASR_TIMEOUT_SECONDS"] = "7.9"
 
@@ -327,6 +327,6 @@ def test_validator_caps_asr_timeout_below_outer_proxy_timeouts(tmp_path):
     assert below_minimum_result.returncode == 1
     assert "ASR_TIMEOUT_SECONDS" in below_minimum_result.stderr
     asr_timeout = float(accepted["ASR_TIMEOUT_SECONDS"])
-    assert gunicorn_timeout == 30
-    assert nginx_timeout == 35
-    assert asr_timeout <= 20 < gunicorn_timeout < nginx_timeout
+    assert gunicorn_timeout == 90
+    assert nginx_timeout == 100
+    assert asr_timeout <= 75 < gunicorn_timeout < nginx_timeout

@@ -167,6 +167,20 @@ def deduction_payload(attempt: InventoryDeductionAttempt):
             f"已记录服药，已扣减{deducted}{attempt.unit_name}，"
             f"精确库存剩余{remaining}{attempt.unit_name}"
         )
+    elif attempt.status == InventoryDeductionAttempt.Status.NOT_CONFIGURED:
+        medicine_name = _attempt_medicine_name(attempt)
+        unit_hint = attempt.unit_name or "当前剂量单位"
+        message = (
+            f"已记录服药，但{medicine_name}未记录每包装含量和剩余{unit_hint}数，"
+            "无法自动扣减"
+        )
+    elif attempt.status == InventoryDeductionAttempt.Status.UNIT_MISMATCH:
+        medicine_name = _attempt_medicine_name(attempt)
+        unit_hint = attempt.unit_name or "当前剂量单位"
+        message = (
+            f"已记录服药，但{medicine_name}的药箱计量单位不是{unit_hint}，"
+            "未自动扣减"
+        )
     return {
         "status": attempt.status,
         "deducted_quantity": _decimal_text(attempt.deducted_quantity),
@@ -213,3 +227,12 @@ def _deduct_from_batch(batch: InventoryBatch, quantity: Decimal):
 
 def _decimal_text(value: Decimal):
     return format(value.normalize(), "f")
+
+
+def _attempt_medicine_name(attempt):
+    plan = attempt.intake_event.occurrence.plan
+    if plan.medicine_name:
+        return plan.medicine_name
+    if plan.medicine_id:
+        return plan.medicine.name
+    return "该药品"

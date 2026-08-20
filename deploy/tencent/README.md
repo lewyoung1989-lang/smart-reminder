@@ -129,7 +129,7 @@ install -m 0600 deploy/tencent/env.production.example \
 
 `configure_secrets.sh` 会为旧环境文件补齐非秘密 ASR 设置和 `OCR_ENABLED=false`。默认发布不要求 MinIO/S3 凭据；需要恢复 OCR 时，先把 `OCR_ENABLED` 改为 `true`，再运行该脚本生成或补齐 MinIO/S3 密钥并重新校验。`ASR_TRUSTED_PROXY_IPS` 必须只有 `172.29.0.10`，对应 `asr_proxy` 网段内 Nginx 的固定地址；不要加入宿主机、公网或整个网段。
 
-生产只接受 `8 <= ASR_TIMEOUT_SECONDS <= 20` 秒，Gunicorn worker timeout 固定为 `30` 秒，API 域名的 Nginx `proxy_read_timeout` 为 `35` 秒。HTTPX 使用连接 2 秒、连接池 1 秒、上传 4 秒、读取 `ASR_TIMEOUT_SECONDS-7` 秒的显式阶段预算，四阶段预算总和不超过 ASR 总预算，并在请求完成后用单调时钟把超预算结果映射为 `504 asr_timeout`。HTTPX 阶段超时无法保证任意分块读取严格服从单一硬截止，因此必须继续保持 `ASR <= 20 < Gunicorn 30 < Nginx 35` 的外层余量。
+生产只接受 `8 <= ASR_TIMEOUT_SECONDS <= 75` 秒，单次音频最长 60 秒，Gunicorn worker timeout 固定为 `90` 秒，API 域名的 Nginx `proxy_read_timeout` 为 `100` 秒。HTTPX 使用连接 2 秒、连接池 1 秒、上传 4 秒、读取 `ASR_TIMEOUT_SECONDS-7` 秒的显式阶段预算，四阶段预算总和不超过 ASR 总预算，并在请求完成后用单调时钟把超预算结果映射为 `504 asr_timeout`。HTTPX 阶段超时无法保证任意分块读取严格服从单一硬截止，因此必须继续保持 `ASR <= 75 < Gunicorn 90 < Nginx 100` 的外层余量。
 
 检查权限和配置，不显示文件内容：
 

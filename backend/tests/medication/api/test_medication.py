@@ -305,6 +305,14 @@ def test_mark_taken_records_without_deducting_unsafe_inventory(
     assert response.status_code == status.HTTP_200_OK
     assert response.data["status"] == "taken"
     assert response.data["inventory_deduction"]["status"] == expected_status
+    if expected_status == "not_configured":
+        assert response.data["inventory_deduction"]["message"] == (
+            "已记录服药，但测试药未记录每包装含量和剩余片数，无法自动扣减"
+        )
+    elif expected_status == "unit_mismatch":
+        assert response.data["inventory_deduction"]["message"] == (
+            "已记录服药，但测试药的药箱计量单位不是片，未自动扣减"
+        )
     batch.refresh_from_db()
     assert batch.quantity == batch_kwargs["quantity"]
     assert batch.loose_units == 0

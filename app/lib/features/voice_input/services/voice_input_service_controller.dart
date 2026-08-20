@@ -135,11 +135,10 @@ class VoiceInputServiceController extends VoiceInputController {
         'asr_timeout' => '语音识别超时，请重试',
         'asr_unavailable' => '语音识别暂不可用，请稍后重试',
         'empty_transcript' => '没有听清，请重新录制',
-        'microphone_audio_invalid' ||
-        'audio_too_short' ||
-        'audio_too_long' ||
-        'audio_too_large' =>
-          '录音无效，请重新录制',
+        'audio_too_short' => '录音太短，请重新录制',
+        'audio_too_long' => '录音超过1分钟，请缩短后重试',
+        'audio_too_large' => '录音文件过大，请缩短后重试',
+        'microphone_audio_invalid' => '录音无效，请重新录制',
         _ => '语音识别失败，请重试',
       };
 }

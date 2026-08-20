@@ -56,3 +56,14 @@ def test_rejects_invalid_audio(payload):
         )
 
     assert error.value.code == "microphone_audio_invalid"
+
+
+def test_rejects_audio_longer_than_one_minute():
+    with pytest.raises(AudioInputError) as error:
+        normalize_wav(
+            wav_bytes(sample_rate=16_000, channels=1, duration_seconds=60.1),
+            tensor_factory=numpy_tensor,
+            resample_fn=numpy_resample,
+        )
+
+    assert error.value.code == "audio_too_long"

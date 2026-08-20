@@ -129,8 +129,9 @@ class _QuickCreateSheetState extends State<QuickCreateSheet> {
             _textController.text != textAtTranscriptionStart) {
           return;
         }
-        _textController.text = transcript;
+        _textController.text = transcript.trim();
         setState(() => _parseError = null);
+        await _parse();
       }
     } catch (_) {
       if (mounted) setState(() => _voiceActionError = '语音输入失败，请重试');

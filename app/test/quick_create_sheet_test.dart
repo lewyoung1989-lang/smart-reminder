@@ -202,14 +202,20 @@ void main() {
   });
 
   testWidgets(
-      'injected voice controller drives all voice states and transcript', (
+      'voice transcript is shown before automatic parsing', (
     tester,
   ) async {
     final voice = _FakeVoiceInputController();
+    var parseCalls = 0;
+    String? parsedText;
     await tester.pumpWidget(
       app(
         QuickCreateSheet(
-          createDraft: (_) async => draft,
+          createDraft: (text) async {
+            parseCalls += 1;
+            parsedText = text;
+            return draft;
+          },
           voiceInputController: voice,
         ),
       ),
@@ -241,6 +247,8 @@ void main() {
       tester.widget<EditableText>(find.byType(EditableText)).controller.text,
       '明天提醒我喝水',
     );
+    expect(parseCalls, 1);
+    expect(parsedText, '明天提醒我喝水');
   });
 
   testWidgets('voice phases preserve panel size and available actions', (
@@ -417,6 +425,7 @@ void main() {
       tester.widget<TextField>(input).controller!.text,
       '手动修改后的提醒',
     );
+    expect(voice.stopCalls, 1);
   });
 
   testWidgets(

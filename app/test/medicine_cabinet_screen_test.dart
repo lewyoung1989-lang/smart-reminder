@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' show Tristate;
 
 import 'package:flutter/material.dart';
@@ -351,6 +352,10 @@ void main() {
 
     await tester.tap(find.text('录入'));
     await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('medicine-entry-parse')),
+      findsNothing,
+    );
     await tester.enterText(
       find.byKey(const Key('medicine-entry-description')),
       '录入布洛芬胶囊 0.3g 2盒，有效期到2027年1月1日',
@@ -498,7 +503,48 @@ void main() {
     expect(parseCalls, 1);
     expect(tester.testTextInput.isVisible, isFalse);
     expect(find.text('依巴斯汀'), findsWidgets);
-    expect(find.text('提交并解析'), findsOneWidget);
+    expect(find.text('已解析，请核对'), findsOneWidget);
+    expect(find.byKey(const Key('medicine-entry-parse')), findsNothing);
+  });
+
+  testWidgets('discards an outdated parse result after the description changes',
+      (tester) async {
+    final parseCompleter = Completer<MedicineDescriptionDraft>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MedicineCabinetScreen(
+          repository: _Repository(),
+          onCreateBatch: (_) async {},
+          onParseDescription: (_) => parseCompleter.future,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('录入'));
+    await tester.pumpAndSettle();
+    final description = find.byKey(const Key('medicine-entry-description'));
+    await tester.enterText(description, '旧的药品描述');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('medicine-entry-parse')));
+    await tester.pump();
+    expect(find.text('正在理解并填写…'), findsOneWidget);
+
+    await tester.enterText(description, '用户修改后的药品描述');
+    parseCompleter.complete(
+      const MedicineDescriptionDraft(medicineName: '旧解析结果'),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('medicine-entry-name')))
+          .controller!
+          .text,
+      isEmpty,
+    );
+    expect(find.text('已解析，请核对'), findsNothing);
+    expect(find.byKey(const Key('medicine-entry-parse')), findsOneWidget);
   });
 
   testWidgets('keeps medicine input visible and explains a save failure',
@@ -584,18 +630,14 @@ void main() {
       ..transcript = '录入维生素C 100mg 3瓶，有效期到2027-06-30';
     final repository = _Repository();
     final created = <MedicineBatchInput>[];
+    final parseCompleter = Completer<MedicineDescriptionDraft>();
     await tester.pumpWidget(
       MaterialApp(
         home: MedicineCabinetScreen(
           repository: repository,
           voiceInputController: voice,
           onCreateBatch: (input) async => created.add(input),
-          onParseDescription: (_) async => MedicineDescriptionDraft(
-            medicineName: '维生素C',
-            specification: '100mg',
-            quantity: 3,
-            expiryDate: DateTime(2027, 6, 30),
-          ),
+          onParseDescription: (_) => parseCompleter.future,
         ),
       ),
     );
@@ -605,9 +647,32 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('medicine-entry-voice')));
     await tester.pumpAndSettle();
-    expect(find.text('停止录音'), findsOneWidget);
+    expect(find.textContaining('停止录音'), findsOneWidget);
     await tester.tap(find.byKey(const Key('medicine-entry-voice')));
+    await tester.pump();
+    expect(find.text('正在理解并填写…'), findsOneWidget);
+    expect(find.byKey(const Key('medicine-entry-parse')), findsNothing);
+    expect(
+      tester
+          .widget<TextField>(
+            find.byKey(const Key('medicine-entry-description')),
+          )
+          .controller!
+          .text,
+      '录入维生素C 100mg 3瓶，有效期到2027-06-30',
+    );
+
+    parseCompleter.complete(
+      MedicineDescriptionDraft(
+        medicineName: '维生素C',
+        specification: '100mg',
+        quantity: 3,
+        expiryDate: DateTime(2027, 6, 30),
+      ),
+    );
     await tester.pumpAndSettle();
+    expect(find.text('已解析，请核对'), findsOneWidget);
+    expect(find.byKey(const Key('medicine-entry-parse')), findsNothing);
     await tester.ensureVisible(find.byKey(const Key('medicine-entry-save')));
     await tester.tap(find.byKey(const Key('medicine-entry-save')));
     await tester.pumpAndSettle();

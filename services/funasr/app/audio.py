@@ -47,7 +47,7 @@ def normalize_wav(payload, *, tensor_factory=None, resample_fn=None):
             duration_seconds = len(audio_file) / audio_file.samplerate
             if duration_seconds < 0.3:
                 raise AudioInputError("audio_too_short")
-            if duration_seconds > 20:
+            if duration_seconds > 60:
                 raise AudioInputError("audio_too_long")
             samples = audio_file.read(dtype="float32", always_2d=True)
             sample_rate = audio_file.samplerate

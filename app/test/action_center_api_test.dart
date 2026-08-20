@@ -56,7 +56,25 @@ void main() {
     expect(client.requests.single.headers['Accept'], 'application/json');
     expect(client.requests.single.headers['Content-Type'], 'application/json');
     expect(jsonDecode(client.requestBodies.single), {'action': 'taken'});
-    expect(result.message, '已记录服药，已扣减1片，精确库存剩余13片');
+    expect(result.message, '已记录服药，药箱余量已更新');
+  });
+
+  test('keeps medication action feedback simple when inventory is not deducted',
+      () async {
+    final client = RecordingClient([
+      jsonResponse(200, {
+        'status': 'taken',
+        'inventory_deduction': {
+          'status': 'not_configured',
+          'message': '已记录服药，但拜新同未记录每包装含量和剩余片数，无法自动扣减',
+        },
+      })
+    ]);
+    final api = ActionCenterApi(baseUrl: 'https://api.invalid', client: client);
+
+    final result = await api.markMedicationTaken('occurrence-1');
+
+    expect(result.message, '已记录服药');
   });
 
   test('handles an inventory batch expiry through the verified action',

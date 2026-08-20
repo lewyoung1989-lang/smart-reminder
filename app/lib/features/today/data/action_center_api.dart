@@ -68,10 +68,12 @@ class MedicationActionResult {
 
   factory MedicationActionResult.fromJson(Map<String, dynamic> json) {
     final deduction = json['inventory_deduction'];
-    final message = deduction is Map<String, dynamic>
-        ? deduction['message'] as String?
+    final deductionStatus = deduction is Map<String, dynamic>
+        ? deduction['status'] as String?
         : null;
-    return MedicationActionResult(message: message ?? '已记录服药');
+    return MedicationActionResult(
+      message: deductionStatus == 'deducted' ? '已记录服药，药箱余量已更新' : '已记录服药',
+    );
   }
 
   final String message;

@@ -168,6 +168,49 @@ def test_medication_confirmation_links_inventory_and_creates_occurrences(
 
 
 @pytest.mark.django_db
+def test_medication_confirmation_prefers_precise_inventory_candidate_for_deduction(
+    api_client, user, mocker
+):
+    MedicineItem.objects.create(owner=user, name="拜新同", specification="旧记录")
+    precise = MedicineItem.objects.create(
+        owner=user,
+        name="拜新同",
+        specification="30片",
+    )
+    batch = InventoryBatch.objects.create(
+        medicine=precise,
+        quantity=1,
+        package_unit="盒",
+        units_per_package="30",
+        unit_name="片",
+    )
+    mocker.patch("apps.workflows.api.views.timezone.now", return_value=NOW)
+    api_client.force_authenticate(user)
+    created = create_draft(api_client, "每天早上八点吃拜新同 1片").json()
+
+    response = api_client.post(f"{CREATE_URL}/{created['id']}/confirm")
+
+    assert response.status_code == 201
+    plan = MedicationPlan.objects.get(source_workflow_draft_id=created["id"])
+    assert plan.medicine == precise
+    occurrence = MedicationOccurrence.objects.filter(plan=plan).earliest(
+        "scheduled_at"
+    )
+
+    taken = api_client.post(
+        f"/api/v1/medication/occurrences/{occurrence.id}/actions",
+        {"action": "taken"},
+        format="json",
+    )
+
+    assert taken.status_code == 200
+    assert taken.json()["inventory_deduction"]["status"] == "deducted"
+    batch.refresh_from_db()
+    assert batch.quantity == 0
+    assert batch.loose_units == 29
+
+
+@pytest.mark.django_db
 def test_three_times_daily_confirmation_creates_one_plan_and_90_occurrences(
     api_client, user, mocker
 ):
