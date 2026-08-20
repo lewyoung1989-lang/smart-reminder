@@ -190,7 +190,8 @@ class _TodayScreenState extends State<TodayScreen> {
       );
     }
 
-    if (snapshot.decisions.isEmpty && snapshot.timeline.isEmpty) {
+    final activeTimeline = _activeTimelineItems(snapshot.timeline);
+    if (snapshot.decisions.isEmpty && activeTimeline.isEmpty) {
       slivers.addAll(
         _stateSlivers(
           const AppContentState.empty(
@@ -239,49 +240,23 @@ class _TodayScreenState extends State<TodayScreen> {
       );
     }
 
-    if (snapshot.timeline.isNotEmpty) {
-      final timeline = List<TimelineItem>.of(snapshot.timeline)
-        ..sort((left, right) => left.scheduledAt.compareTo(right.scheduledAt));
-      final activeTimeline = timeline
-          .where((item) =>
-              item.status == TimelineStatus.upcoming ||
-              item.status == TimelineStatus.due)
-          .toList(growable: false);
-      final completedTimeline = timeline
-          .where((item) =>
-              item.status == TimelineStatus.completed ||
-              item.status == TimelineStatus.skipped)
-          .toList(growable: false);
-      if (activeTimeline.isNotEmpty) {
-        slivers.add(
-          _sectionSliver(
-            key: const ValueKey('today-timeline-section'),
-            title: '今天稍后',
-            child: Column(
-              children: <Widget>[
-                for (var index = 0; index < activeTimeline.length; index += 1)
-                  _TimelineRow(
-                    item: activeTimeline[index],
-                    position: _listRowPosition(index, activeTimeline.length),
-                    onOpen: widget.onOpenTimeline,
-                  ),
-              ],
-            ),
+    if (activeTimeline.isNotEmpty) {
+      slivers.add(
+        _sectionSliver(
+          key: const ValueKey('today-timeline-section'),
+          title: '今天稍后',
+          child: Column(
+            children: <Widget>[
+              for (var index = 0; index < activeTimeline.length; index += 1)
+                _TimelineRow(
+                  item: activeTimeline[index],
+                  position: _listRowPosition(index, activeTimeline.length),
+                  onOpen: widget.onOpenTimeline,
+                ),
+            ],
           ),
-        );
-      }
-      if (completedTimeline.isNotEmpty) {
-        slivers.add(
-          _sectionSliver(
-            key: const ValueKey('today-completed-section'),
-            title: '已完成',
-            child: _CompletedTimelineList(
-              items: completedTimeline,
-              onOpen: widget.onOpenTimeline,
-            ),
-          ),
-        );
-      }
+        ),
+      );
     }
 
     return slivers;
@@ -329,6 +304,16 @@ class _TodayScreenState extends State<TodayScreen> {
     if (index == 0) return AppListRowPosition.first;
     if (index == length - 1) return AppListRowPosition.last;
     return AppListRowPosition.middle;
+  }
+
+  static List<TimelineItem> _activeTimelineItems(List<TimelineItem> timeline) {
+    return List<TimelineItem>.of(
+      timeline.where(
+        (item) =>
+            item.status == TimelineStatus.upcoming ||
+            item.status == TimelineStatus.due,
+      ),
+    )..sort((left, right) => left.scheduledAt.compareTo(right.scheduledAt));
   }
 }
 
@@ -570,7 +555,7 @@ class _TodayOverview extends StatelessWidget {
       ),
       (
         label: '项日程',
-        value: '${snapshot.timeline.length}',
+        value: '${_visibleTimelineCount(snapshot.timeline)}',
         emphasized: false,
         labelFirst: false,
       ),
@@ -718,35 +703,6 @@ class _TimelineRow extends StatelessWidget {
   }
 }
 
-class _CompletedTimelineList extends StatelessWidget {
-  const _CompletedTimelineList({required this.items, this.onOpen});
-
-  final List<TimelineItem> items;
-  final ValueChanged<TimelineItem>? onOpen;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Theme.of(context).colorScheme.surface,
-      child: ExpansionTile(
-        key: const ValueKey('today-completed-expansion'),
-        tilePadding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-        childrenPadding: EdgeInsets.zero,
-        title: Text('${items.length} 项已完成'),
-        leading: const Icon(LucideIcons.circleCheck),
-        children: <Widget>[
-          for (var index = 0; index < items.length; index += 1)
-            _TimelineRow(
-              item: items[index],
-              position: _TodayScreenState._listRowPosition(index, items.length),
-              onOpen: onOpen,
-            ),
-        ],
-      ),
-    );
-  }
-}
-
 class _AttentionVisuals {
   const _AttentionVisuals({
     required this.label,
@@ -844,6 +800,16 @@ DateTime? _nextScheduledAt(TodaySnapshot snapshot) {
         item.scheduledAt,
   ]..sort();
   return candidates.isEmpty ? null : candidates.first;
+}
+
+int _visibleTimelineCount(List<TimelineItem> timeline) {
+  return timeline
+      .where(
+        (item) =>
+            item.status == TimelineStatus.upcoming ||
+            item.status == TimelineStatus.due,
+      )
+      .length;
 }
 
 String _formatTime(DateTime value) {

@@ -43,7 +43,7 @@ void main() {
         lessThan(tester.getTopLeft(find.text('药品临期')).dy),
       );
       expect(find.text('待确认'), findsOneWidget);
-      expect(find.text('已完成'), findsWidgets);
+      expect(find.text('已完成'), findsNothing);
       expect(find.text('即将开始'), findsWidgets);
       expect(find.byKey(const ValueKey('today-overview')), findsOneWidget);
       expect(find.textContaining('项待决定'), findsOneWidget);
@@ -140,7 +140,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('已降级'), findsOneWidget);
-      expect(find.text('1 项已完成'), findsOneWidget);
+      expect(find.text('工作日出门'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
@@ -216,7 +216,8 @@ void main() {
       );
     });
 
-    testWidgets('maps every timeline status to text', (tester) async {
+    testWidgets('shows only actionable timeline statuses on today',
+        (tester) async {
       final snapshot = TodaySnapshot(
         decisions: const <AttentionItem>[],
         timeline: <TimelineItem>[
@@ -256,16 +257,15 @@ void main() {
 
       expect(find.text('即将开始'), findsOneWidget);
       expect(find.text('现在处理'), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('today-completed-expansion')));
-      await tester.pumpAndSettle();
-      expect(find.text('已完成'), findsWidgets);
-      expect(find.text('已跳过'), findsOneWidget);
+      expect(find.text('完成项目'), findsNothing);
+      expect(find.text('跳过项目'), findsNothing);
+      expect(find.text('已完成'), findsNothing);
+      expect(find.text('已跳过'), findsNothing);
     });
 
     testWidgets(
-        'keeps completed and skipped timeline rows readable without opacity', (
-      tester,
-    ) async {
+        'shows empty state when only completed and skipped timeline rows exist',
+        (tester) async {
       final snapshot = TodaySnapshot(
         decisions: const <AttentionItem>[],
         timeline: <TimelineItem>[
@@ -290,24 +290,10 @@ void main() {
         FakeTodayRepository.success(snapshot: snapshot),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('today-completed-expansion')));
-      await tester.pumpAndSettle();
 
-      for (final title in <String>['完成事项', '跳过事项']) {
-        expect(
-          find.ancestor(of: find.text(title), matching: find.byType(Opacity)),
-          findsNothing,
-        );
-      }
-      final theme = Theme.of(tester.element(find.byType(TodayScreen)));
-      expect(
-        tester.widgetList<Text>(find.text('已完成')).last.style?.color,
-        theme.colorScheme.onSurfaceVariant,
-      );
-      expect(
-        tester.widget<Text>(find.text('已跳过')).style?.color,
-        theme.colorScheme.onSurfaceVariant,
-      );
+      expect(find.text('今天没有待处理事项'), findsOneWidget);
+      expect(find.text('完成事项'), findsNothing);
+      expect(find.text('跳过事项'), findsNothing);
     });
 
     testWidgets('sorts decisions and timeline by their scheduled time', (
