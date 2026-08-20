@@ -164,13 +164,22 @@ def test_today_separates_actionable_statuses_and_orders_each_queue(
         next_run_at=NOW + timedelta(hours=3),
     )
     scheduled_later = create_workflow_rule(
-        user, title="scheduled later", next_run_at=NOW + timedelta(hours=2)
+        user,
+        title="scheduled later",
+        template_key="smart_departure",
+        next_run_at=NOW + timedelta(hours=2),
     )
     scheduled_next = create_workflow_rule(
-        user, title="scheduled next", next_run_at=NOW + timedelta(hours=1)
+        user,
+        title="scheduled next",
+        template_key="smart_departure",
+        next_run_at=NOW + timedelta(hours=1),
     )
     create_workflow_rule(
-        user, title="scheduled tomorrow", next_run_at=NOW + timedelta(days=1)
+        user,
+        title="scheduled tomorrow",
+        template_key="smart_departure",
+        next_run_at=NOW + timedelta(days=1),
     )
     due = create_outbox(
         user,
@@ -206,7 +215,7 @@ def test_today_separates_actionable_statuses_and_orders_each_queue(
     assert body["upcoming"]["results"][0]["id"] == str(due.id)
     assert all("+08:00" in item["occurred_at"] for item in body["need_decision"]["results"])
     assert body["upcoming"]["results"][1]["id"] == str(scheduled_next.id)
-    assert body["upcoming"]["results"][1]["subtitle"] == "用药计划"
+    assert body["upcoming"]["results"][1]["subtitle"] == "路线与天气提醒"
     assert body["upcoming"]["results"][1]["action_target"] == {
         "resource": "workflow",
         "id": str(scheduled_next.id),
@@ -395,6 +404,7 @@ def test_today_uses_validated_bounded_pagination(api_client, user, mocker):
         create_workflow_rule(
             user,
             title=f"scheduled {index}",
+            template_key="smart_departure",
             next_run_at=NOW + timedelta(hours=index + 1),
         )
     mocker.patch("apps.workflows.api.action.timezone.now", return_value=NOW)
@@ -442,6 +452,11 @@ def test_today_includes_due_and_upcoming_medication_occurrences(api_client, user
         index=2,
         idempotency_key="upcoming-medication",
     )
+    parent_rule = create_workflow_rule(
+        user,
+        title="用药提醒",
+        next_run_at=upcoming.scheduled_at,
+    )
     MedicationOccurrence.objects.create(
         plan=plan,
         scheduled_at=NOW + timedelta(days=1),
@@ -472,6 +487,10 @@ def test_today_includes_due_and_upcoming_medication_occurrences(api_client, user
         "status": "scheduled",
         "occurred_at": "2026-08-08T10:00:00+08:00",
     } in response.json()["upcoming"]["results"]
+    assert all(
+        item["id"] != str(parent_rule.id)
+        for item in response.json()["upcoming"]["results"]
+    )
     assert all(
         item["occurred_at"] != "2026-08-09T09:00:00+08:00"
         for item in response.json()["upcoming"]["results"]

@@ -81,7 +81,7 @@ class TodayActionCenterView(APIView):
             enabled=True,
             next_run_at__gt=now,
             next_run_at__lt=tomorrow_start,
-        )
+        ).exclude(template_key="medication_cycle")
         ordinary_reminders = ReminderRule.objects.filter(
             owner=request.user,
             workflow_draft__isnull=True,
