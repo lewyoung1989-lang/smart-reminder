@@ -691,6 +691,9 @@ class _TimelineRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final visuals = _timelineVisuals(context, item.status);
+    final onTap = item.actionTarget == null || onOpen == null
+        ? null
+        : () => onOpen!(item);
     return AppListRow(
       icon: visuals.icon,
       title: item.title,
@@ -698,7 +701,7 @@ class _TimelineRow extends StatelessWidget {
       statusText: visuals.label,
       statusColor: visuals.color,
       position: position,
-      onTap: onOpen == null ? null : () => onOpen!(item),
+      onTap: onTap,
     );
   }
 }

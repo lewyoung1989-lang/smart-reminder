@@ -29,6 +29,7 @@ class PlanDetailScreen extends StatelessWidget {
     final summary = detail.summary;
     final action = summary.status == PlanStatus.paused ? onResume : onPause;
     final actionLabel = summary.status == PlanStatus.paused ? '恢复计划' : '暂停计划';
+    final sourceText = detail.sourceText.trim();
 
     return Scaffold(
       body: SafeArea(
@@ -105,6 +106,11 @@ class PlanDetailScreen extends StatelessWidget {
                           : detail.queriedSources.join('、'),
                     ),
                   ),
+                  if (sourceText.isNotEmpty)
+                    AppPropertyRow(
+                      label: '创建时说的话',
+                      value: SelectableText(sourceText),
+                    ),
                 ],
               ),
               const SizedBox(height: AppSpacing.xl),

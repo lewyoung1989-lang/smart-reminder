@@ -203,6 +203,11 @@ def test_today_separates_actionable_statuses_and_orders_each_queue(
     assert body["upcoming"]["results"][0]["id"] == str(due.id)
     assert all("+08:00" in item["occurred_at"] for item in body["need_decision"]["results"])
     assert body["upcoming"]["results"][1]["id"] == str(scheduled_next.id)
+    assert body["upcoming"]["results"][1]["subtitle"] == "用药计划"
+    assert body["upcoming"]["results"][1]["action_target"] == {
+        "resource": "workflow",
+        "id": str(scheduled_next.id),
+    }
     assert body["upcoming"]["results"][2]["id"] == str(scheduled_later.id)
     assert body["need_decision"]["results"][-1]["id"] == str(paused.id)
 

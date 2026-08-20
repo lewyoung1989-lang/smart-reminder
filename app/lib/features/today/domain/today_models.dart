@@ -70,6 +70,7 @@ class TimelineItem {
     required this.subtitle,
     required this.scheduledAt,
     required this.status,
+    this.actionTarget,
   });
 
   final String id;
@@ -77,6 +78,7 @@ class TimelineItem {
   final String subtitle;
   final DateTime scheduledAt;
   final TimelineStatus status;
+  final ActionTarget? actionTarget;
 }
 
 class TodaySnapshot {

@@ -125,6 +125,10 @@ TodaySnapshot _todaySnapshot({required bool isOffline}) {
         subtitle: '布洛芬缓释胶囊将在 30 天内到期',
         scheduledAt: DateTime(2026, 8, 6, 14),
         status: TimelineStatus.upcoming,
+        actionTarget: const ActionTarget(
+          resource: 'inventory_batch',
+          id: 'batch-1',
+        ),
       ),
       TimelineItem(
         id: 'evening-reminder',

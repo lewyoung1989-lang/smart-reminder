@@ -104,6 +104,10 @@ class DemoTodayRepository implements TodayRepository {
           subtitle: '给家人打电话',
           scheduledAt: _at(20),
           status: TimelineStatus.upcoming,
+          actionTarget: const ActionTarget(
+            resource: 'workflow',
+            id: 'evening-reminder',
+          ),
         ),
       ],
     );
@@ -158,9 +162,10 @@ TimelineItem _timelineItem(Map<String, dynamic> json) {
   return TimelineItem(
     id: json['id'] as String,
     title: json['title'] as String,
-    subtitle: _timelineSubtitle(kind, status),
+    subtitle: json['subtitle'] as String? ?? _timelineSubtitle(kind, status),
     scheduledAt: _parseActionCenterTime(json['occurred_at']),
     status: _timelineStatus(status),
+    actionTarget: _actionTarget(json['action_target']),
   );
 }
 

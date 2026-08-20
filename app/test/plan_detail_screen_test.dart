@@ -19,6 +19,14 @@ void main() {
       expect(find.byType(AppStatusBanner), findsOneWidget);
     });
 
+    testWidgets('shows the original reminder expression when available',
+        (tester) async {
+      await pumpPlanDetail(tester, _detailWithSourceText());
+
+      expect(find.text('创建时说的话'), findsOneWidget);
+      expect(find.text('每天晚上六点半提醒我饭后吃拜新同一片'), findsOneWidget);
+    });
+
     testWidgets('active detail invokes a supplied pause callback',
         (tester) async {
       var pauses = 0;
@@ -171,5 +179,23 @@ PlanDetail _pausedDetail() {
     queriedSources: const [],
     reminderLabel: '通知提醒',
     executions: const [],
+  );
+}
+
+PlanDetail _detailWithSourceText() {
+  final summary = PlanSummary(
+    id: 'source-text',
+    title: '晚间用药',
+    subtitle: '拜新同 · 1片',
+    nextRunAt: fixedNow,
+    status: PlanStatus.active,
+    kind: PlanKind.medication,
+  );
+  return PlanDetail(
+    summary: summary,
+    queriedSources: const [],
+    reminderLabel: '每天 18:30 通知提醒',
+    executions: const [],
+    sourceText: '每天晚上六点半提醒我饭后吃拜新同一片',
   );
 }

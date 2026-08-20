@@ -9,6 +9,8 @@ import '../../features/medicine_cabinet/domain/medicine_models.dart';
 import '../../features/medicine_cabinet/domain/medicine_description_draft.dart';
 import '../../features/medicine_cabinet/presentation/medicine_cabinet_screen.dart';
 import '../../features/plans/data/plan_repository.dart';
+import '../../features/plans/domain/plan_models.dart';
+import '../../features/plans/presentation/plan_detail_screen.dart';
 import '../../features/plans/presentation/plans_screen.dart';
 import '../../features/quick_create/domain/quick_create_draft.dart';
 import '../../features/quick_create/domain/quick_create_result.dart';
@@ -235,6 +237,77 @@ class _AppShellState extends State<AppShell> {
     }
   }
 
+  Future<void> _openTimelineItem(TimelineItem item) async {
+    final target = item.actionTarget;
+    if (target?.resource != 'workflow') {
+      _showSnackBar('这个提醒暂时没有详情页');
+      return;
+    }
+    try {
+      final detail = await widget.planRepository.getById(target!.id);
+      if (!mounted) return;
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => _planDetailScreen(detail),
+        ),
+      );
+    } catch (_) {
+      _showSnackBar('提醒详情加载失败，请稍后重试');
+    }
+  }
+
+  PlanDetailScreen _planDetailScreen(PlanDetail detail) {
+    final actions = widget.planRepository is PlanActions
+        ? widget.planRepository as PlanActions
+        : null;
+    return PlanDetailScreen(
+      detail: detail,
+      onPause: actions == null ? null : () => _pausePlan(actions, detail),
+      onResume: actions == null ? null : () => _resumePlan(actions, detail),
+      onDelete: actions == null ? null : () => _deletePlan(actions, detail),
+      onEdit: detail.sourceText.trim().isEmpty
+          ? null
+          : () => _editPlanFromDetail(detail),
+    );
+  }
+
+  Future<void> _pausePlan(PlanActions actions, PlanDetail detail) async {
+    await actions.pause(detail.summary.id);
+    await _cancelPlanNotification(detail.summary.id);
+    if (!mounted) return;
+    Navigator.of(context).pop();
+    _showSnackBar('计划已暂停');
+  }
+
+  Future<void> _resumePlan(PlanActions actions, PlanDetail detail) async {
+    final updated = await actions.resume(detail.summary.id);
+    final scheduled = await _schedulePlanNotification(updated.summary.id);
+    if (!mounted) return;
+    Navigator.of(context).pop();
+    _showSnackBar(scheduled ? '计划已恢复，手机通知已安排' : '计划已恢复，但手机通知未安排');
+  }
+
+  Future<void> _deletePlan(PlanActions actions, PlanDetail detail) async {
+    await actions.delete(detail.summary.id);
+    await _cancelPlanNotification(detail.summary.id);
+    if (!mounted) return;
+    Navigator.of(context).pop();
+    _showSnackBar('计划已删除');
+  }
+
+  void _editPlanFromDetail(PlanDetail detail) {
+    Navigator.of(context).pop();
+    _openQuickCreate(initialText: detail.sourceText);
+  }
+
+  Future<void> _cancelPlanNotification(String planId) async {
+    try {
+      await widget.planNotificationScheduler?.cancelPlan(planId: planId);
+    } catch (_) {
+      _showSnackBar('计划已更新，但手机通知取消失败');
+    }
+  }
+
   Future<void> _confirmDraft(
     ReminderDraft draft,
     ReminderCreationService service,
@@ -332,6 +405,7 @@ class _AppShellState extends State<AppShell> {
           onOpenReminderManager: widget.onOpenReminderManager,
           onOpenSettings: _openSettings,
           onOpenAttention: _handleAttentionAction,
+          onOpenTimeline: (item) => _openTimelineItem(item),
           bottomContentPadding: compact && canQuickCreate ? 72 : 0,
         ),
       ),

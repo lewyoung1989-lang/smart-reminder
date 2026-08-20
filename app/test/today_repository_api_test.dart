@@ -95,9 +95,14 @@ void main() {
             {
               'id': 'departure-1',
               'title': '去虹桥火车站',
+              'subtitle': '虹桥火车站',
               'kind': 'workflow',
               'status': 'scheduled',
               'occurred_at': '2026-08-08T09:10:00+00:00',
+              'action_target': {
+                'resource': 'workflow',
+                'id': 'departure-1',
+              },
             },
             {
               'id': 'reminder-1',
@@ -148,7 +153,10 @@ void main() {
     expect(snapshot.decisions.last.secondaryActionLabel, '稍后');
     expect(snapshot.decisions.last.secondaryActionTarget?.action, 'snooze');
     expect(snapshot.timeline.first.id, 'departure-1');
+    expect(snapshot.timeline.first.subtitle, '虹桥火车站');
     expect(snapshot.timeline.first.status, TimelineStatus.upcoming);
+    expect(snapshot.timeline.first.actionTarget?.resource, 'workflow');
+    expect(snapshot.timeline.first.actionTarget?.id, 'departure-1');
     expect(snapshot.timeline.first.scheduledAt,
         DateTime.parse('2026-08-08T09:10:00+00:00').toLocal());
     expect(snapshot.timeline.last.id, 'reminder-1');

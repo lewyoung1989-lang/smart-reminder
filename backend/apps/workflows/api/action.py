@@ -234,9 +234,11 @@ class TodayActionCenterView(APIView):
                 {
                     "id": str(rule.id),
                     "title": rule.title,
+                    "subtitle": _workflow_timeline_subtitle(rule),
                     "kind": "workflow",
                     "status": "scheduled",
                     "occurred_at": _as_local_iso(rule.next_run_at),
+                    "action_target": {"resource": "workflow", "id": str(rule.id)},
                 },
             )
             for rule in upcoming_rules.order_by("next_run_at", "id")[:window]
@@ -305,6 +307,31 @@ class TodayActionCenterView(APIView):
 def _medication_title(occurrence):
     name = occurrence.plan.medicine_name or occurrence.plan.medicine.name
     return f"服用{name}（{occurrence.plan.dosage_text}）"
+
+
+def _workflow_timeline_subtitle(rule):
+    task = getattr(rule.workflow_draft, "task_spec_json", None)
+    slots = task.get("slots") if isinstance(task, dict) else {}
+    if not isinstance(slots, dict):
+        slots = {}
+    if rule.template_key == "medication_cycle":
+        parts = [
+            value
+            for value in (
+                slots.get("medicine_name"),
+                slots.get("dose_text"),
+            )
+            if isinstance(value, str) and value
+        ]
+        return " · ".join(parts) if parts else "用药计划"
+    if rule.template_key == "smart_departure":
+        destination = slots.get("destination_text")
+        if isinstance(destination, str) and destination:
+            return destination
+        return "路线与天气提醒"
+    if rule.template_key == "medicine_expiry":
+        return "药品有效期提醒"
+    return "提醒计划"
 
 
 def _expiry_title(alert):

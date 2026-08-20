@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../app/theme/app_spacing.dart';
 
@@ -101,6 +102,16 @@ class AppListRow extends StatelessWidget {
                         if (!useCompactLayout && statusText != null) ...[
                           const SizedBox(width: AppSpacing.lg),
                           _StatusText(text: statusText!, color: statusColor),
+                        ],
+                        if (onTap != null) ...[
+                          const SizedBox(width: AppSpacing.sm),
+                          ExcludeSemantics(
+                            child: Icon(
+                              LucideIcons.chevronRight,
+                              size: 18,
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
                         ],
                       ],
                     );

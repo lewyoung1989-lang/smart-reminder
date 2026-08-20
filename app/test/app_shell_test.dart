@@ -16,6 +16,7 @@ import 'package:smart_reminder_app/features/medicine_cabinet/data/medicine_repos
 import 'package:smart_reminder_app/features/medicine_cabinet/domain/medicine_models.dart';
 import 'package:smart_reminder_app/features/medicine_cabinet/domain/inventory_batch.dart';
 import 'package:smart_reminder_app/features/plans/data/plan_repository.dart';
+import 'package:smart_reminder_app/features/plans/domain/plan_models.dart';
 import 'package:smart_reminder_app/features/today/data/action_center_api.dart';
 import 'package:smart_reminder_app/features/today/data/today_repository.dart';
 import 'package:smart_reminder_app/features/today/domain/today_models.dart';
@@ -683,6 +684,66 @@ void main() {
     expect(todayRepository.calls, 2);
     expect(find.text('已改到30分钟后提醒'), findsOneWidget);
   });
+
+  testWidgets('opens workflow reminder detail from the today timeline',
+      (tester) async {
+    final detail = PlanDetail(
+      summary: PlanSummary(
+        id: 'plan-1',
+        title: '晚间用药',
+        subtitle: '拜新同 · 1片',
+        nextRunAt: DateTime(2026, 8, 8, 18, 30),
+        status: PlanStatus.active,
+        kind: PlanKind.medication,
+      ),
+      queriedSources: const [],
+      reminderLabel: '每天 18:30 通知提醒',
+      executions: const [],
+      sourceText: '每天晚上六点半提醒我饭后吃拜新同一片',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppShell(
+          todayRepository: _SequenceTodayRepository([
+            TodaySnapshot(
+              decisions: const <AttentionItem>[],
+              timeline: <TimelineItem>[
+                TimelineItem(
+                  id: 'plan-1',
+                  title: '晚间用药',
+                  subtitle: '拜新同 · 1片',
+                  scheduledAt: DateTime(2026, 8, 8, 18, 30),
+                  status: TimelineStatus.upcoming,
+                  actionTarget: const ActionTarget(
+                    resource: 'workflow',
+                    id: 'plan-1',
+                  ),
+                ),
+              ],
+            ),
+          ]),
+          planRepository: _SinglePlanRepository(detail),
+          medicineRepository: _UnavailableMedicineRepository(),
+          user: const AuthUser(
+            id: 'user-1',
+            phoneMasked: '138****8000',
+            phoneVerified: true,
+          ),
+          themeMode: ThemeMode.system,
+          onThemeModeChanged: (_) {},
+          onChangePassword: (_, __, ___) async {},
+          onLogout: () async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('晚间用药'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('创建时说的话'), findsOneWidget);
+    expect(find.text('每天晚上六点半提醒我饭后吃拜新同一片'), findsOneWidget);
+  });
 }
 
 class _ThrowingNotificationScheduler implements ReminderNotificationScheduler {
@@ -726,6 +787,23 @@ class _RecordingMedicineRepository implements MedicineRepository {
   @override
   Future<MedicineDetail> getById(String id) =>
       Future.error(StateError('No medicine available'));
+}
+
+class _SinglePlanRepository implements PlanRepository {
+  const _SinglePlanRepository(this.detail);
+
+  final PlanDetail detail;
+
+  @override
+  Future<PlanDetail> getById(String id) async {
+    if (id != detail.summary.id) throw StateError('Unknown plan id: $id');
+    return detail;
+  }
+
+  @override
+  Future<PlanCollection> load() async {
+    return PlanCollection(items: [detail.summary]);
+  }
 }
 
 class _SequenceTodayRepository implements TodayRepository {
