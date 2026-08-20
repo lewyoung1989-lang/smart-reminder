@@ -1,3 +1,4 @@
+from datetime import timedelta
 from zoneinfo import ZoneInfo
 
 from django.db.models import Q
@@ -55,6 +56,9 @@ class TodayActionCenterView(APIView):
         offset, limit = _pagination(request)
         window = offset + limit + 1
         now = timezone.now()
+        local_now = now.astimezone(LOCAL_TIMEZONE)
+        today_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+        tomorrow_start = today_start + timedelta(days=1)
         failed_outbox = NotificationOutbox.objects.filter(
             workflow_run__workflow__owner=request.user,
             status=NotificationOutbox.Status.FAILED,
@@ -82,6 +86,14 @@ class TodayActionCenterView(APIView):
             workflow_draft__isnull=True,
             enabled=True,
             cancelled_at__isnull=True,
+            completed_at__isnull=True,
+            scheduled_at__isnull=False,
+        ).filter(Q(template_key__isnull=True) | Q(template_key=""))
+        completed_reminders = ReminderRule.objects.filter(
+            owner=request.user,
+            workflow_draft__isnull=True,
+            completed_at__gte=today_start,
+            completed_at__lt=tomorrow_start,
             scheduled_at__isnull=False,
         ).filter(Q(template_key__isnull=True) | Q(template_key=""))
         due_medication = MedicationOccurrence.objects.filter(
@@ -155,6 +167,16 @@ class TodayActionCenterView(APIView):
                 "kind": "reminder",
                 "status": "due",
                 "occurred_at": _as_local_iso(rule.scheduled_at),
+                "action_target": {
+                    "resource": "reminder",
+                    "id": str(rule.id),
+                    "action": "complete",
+                },
+                "secondary_action_target": {
+                    "resource": "reminder",
+                    "id": str(rule.id),
+                    "action": "snooze",
+                },
             }
             for rule in ordinary_reminders.filter(scheduled_at__lte=now).order_by(
                 "scheduled_at", "id"
@@ -234,6 +256,20 @@ class TodayActionCenterView(APIView):
             for rule in ordinary_reminders.filter(scheduled_at__gt=now).order_by(
                 "scheduled_at", "id"
             )[:window]
+        )
+        upcoming.extend(
+            (
+                rule.completed_at,
+                str(rule.id),
+                {
+                    "id": str(rule.id),
+                    "title": rule.title,
+                    "kind": "reminder",
+                    "status": "completed",
+                    "occurred_at": _as_local_iso(rule.completed_at),
+                },
+            )
+            for rule in completed_reminders.order_by("-completed_at", "id")[:window]
         )
         upcoming.extend(
             (

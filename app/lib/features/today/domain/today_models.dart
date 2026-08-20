@@ -11,6 +11,8 @@ class AttentionItem {
     required this.kind,
     required this.actionLabel,
     this.actionTarget,
+    this.secondaryActionLabel,
+    this.secondaryActionTarget,
   });
 
   final String id;
@@ -20,16 +22,45 @@ class AttentionItem {
   final AttentionKind kind;
   final String actionLabel;
   final ActionTarget? actionTarget;
+  final String? secondaryActionLabel;
+  final ActionTarget? secondaryActionTarget;
+
+  AttentionItem withAction({
+    required String actionLabel,
+    required ActionTarget? actionTarget,
+  }) =>
+      AttentionItem(
+        id: id,
+        title: title,
+        reason: reason,
+        dueAt: dueAt,
+        kind: kind,
+        actionLabel: actionLabel,
+        actionTarget: actionTarget,
+        secondaryActionLabel: secondaryActionLabel,
+        secondaryActionTarget: secondaryActionTarget,
+      );
 }
 
 class ActionTarget {
   const ActionTarget({
     required this.resource,
     required this.id,
+    this.action,
+    this.snoozeMinutes,
   });
 
   final String resource;
   final String id;
+  final String? action;
+  final int? snoozeMinutes;
+
+  ActionTarget withSnoozeMinutes(int minutes) => ActionTarget(
+        resource: resource,
+        id: id,
+        action: action,
+        snoozeMinutes: minutes,
+      );
 }
 
 class TimelineItem {

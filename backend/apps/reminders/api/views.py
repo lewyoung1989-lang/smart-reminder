@@ -1,4 +1,5 @@
 from datetime import timedelta
+from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.db import transaction
@@ -32,6 +33,7 @@ from apps.workflows.services.task_parser import (
 from .serializers import (
     CreateTextReminderDraftSerializer,
     CreateVoiceReminderDraftSerializer,
+    ReminderActionSerializer,
     ReminderRuleSerializer,
 )
 
@@ -51,10 +53,16 @@ class CancelledReminderPagination(CursorPagination):
     ordering = ("-cancelled_at", "id")
 
 
+class CompletedReminderPagination(CursorPagination):
+    page_size = 50
+    ordering = ("-completed_at", "id")
+
+
 REMINDER_PAGINATORS = {
     "pending": PendingReminderPagination,
     "expired": ExpiredReminderPagination,
     "cancelled": CancelledReminderPagination,
+    "completed": CompletedReminderPagination,
 }
 
 
@@ -318,7 +326,7 @@ class ReminderListView(APIView):
         reminder_status = request.query_params.get("status", "pending")
         if reminder_status not in REMINDER_PAGINATORS:
             raise ValidationError(
-                {"status": "状态必须是 pending、expired 或 cancelled"}
+                {"status": "状态必须是 pending、expired、cancelled 或 completed"}
             )
 
         now = timezone.now()
@@ -330,18 +338,25 @@ class ReminderListView(APIView):
             queryset = queryset.filter(
                 enabled=True,
                 cancelled_at__isnull=True,
+                completed_at__isnull=True,
                 scheduled_at__gt=now,
             )
         elif reminder_status == "expired":
             queryset = queryset.filter(
                 enabled=True,
                 cancelled_at__isnull=True,
+                completed_at__isnull=True,
                 scheduled_at__lte=now,
+            )
+        elif reminder_status == "cancelled":
+            queryset = queryset.filter(
+                enabled=False,
+                cancelled_at__isnull=False,
             )
         else:
             queryset = queryset.filter(
                 enabled=False,
-                cancelled_at__isnull=False,
+                completed_at__isnull=False,
             )
 
         paginator = REMINDER_PAGINATORS[reminder_status]()
@@ -380,6 +395,14 @@ class ReminderCancelView(APIView):
                 )
 
             now = timezone.now()
+            if rule.completed_at is not None:
+                return Response(
+                    {
+                        "code": "reminder_completed",
+                        "detail": "提醒已完成，不能取消",
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
             if not rule.enabled and rule.cancelled_at is not None:
                 serializer = ReminderRuleSerializer(rule, context={"now": now})
                 return Response(serializer.data, status=status.HTTP_200_OK)
@@ -399,3 +422,84 @@ class ReminderCancelView(APIView):
 
         serializer = ReminderRuleSerializer(rule, context={"now": now})
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class ReminderActionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, reminder_id):
+        serializer = ReminderActionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        action = serializer.validated_data["action"]
+
+        with transaction.atomic():
+            try:
+                rule = ReminderRule.objects.select_for_update().get(
+                    id=reminder_id,
+                    owner=request.user,
+                )
+            except ReminderRule.DoesNotExist:
+                return Response(
+                    {"detail": "未找到该提醒"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            if rule.workflow_draft_id is not None:
+                return Response(
+                    {
+                        "code": "workflow_requires_workflow_api",
+                        "detail": "该工作流提醒不能通过旧提醒接口处理",
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            now = timezone.now()
+            if action == "complete":
+                if rule.completed_at is None:
+                    rule.enabled = False
+                    rule.completed_at = now
+                    rule.save(update_fields=["enabled", "completed_at"])
+                response_status = status.HTTP_200_OK
+            else:
+                if rule.completed_at is not None:
+                    return Response(
+                        {
+                            "code": "reminder_completed",
+                            "detail": "提醒已完成，不能稍后提醒",
+                        },
+                        status=status.HTTP_409_CONFLICT,
+                    )
+                if not rule.enabled and rule.cancelled_at is not None:
+                    return Response(
+                        {
+                            "code": "reminder_cancelled",
+                            "detail": "提醒已取消，不能稍后提醒",
+                        },
+                        status=status.HTTP_409_CONFLICT,
+                    )
+                scheduled_at = now + timedelta(
+                    minutes=serializer.validated_data["snooze_minutes"]
+                )
+                rule.enabled = True
+                rule.cancelled_at = None
+                rule.scheduled_at = scheduled_at
+                rule.schedule_json = {
+                    **(rule.schedule_json or {}),
+                    "local_datetime": scheduled_at.astimezone(
+                        ZoneInfo(rule.timezone)
+                    ).isoformat(),
+                }
+                rule.save(
+                    update_fields=[
+                        "enabled",
+                        "cancelled_at",
+                        "scheduled_at",
+                        "schedule_json",
+                    ]
+                )
+                response_status = status.HTTP_200_OK
+
+        return Response(
+            ReminderRuleSerializer(rule, context={"now": now}).data,
+            status=response_status,
+        )

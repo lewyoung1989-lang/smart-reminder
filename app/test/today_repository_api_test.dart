@@ -76,6 +76,16 @@ void main() {
               'kind': 'reminder',
               'status': 'due',
               'occurred_at': '2026-08-08T08:30:00+08:00',
+              'action_target': {
+                'resource': 'reminder',
+                'id': 'reminder-due-1',
+                'action': 'complete',
+              },
+              'secondary_action_target': {
+                'resource': 'reminder',
+                'id': 'reminder-due-1',
+                'action': 'snooze',
+              },
             },
           ],
         },
@@ -132,7 +142,11 @@ void main() {
     expect(snapshot.decisions[2].actionTarget?.resource, 'low_stock_alert');
     expect(snapshot.decisions.last.title, '给妈妈打电话');
     expect(snapshot.decisions.last.reason, '提醒时间到了');
-    expect(snapshot.decisions.last.actionLabel, '查看');
+    expect(snapshot.decisions.last.actionLabel, '完成');
+    expect(snapshot.decisions.last.actionTarget?.resource, 'reminder');
+    expect(snapshot.decisions.last.actionTarget?.action, 'complete');
+    expect(snapshot.decisions.last.secondaryActionLabel, '稍后');
+    expect(snapshot.decisions.last.secondaryActionTarget?.action, 'snooze');
     expect(snapshot.timeline.first.id, 'departure-1');
     expect(snapshot.timeline.first.status, TimelineStatus.upcoming);
     expect(snapshot.timeline.first.scheduledAt,

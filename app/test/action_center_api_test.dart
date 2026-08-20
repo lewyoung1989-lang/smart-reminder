@@ -110,6 +110,41 @@ void main() {
     expect(jsonDecode(client.requestBodies.single), {'action': 'handled'});
   });
 
+  test('completes an ordinary reminder through the verified action', () async {
+    final client = RecordingClient([
+      jsonResponse(200, {'status': 'completed'})
+    ]);
+    final api = ActionCenterApi(baseUrl: 'https://api.invalid', client: client);
+
+    await api.completeReminder('reminder-1');
+
+    expect(client.requests.single.method, 'POST');
+    expect(
+      client.requests.single.url.toString(),
+      'https://api.invalid/api/v1/reminders/reminder-1/actions',
+    );
+    expect(jsonDecode(client.requestBodies.single), {'action': 'complete'});
+  });
+
+  test('snoozes an ordinary reminder through the verified action', () async {
+    final client = RecordingClient([
+      jsonResponse(200, {'status': 'pending'})
+    ]);
+    final api = ActionCenterApi(baseUrl: 'https://api.invalid', client: client);
+
+    await api.snoozeReminder('reminder-1', minutes: 30);
+
+    expect(client.requests.single.method, 'POST');
+    expect(
+      client.requests.single.url.toString(),
+      'https://api.invalid/api/v1/reminders/reminder-1/actions',
+    );
+    expect(jsonDecode(client.requestBodies.single), {
+      'action': 'snooze',
+      'snooze_minutes': 30,
+    });
+  });
+
   test('throws a stable exception when a verified action is rejected',
       () async {
     final api = ActionCenterApi(

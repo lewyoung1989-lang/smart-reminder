@@ -380,12 +380,14 @@ class _ReminderHomeScreenState extends State<ReminderHomeScreen>
         ReminderStatus.pending => LucideIcons.bell,
         ReminderStatus.expired => LucideIcons.history,
         ReminderStatus.cancelled => LucideIcons.bellOff,
+        ReminderStatus.completed => LucideIcons.circleCheck,
       };
 
   static String _emptyText(ReminderStatus status) => switch (status) {
         ReminderStatus.pending => '暂无待提醒事项',
         ReminderStatus.expired => '暂无已过期提醒',
         ReminderStatus.cancelled => '暂无已取消提醒',
+        ReminderStatus.completed => '暂无已完成提醒',
       };
 }
 
@@ -452,5 +454,6 @@ class _ReminderRow extends StatelessWidget {
         ReminderStatus.pending => const Color(0xFF166B5A),
         ReminderStatus.expired => const Color(0xFF656A70),
         ReminderStatus.cancelled => const Color(0xFF9B4A4A),
+        ReminderStatus.completed => const Color(0xFF3F6F57),
       };
 }

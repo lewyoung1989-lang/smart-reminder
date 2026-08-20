@@ -474,6 +474,13 @@ def test_today_includes_due_and_upcoming_ordinary_reminders(
         title="晚上测血压",
         scheduled_at=NOW + timedelta(hours=1),
     )
+    completed = create_ordinary_reminder(
+        user,
+        title="已经喝水",
+        scheduled_at=NOW - timedelta(hours=1),
+        enabled=False,
+        completed_at=NOW - timedelta(minutes=10),
+    )
     other = django_user_model.objects.create_user(username="ordinary-reminder-other")
     create_ordinary_reminder(
         other,
@@ -499,6 +506,16 @@ def test_today_includes_due_and_upcoming_ordinary_reminders(
         "kind": "reminder",
         "status": "due",
         "occurred_at": "2026-08-08T08:55:00+08:00",
+        "action_target": {
+            "resource": "reminder",
+            "id": str(due.id),
+            "action": "complete",
+        },
+        "secondary_action_target": {
+            "resource": "reminder",
+            "id": str(due.id),
+            "action": "snooze",
+        },
     } in response.json()["need_decision"]["results"]
     assert {
         "id": str(upcoming.id),
@@ -506,6 +523,13 @@ def test_today_includes_due_and_upcoming_ordinary_reminders(
         "kind": "reminder",
         "status": "scheduled",
         "occurred_at": "2026-08-08T10:00:00+08:00",
+    } in response.json()["upcoming"]["results"]
+    assert {
+        "id": str(completed.id),
+        "title": "已经喝水",
+        "kind": "reminder",
+        "status": "completed",
+        "occurred_at": "2026-08-08T08:50:00+08:00",
     } in response.json()["upcoming"]["results"]
     assert all(
         item["title"] not in {"别人的提醒", "已取消提醒"}

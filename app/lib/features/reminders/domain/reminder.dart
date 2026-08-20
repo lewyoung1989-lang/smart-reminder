@@ -1,4 +1,4 @@
-enum ReminderStatus { pending, expired, cancelled }
+enum ReminderStatus { pending, expired, cancelled, completed }
 
 enum ReminderSeverity { alarm, notification }
 
@@ -7,6 +7,7 @@ extension ReminderStatusValue on ReminderStatus {
         ReminderStatus.pending => 'pending',
         ReminderStatus.expired => 'expired',
         ReminderStatus.cancelled => 'cancelled',
+        ReminderStatus.completed => 'completed',
       };
 }
 
@@ -19,6 +20,7 @@ class Reminder {
     required this.severity,
     required this.status,
     required this.cancelledAt,
+    required this.completedAt,
   });
 
   factory Reminder.fromJson(Map<String, dynamic> json) => Reminder(
@@ -37,6 +39,7 @@ class Reminder {
           'pending' => ReminderStatus.pending,
           'expired' => ReminderStatus.expired,
           'cancelled' => ReminderStatus.cancelled,
+          'completed' => ReminderStatus.completed,
           final value => throw FormatException(
               'Unsupported reminder status: $value',
             ),
@@ -44,6 +47,9 @@ class Reminder {
         cancelledAt: json['cancelled_at'] == null
             ? null
             : DateTime.parse(json['cancelled_at'] as String).toLocal(),
+        completedAt: json['completed_at'] == null
+            ? null
+            : DateTime.parse(json['completed_at'] as String).toLocal(),
       );
 
   final String id;
@@ -53,6 +59,7 @@ class Reminder {
   final ReminderSeverity severity;
   final ReminderStatus status;
   final DateTime? cancelledAt;
+  final DateTime? completedAt;
 }
 
 class ReminderPage {

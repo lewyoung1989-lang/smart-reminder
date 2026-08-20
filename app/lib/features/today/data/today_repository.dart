@@ -147,6 +147,8 @@ AttentionItem _attentionItem(Map<String, dynamic> json) {
     kind: _attentionKind(kind, status),
     actionLabel: _attentionActionLabel(kind, status),
     actionTarget: _actionTarget(json['action_target']),
+    secondaryActionLabel: _secondaryAttentionActionLabel(kind, status),
+    secondaryActionTarget: _actionTarget(json['secondary_action_target']),
   );
 }
 
@@ -178,11 +180,16 @@ AttentionKind _attentionKind(String kind, String status) {
 
 String _attentionActionLabel(String kind, String status) {
   if (kind == 'medication') return '记录';
-  if (kind == 'reminder') return '查看';
+  if (kind == 'reminder') return '完成';
   if (kind == 'medicine_expiry') return '处理';
   if (kind == 'medicine_low_stock') return '处理';
   if (status == 'paused') return '查看';
   return '查看详情';
+}
+
+String? _secondaryAttentionActionLabel(String kind, String status) {
+  if (kind == 'reminder' && status == 'due') return '稍后';
+  return null;
 }
 
 String _attentionReason(String kind, String status) {
@@ -217,5 +224,12 @@ ActionTarget? _actionTarget(Object? value) {
   final resource = value['resource'];
   final id = value['id'];
   if (resource is! String || id is! String) return null;
-  return ActionTarget(resource: resource, id: id);
+  final action = value['action'];
+  final snoozeMinutes = value['snooze_minutes'];
+  return ActionTarget(
+    resource: resource,
+    id: id,
+    action: action is String ? action : null,
+    snoozeMinutes: snoozeMinutes is int ? snoozeMinutes : null,
+  );
 }

@@ -562,6 +562,127 @@ void main() {
     expect(find.text('拜新同余量不足'), findsNothing);
     expect(find.text('已处理买药提醒'), findsOneWidget);
   });
+
+  testWidgets('dispatches ordinary reminder completion from today',
+      (tester) async {
+    final todayRepository = _SequenceTodayRepository([
+      TodaySnapshot(
+        decisions: <AttentionItem>[
+          AttentionItem(
+            id: 'attention-1',
+            title: '给妈妈打电话',
+            reason: '提醒时间到了',
+            dueAt: DateTime(2026, 8, 8, 8),
+            kind: AttentionKind.confirmation,
+            actionLabel: '完成',
+            actionTarget: const ActionTarget(
+              resource: 'reminder',
+              id: 'reminder-1',
+              action: 'complete',
+            ),
+            secondaryActionLabel: '稍后',
+            secondaryActionTarget: const ActionTarget(
+              resource: 'reminder',
+              id: 'reminder-1',
+              action: 'snooze',
+            ),
+          ),
+        ],
+        timeline: const <TimelineItem>[],
+      ),
+      TodaySnapshot(decisions: const [], timeline: const []),
+    ]);
+    final actions = _RecordingActionCenterActions();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppShell(
+          todayRepository: todayRepository,
+          planRepository: const UnavailablePlanRepository(),
+          medicineRepository: _UnavailableMedicineRepository(),
+          user: const AuthUser(
+            id: 'user-1',
+            phoneMasked: '138****8000',
+            phoneVerified: true,
+          ),
+          themeMode: ThemeMode.system,
+          onThemeModeChanged: (_) {},
+          onChangePassword: (_, __, ___) async {},
+          onLogout: () async {},
+          actionCenterActions: actions,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FilledButton, '完成'));
+    await tester.pumpAndSettle();
+
+    expect(actions.completedReminders, ['reminder-1']);
+    expect(todayRepository.calls, 2);
+    expect(find.text('给妈妈打电话'), findsNothing);
+    expect(find.text('已完成提醒'), findsOneWidget);
+  });
+
+  testWidgets('dispatches ordinary reminder snooze choices from today',
+      (tester) async {
+    final todayRepository = _SequenceTodayRepository([
+      TodaySnapshot(
+        decisions: <AttentionItem>[
+          AttentionItem(
+            id: 'attention-1',
+            title: '晚上测血压',
+            reason: '提醒时间到了',
+            dueAt: DateTime(2026, 8, 8, 8),
+            kind: AttentionKind.confirmation,
+            actionLabel: '完成',
+            actionTarget: const ActionTarget(
+              resource: 'reminder',
+              id: 'reminder-1',
+              action: 'complete',
+            ),
+            secondaryActionLabel: '稍后',
+            secondaryActionTarget: const ActionTarget(
+              resource: 'reminder',
+              id: 'reminder-1',
+              action: 'snooze',
+            ),
+          ),
+        ],
+        timeline: const <TimelineItem>[],
+      ),
+      TodaySnapshot(decisions: const [], timeline: const []),
+    ]);
+    final actions = _RecordingActionCenterActions();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppShell(
+          todayRepository: todayRepository,
+          planRepository: const UnavailablePlanRepository(),
+          medicineRepository: _UnavailableMedicineRepository(),
+          user: const AuthUser(
+            id: 'user-1',
+            phoneMasked: '138****8000',
+            phoneVerified: true,
+          ),
+          themeMode: ThemeMode.system,
+          onThemeModeChanged: (_) {},
+          onChangePassword: (_, __, ___) async {},
+          onLogout: () async {},
+          actionCenterActions: actions,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(OutlinedButton, '稍后'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('30分钟后'));
+    await tester.pumpAndSettle();
+
+    expect(actions.snoozedReminders, ['reminder-1:30']);
+    expect(todayRepository.calls, 2);
+    expect(find.text('已改到30分钟后提醒'), findsOneWidget);
+  });
 }
 
 class _ThrowingNotificationScheduler implements ReminderNotificationScheduler {
@@ -625,6 +746,8 @@ class _RecordingActionCenterActions implements ActionCenterActions {
   final takenOccurrences = <String>[];
   final handledBatches = <String>[];
   final handledLowStockAlerts = <String>[];
+  final completedReminders = <String>[];
+  final snoozedReminders = <String>[];
 
   @override
   Future<MedicationActionResult> markMedicationTaken(
@@ -641,5 +764,15 @@ class _RecordingActionCenterActions implements ActionCenterActions {
   @override
   Future<void> handleLowStockAlert(String alertId) async {
     handledLowStockAlerts.add(alertId);
+  }
+
+  @override
+  Future<void> completeReminder(String reminderId) async {
+    completedReminders.add(reminderId);
+  }
+
+  @override
+  Future<void> snoozeReminder(String reminderId, {required int minutes}) async {
+    snoozedReminders.add('$reminderId:$minutes');
   }
 }

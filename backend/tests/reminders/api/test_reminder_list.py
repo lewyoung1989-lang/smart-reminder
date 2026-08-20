@@ -16,6 +16,7 @@ def create_rule(
     title,
     scheduled_at,
     cancelled_at=None,
+    completed_at=None,
     enabled=True,
 ):
     session = VoiceParseSession.objects.create(
@@ -36,6 +37,7 @@ def create_rule(
         severity="notification",
         scheduled_at=scheduled_at,
         cancelled_at=cancelled_at,
+        completed_at=completed_at,
         enabled=enabled,
         source_draft=draft,
     )
@@ -144,6 +146,35 @@ def test_cancelled_orders_by_most_recent_cancellation(api_client, user, mocker):
         "cancelled-first",
     ]
     assert all(item["status"] == "cancelled" for item in response.json()["results"])
+
+
+@pytest.mark.django_db
+def test_completed_orders_by_most_recent_completion(api_client, user, mocker):
+    create_rule(
+        owner=user,
+        title="completed-first",
+        scheduled_at=NOW - timedelta(hours=1),
+        completed_at=NOW - timedelta(minutes=10),
+        enabled=False,
+    )
+    create_rule(
+        owner=user,
+        title="completed-last",
+        scheduled_at=NOW - timedelta(hours=1),
+        completed_at=NOW - timedelta(minutes=1),
+        enabled=False,
+    )
+    mocker.patch("apps.reminders.api.views.timezone.now", return_value=NOW)
+    api_client.force_authenticate(user)
+
+    response = api_client.get("/api/v1/reminders", {"status": "completed"})
+
+    assert response.status_code == 200
+    assert [item["title"] for item in response.json()["results"]] == [
+        "completed-last",
+        "completed-first",
+    ]
+    assert all(item["status"] == "completed" for item in response.json()["results"])
 
 
 @pytest.mark.django_db

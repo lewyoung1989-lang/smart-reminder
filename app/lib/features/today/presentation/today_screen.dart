@@ -222,7 +222,7 @@ class _TodayScreenState extends State<TodayScreen> {
       slivers.add(
         _sectionSliver(
           key: const ValueKey('today-decisions-section'),
-          title: '需要你决定',
+          title: '现在要处理',
           child: Column(
             children: <Widget>[
               for (var index = 0; index < decisions.length; index += 1) ...[
@@ -242,22 +242,46 @@ class _TodayScreenState extends State<TodayScreen> {
     if (snapshot.timeline.isNotEmpty) {
       final timeline = List<TimelineItem>.of(snapshot.timeline)
         ..sort((left, right) => left.scheduledAt.compareTo(right.scheduledAt));
-      slivers.add(
-        _sectionSliver(
-          key: const ValueKey('today-timeline-section'),
-          title: '接下来',
-          child: Column(
-            children: <Widget>[
-              for (var index = 0; index < timeline.length; index += 1)
-                _TimelineRow(
-                  item: timeline[index],
-                  position: _listRowPosition(index, timeline.length),
-                  onOpen: widget.onOpenTimeline,
-                ),
-            ],
+      final activeTimeline = timeline
+          .where((item) =>
+              item.status == TimelineStatus.upcoming ||
+              item.status == TimelineStatus.due)
+          .toList(growable: false);
+      final completedTimeline = timeline
+          .where((item) =>
+              item.status == TimelineStatus.completed ||
+              item.status == TimelineStatus.skipped)
+          .toList(growable: false);
+      if (activeTimeline.isNotEmpty) {
+        slivers.add(
+          _sectionSliver(
+            key: const ValueKey('today-timeline-section'),
+            title: '今天稍后',
+            child: Column(
+              children: <Widget>[
+                for (var index = 0; index < activeTimeline.length; index += 1)
+                  _TimelineRow(
+                    item: activeTimeline[index],
+                    position: _listRowPosition(index, activeTimeline.length),
+                    onOpen: widget.onOpenTimeline,
+                  ),
+              ],
+            ),
           ),
-        ),
-      );
+        );
+      }
+      if (completedTimeline.isNotEmpty) {
+        slivers.add(
+          _sectionSliver(
+            key: const ValueKey('today-completed-section'),
+            title: '已完成',
+            child: _CompletedTimelineList(
+              items: completedTimeline,
+              onOpen: widget.onOpenTimeline,
+            ),
+          ),
+        );
+      }
     }
 
     return slivers;
@@ -358,20 +382,11 @@ class _DecisionRow extends StatelessWidget {
                       MediaQuery.textScalerOf(context).scale(14) > 20;
                   final details =
                       _DecisionDetails(item: item, visuals: visuals);
-                  final action = Semantics(
-                    container: true,
-                    label: actionSemantics,
-                    button: true,
+                  final actions = _DecisionActions(
+                    item: item,
                     enabled: enabled,
-                    onTap: enabled ? () => onOpen!(item) : null,
-                    child: ExcludeSemantics(
-                      child: TextButton.icon(
-                        onPressed: enabled ? () => onOpen!(item) : null,
-                        iconAlignment: IconAlignment.end,
-                        icon: const Icon(LucideIcons.chevronRight),
-                        label: Text(item.actionLabel),
-                      ),
-                    ),
+                    primarySemantics: actionSemantics,
+                    onOpen: onOpen,
                   );
 
                   if (accessibilityLayout) {
@@ -380,7 +395,7 @@ class _DecisionRow extends StatelessWidget {
                       children: <Widget>[
                         details,
                         const SizedBox(height: AppSpacing.sm),
-                        Align(alignment: Alignment.centerRight, child: action),
+                        actions,
                       ],
                     );
                   }
@@ -390,7 +405,7 @@ class _DecisionRow extends StatelessWidget {
                     children: <Widget>[
                       Expanded(child: details),
                       const SizedBox(width: AppSpacing.sm),
-                      action,
+                      actions,
                     ],
                   );
                 },
@@ -398,6 +413,140 @@ class _DecisionRow extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _DecisionActions extends StatelessWidget {
+  const _DecisionActions({
+    required this.item,
+    required this.enabled,
+    required this.primarySemantics,
+    required this.onOpen,
+  });
+
+  final AttentionItem item;
+  final bool enabled;
+  final String primarySemantics;
+  final AttentionActionCallback? onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final secondaryLabel = item.secondaryActionLabel;
+    final secondaryTarget = item.secondaryActionTarget;
+    if (secondaryLabel == null || secondaryTarget == null) {
+      return Align(
+        alignment: Alignment.centerRight,
+        child: Semantics(
+          container: true,
+          label: primarySemantics,
+          button: true,
+          enabled: enabled,
+          onTap: enabled ? () => onOpen!(item) : null,
+          child: ExcludeSemantics(
+            child: TextButton.icon(
+              onPressed: enabled ? () => onOpen!(item) : null,
+              iconAlignment: IconAlignment.end,
+              icon: const Icon(LucideIcons.chevronRight),
+              label: Text(item.actionLabel),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Wrap(
+      alignment: WrapAlignment.end,
+      spacing: AppSpacing.sm,
+      runSpacing: AppSpacing.xs,
+      children: <Widget>[
+        SizedBox(
+          height: 44,
+          child: OutlinedButton.icon(
+            onPressed: enabled
+                ? () => _handleSecondaryAction(context, secondaryTarget)
+                : null,
+            icon: const Icon(LucideIcons.clock3),
+            label: Text(secondaryLabel),
+          ),
+        ),
+        SizedBox(
+          height: 44,
+          child: FilledButton.icon(
+            onPressed: enabled ? () => onOpen!(item) : null,
+            icon: const Icon(LucideIcons.check),
+            label: Text(item.actionLabel),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _handleSecondaryAction(
+    BuildContext context,
+    ActionTarget target,
+  ) async {
+    final callback = onOpen;
+    if (callback == null) return;
+    final minutes = await showModalBottomSheet<int>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => const _SnoozeSheet(),
+    );
+    if (minutes == null) return;
+    await callback(
+      item.withAction(
+        actionLabel: item.secondaryActionLabel!,
+        actionTarget: target.withSnoozeMinutes(minutes),
+      ),
+    );
+  }
+}
+
+class _SnoozeSheet extends StatelessWidget {
+  const _SnoozeSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          0,
+          AppSpacing.lg,
+          AppSpacing.lg,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Text('稍后提醒', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: AppSpacing.sm),
+            _SnoozeOption(label: '10分钟后', minutes: 10),
+            _SnoozeOption(label: '30分钟后', minutes: 30),
+            _SnoozeOption(label: '明天再提醒', minutes: 1440),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SnoozeOption extends StatelessWidget {
+  const _SnoozeOption({required this.label, required this.minutes});
+
+  final String label;
+  final int minutes;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 52,
+      child: ListTile(
+        leading: const Icon(LucideIcons.clock),
+        title: Text(label),
+        onTap: () => Navigator.of(context).pop(minutes),
       ),
     );
   }
@@ -565,6 +714,35 @@ class _TimelineRow extends StatelessWidget {
       statusColor: visuals.color,
       position: position,
       onTap: onOpen == null ? null : () => onOpen!(item),
+    );
+  }
+}
+
+class _CompletedTimelineList extends StatelessWidget {
+  const _CompletedTimelineList({required this.items, this.onOpen});
+
+  final List<TimelineItem> items;
+  final ValueChanged<TimelineItem>? onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Theme.of(context).colorScheme.surface,
+      child: ExpansionTile(
+        key: const ValueKey('today-completed-expansion'),
+        tilePadding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+        childrenPadding: EdgeInsets.zero,
+        title: Text('${items.length} 项已完成'),
+        leading: const Icon(LucideIcons.circleCheck),
+        children: <Widget>[
+          for (var index = 0; index < items.length; index += 1)
+            _TimelineRow(
+              item: items[index],
+              position: _TodayScreenState._listRowPosition(index, items.length),
+              onOpen: onOpen,
+            ),
+        ],
+      ),
     );
   }
 }

@@ -22,6 +22,8 @@ Reminder reminder(
       status: status,
       cancelledAt:
           status == ReminderStatus.cancelled ? DateTime(2026, 8, 5, 12) : null,
+      completedAt:
+          status == ReminderStatus.completed ? DateTime(2026, 8, 5, 12) : null,
     );
 
 class RecordingScheduler implements ReminderNotificationScheduler {

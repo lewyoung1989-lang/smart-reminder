@@ -40,7 +40,7 @@ void main() {
       );
       expect(
         tester.getTopLeft(find.text('洗车计划')).dy,
-        lessThan(tester.getTopLeft(find.text('早间用药')).dy),
+        lessThan(tester.getTopLeft(find.text('药品临期')).dy),
       );
       expect(find.text('待确认'), findsOneWidget);
       expect(find.text('已完成'), findsWidgets);
@@ -64,7 +64,7 @@ void main() {
         find.byKey(const ValueKey('app-content-state-loading')),
         findsOneWidget,
       );
-      expect(find.text('需要你决定'), findsNothing);
+      expect(find.text('现在要处理'), findsNothing);
 
       repository.completer.complete(_snapshot());
       await tester.pumpAndSettle();
@@ -140,7 +140,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('已降级'), findsOneWidget);
-      expect(find.text('早间用药'), findsOneWidget);
+      expect(find.text('1 项已完成'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
@@ -172,7 +172,7 @@ void main() {
         '离线：正在显示上次同步内容',
       );
       expect(find.text('洗车计划'), findsOneWidget);
-      expect(find.text('早间用药'), findsOneWidget);
+      expect(find.text('药品临期'), findsOneWidget);
     });
 
     testWidgets(
@@ -256,7 +256,9 @@ void main() {
 
       expect(find.text('即将开始'), findsOneWidget);
       expect(find.text('现在处理'), findsOneWidget);
-      expect(find.text('已完成'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('today-completed-expansion')));
+      await tester.pumpAndSettle();
+      expect(find.text('已完成'), findsWidgets);
       expect(find.text('已跳过'), findsOneWidget);
     });
 
@@ -288,6 +290,8 @@ void main() {
         FakeTodayRepository.success(snapshot: snapshot),
       );
       await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('today-completed-expansion')));
+      await tester.pumpAndSettle();
 
       for (final title in <String>['完成事项', '跳过事项']) {
         expect(
@@ -297,7 +301,7 @@ void main() {
       }
       final theme = Theme.of(tester.element(find.byType(TodayScreen)));
       expect(
-        tester.widget<Text>(find.text('已完成')).style?.color,
+        tester.widgetList<Text>(find.text('已完成')).last.style?.color,
         theme.colorScheme.onSurfaceVariant,
       );
       expect(
@@ -521,7 +525,7 @@ void main() {
 
       expect(settingsCalls, 1);
       expect(openedAttention?.id, 'demo-car-wash');
-      expect(openedTimeline?.id, 'morning-medication');
+      expect(openedTimeline?.id, 'medicine-expiry');
     });
 
     testWidgets('reloads today content after a decision action completes', (
@@ -552,6 +556,65 @@ void main() {
       expect(find.text('今天没有待处理事项'), findsOneWidget);
     });
 
+    testWidgets('shows complete and snooze actions for ordinary reminders', (
+      tester,
+    ) async {
+      final repository = _SequenceTodayRepository([
+        TodaySnapshot(
+          decisions: <AttentionItem>[
+            AttentionItem(
+              id: 'reminder-1',
+              title: '给妈妈打电话',
+              reason: '提醒时间到了',
+              dueAt: DateTime(2026, 8, 6, 9),
+              kind: AttentionKind.confirmation,
+              actionLabel: '完成',
+              actionTarget: const ActionTarget(
+                resource: 'reminder',
+                id: 'reminder-1',
+                action: 'complete',
+              ),
+              secondaryActionLabel: '稍后',
+              secondaryActionTarget: const ActionTarget(
+                resource: 'reminder',
+                id: 'reminder-1',
+                action: 'snooze',
+              ),
+            ),
+          ],
+          timeline: const <TimelineItem>[],
+        ),
+        TodaySnapshot(decisions: const [], timeline: const []),
+      ]);
+      final handled = <ActionTarget?>[];
+      await pumpTodayScreen(
+        tester,
+        repository,
+        surfaceSize: const Size(390, 900),
+        onOpenAttention: (item) async {
+          handled.add(item.actionTarget);
+        },
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(FilledButton, '完成'), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, '稍后'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(OutlinedButton, '稍后'));
+      await tester.pumpAndSettle();
+      expect(find.text('10分钟后'), findsOneWidget);
+      expect(find.text('30分钟后'), findsOneWidget);
+      expect(find.text('明天再提醒'), findsOneWidget);
+
+      await tester.tap(find.text('30分钟后'));
+      await tester.pumpAndSettle();
+
+      expect(handled.single?.resource, 'reminder');
+      expect(handled.single?.action, 'snooze');
+      expect(handled.single?.snoozeMinutes, 30);
+      expect(repository.calls, 2);
+    });
+
     testWidgets('does not overflow at narrow width and 200 percent text scale',
         (
       tester,
@@ -564,13 +627,13 @@ void main() {
       );
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
-        find.text('早间用药'),
+        find.text('药品临期'),
         300,
         scrollable: find.byType(Scrollable).first,
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('早间用药'), findsOneWidget);
+      expect(find.text('药品临期'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
@@ -585,7 +648,7 @@ void main() {
 
       final scroll = find.byKey(const ValueKey('today-scroll'));
       final header = find.byKey(const ValueKey('today-fixed-header'));
-      final sectionTitle = find.text('需要你决定');
+      final sectionTitle = find.text('现在要处理');
       final initialHeaderTop = tester.getTopLeft(header).dy;
       final initialTop = tester.getTopLeft(sectionTitle).dy;
 

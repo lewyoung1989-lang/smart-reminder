@@ -44,6 +44,26 @@ class ConfirmWorkflowDraftSerializer(serializers.Serializer):
         return attrs
 
 
+class ReminderActionSerializer(serializers.Serializer):
+    action = serializers.ChoiceField(choices=("complete", "snooze"))
+    snooze_minutes = serializers.IntegerField(required=False)
+
+    def validate(self, attrs):
+        if attrs["action"] == "complete":
+            if "snooze_minutes" in attrs:
+                raise serializers.ValidationError(
+                    {"snooze_minutes": "完成提醒时不支持该字段"}
+                )
+            return attrs
+
+        minutes = attrs.get("snooze_minutes")
+        if minutes not in (10, 30, 1440):
+            raise serializers.ValidationError(
+                {"snooze_minutes": "只能选择 10、30 或 1440 分钟"}
+            )
+        return attrs
+
+
 class AnswerWorkflowDraftSerializer(serializers.Serializer):
     answer = serializers.CharField(
         allow_blank=False,
@@ -73,9 +93,12 @@ class ReminderRuleSerializer(serializers.ModelSerializer):
             "severity",
             "status",
             "cancelled_at",
+            "completed_at",
         )
 
     def get_status(self, rule):
+        if rule.completed_at is not None:
+            return "completed"
         if not rule.enabled and rule.cancelled_at is not None:
             return "cancelled"
         if rule.scheduled_at is None:

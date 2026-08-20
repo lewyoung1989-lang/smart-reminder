@@ -8,6 +8,10 @@ abstract interface class ActionCenterActions {
   Future<void> handleExpiryBatch(String batchId);
 
   Future<void> handleLowStockAlert(String alertId);
+
+  Future<void> completeReminder(String reminderId);
+
+  Future<void> snoozeReminder(String reminderId, {required int minutes});
 }
 
 class ActionCenterApi implements ActionCenterActions {
@@ -50,9 +54,27 @@ class ActionCenterApi implements ActionCenterActions {
     );
   }
 
+  @override
+  Future<void> completeReminder(String reminderId) async {
+    await _postVerifiedAction(
+      path: '/api/v1/reminders/${Uri.encodeComponent(reminderId)}/actions',
+      action: 'complete',
+    );
+  }
+
+  @override
+  Future<void> snoozeReminder(String reminderId, {required int minutes}) async {
+    await _postVerifiedAction(
+      path: '/api/v1/reminders/${Uri.encodeComponent(reminderId)}/actions',
+      action: 'snooze',
+      extraBody: {'snooze_minutes': minutes},
+    );
+  }
+
   Future<Map<String, dynamic>> _postVerifiedAction({
     required String path,
     required String action,
+    Map<String, Object?> extraBody = const {},
   }) async {
     final response = await _client.post(
       _baseUri.resolve(path),
@@ -60,7 +82,7 @@ class ActionCenterApi implements ActionCenterActions {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
       },
-      body: jsonEncode({'action': action}),
+      body: jsonEncode({'action': action, ...extraBody}),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw ActionCenterApiException(response.statusCode, response.body);

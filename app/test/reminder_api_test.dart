@@ -42,6 +42,7 @@ void main() {
         'severity': severity,
         'status': status,
         'cancelled_at': null,
+        'completed_at': null,
       };
 
   test('rejects unknown reminder severity and status values', () {
@@ -70,6 +71,7 @@ void main() {
             'severity': 'notification',
             'status': 'pending',
             'cancelled_at': null,
+            'completed_at': null,
           },
         ],
       }),
@@ -129,6 +131,7 @@ void main() {
         'severity': 'notification',
         'status': 'cancelled',
         'cancelled_at': '2026-08-05T12:00:00+08:00',
+        'completed_at': null,
       }),
       jsonResponse(409, {
         'code': 'reminder_expired',

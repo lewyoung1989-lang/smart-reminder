@@ -286,6 +286,17 @@ class _AppShellState extends State<AppShell> {
       } else if (target.resource == 'low_stock_alert') {
         await actions.handleLowStockAlert(target.id);
         _showSnackBar('已处理买药提醒');
+      } else if (target.resource == 'reminder') {
+        if (target.action == 'complete') {
+          await actions.completeReminder(target.id);
+          _showSnackBar('已完成提醒');
+        } else if (target.action == 'snooze') {
+          final minutes = target.snoozeMinutes ?? 10;
+          await actions.snoozeReminder(target.id, minutes: minutes);
+          _showSnackBar(_snoozeMessage(minutes));
+        } else {
+          _showSnackBar('暂不支持直接处理这个事项');
+        }
       } else {
         _showSnackBar('暂不支持直接处理这个事项');
       }
@@ -293,6 +304,11 @@ class _AppShellState extends State<AppShell> {
       _showSnackBar('处理失败，请稍后重试');
       rethrow;
     }
+  }
+
+  String _snoozeMessage(int minutes) {
+    if (minutes >= 1440) return '已改到明天提醒';
+    return '已改到$minutes分钟后提醒';
   }
 
   void _showSnackBar(String message) {

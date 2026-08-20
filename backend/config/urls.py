@@ -2,6 +2,7 @@ from django.urls import include, path
 
 from apps.core.views import health
 from apps.reminders.api.views import (
+    ReminderActionView,
     ReminderCancelView,
     ReminderDraftListCreateView,
     ReminderListView,
@@ -49,6 +50,11 @@ urlpatterns = [
         "api/v1/reminders/<uuid:reminder_id>/cancel",
         ReminderCancelView.as_view(),
         name="reminder-cancel",
+    ),
+    path(
+        "api/v1/reminders/<uuid:reminder_id>/actions",
+        ReminderActionView.as_view(),
+        name="reminder-actions",
     ),
     path("api/v1/voice/", include("apps.reminders.api.urls")),
     path("api/v1/ocr/", include("apps.ocr.api.urls")),

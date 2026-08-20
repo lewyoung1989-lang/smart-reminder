@@ -35,6 +35,7 @@ class ReminderRule(models.Model):
     severity = models.CharField(max_length=32)
     scheduled_at = models.DateTimeField(db_index=True, null=True, blank=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
     enabled = models.BooleanField(default=True)
     template_key = models.CharField(max_length=128, null=True, blank=True)
     template_version = models.CharField(max_length=32, null=True, blank=True)
