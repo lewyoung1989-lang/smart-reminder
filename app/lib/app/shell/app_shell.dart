@@ -98,6 +98,7 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   var _selectedIndex = 0;
   var _familyMembershipRevision = 0;
+  var _todayRefreshRevision = 0;
   bool? _hasFamilyMembership;
 
   void _selectDestination(int index) {
@@ -110,6 +111,11 @@ class _AppShellState extends State<AppShell> {
       _hasFamilyMembership = hasFamilyMembership;
       _familyMembershipRevision += 1;
     });
+  }
+
+  void _refreshToday() {
+    if (!mounted) return;
+    setState(() => _todayRefreshRevision += 1);
   }
 
   void _openSettings() {
@@ -207,6 +213,7 @@ class _AppShellState extends State<AppShell> {
       final notificationScheduled = await _schedulePlanNotification(planId);
       if (!mounted) return;
       Navigator.of(context).pop();
+      _refreshToday();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -316,6 +323,7 @@ class _AppShellState extends State<AppShell> {
       final outcome = await service.confirm(draft);
       if (!mounted) return;
       Navigator.of(context).pop();
+      _refreshToday();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(switch (outcome) {
@@ -328,6 +336,7 @@ class _AppShellState extends State<AppShell> {
     } on ReminderNotificationSchedulingException {
       if (mounted) {
         Navigator.of(context).pop();
+        _refreshToday();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('提醒已创建，但手机通知未安排')),
         );
@@ -402,6 +411,7 @@ class _AppShellState extends State<AppShell> {
         key: const PageStorageKey<String>('today-tab'),
         child: TodayScreen(
           repository: widget.todayRepository,
+          refreshRevision: _todayRefreshRevision,
           onOpenReminderManager: widget.onOpenReminderManager,
           onOpenSettings: _openSettings,
           onOpenAttention: _handleAttentionAction,

@@ -440,6 +440,30 @@ void main() {
       expect(find.text('旧内容'), findsNothing);
     });
 
+    testWidgets('reloads when refresh revision changes', (tester) async {
+      final screenKey = GlobalKey();
+      final repository = _SequenceTodayRepository([
+        _snapshotWithTitle('旧提醒'),
+        _snapshotWithTitle('新提醒'),
+      ]);
+
+      await pumpTodayScreen(tester, repository, screenKey: screenKey);
+      await tester.pumpAndSettle();
+      expect(find.text('旧提醒'), findsOneWidget);
+
+      await pumpTodayScreen(
+        tester,
+        repository,
+        screenKey: screenKey,
+        refreshRevision: 1,
+      );
+      await tester.pumpAndSettle();
+
+      expect(repository.calls, 2);
+      expect(find.text('新提醒'), findsOneWidget);
+      expect(find.text('旧提醒'), findsNothing);
+    });
+
     testWidgets('shows an error when a replacement repository fails', (
       tester,
     ) async {
@@ -700,6 +724,7 @@ Future<void> pumpTodayScreen(
   VoidCallback? onOpenSettings,
   AttentionActionCallback? onOpenAttention,
   ValueChanged<TimelineItem>? onOpenTimeline,
+  int refreshRevision = 0,
 }) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = surfaceSize;
@@ -718,6 +743,7 @@ Future<void> pumpTodayScreen(
           onOpenSettings: onOpenSettings,
           onOpenAttention: onOpenAttention,
           onOpenTimeline: onOpenTimeline,
+          refreshRevision: refreshRevision,
         ),
       ),
     ),

@@ -378,6 +378,166 @@ void main() {
     expect(find.text('提醒已创建，但手机通知未安排'), findsOneWidget);
   });
 
+  testWidgets('quick create refreshes today after creating a reminder',
+      (tester) async {
+    final now = DateTime.now();
+    final todayRepository = _SequenceTodayRepository([
+      TodaySnapshot(decisions: const [], timeline: const []),
+      TodaySnapshot(
+        decisions: <AttentionItem>[
+          AttentionItem(
+            id: 'attention-drink-water',
+            title: '喝水',
+            reason: '刚刚创建的提醒',
+            dueAt: DateTime(now.year, now.month, now.day, 18),
+            kind: AttentionKind.confirmation,
+            actionLabel: '完成',
+          ),
+        ],
+        timeline: const [],
+      ),
+    ]);
+    final draft = QuickCreateDraft.reminder(
+      reminder: ReminderDraft(
+        id: 'draft-1',
+        title: '喝水',
+        scheduledAt: DateTime(now.year, now.month, now.day, 18),
+        timezone: 'Asia/Shanghai',
+        severity: ReminderSeverity.notification,
+        weatherMessage: null,
+        ambiguities: const [],
+      ),
+    );
+    final creationService = ReminderCreationService(
+      confirmDraft: (_) async => 'reminder-1',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppShell(
+          todayRepository: todayRepository,
+          planRepository: const UnavailablePlanRepository(),
+          medicineRepository: _UnavailableMedicineRepository(),
+          user: const AuthUser(
+            id: 'user-1',
+            phoneMasked: '138****8000',
+            phoneVerified: true,
+          ),
+          themeMode: ThemeMode.system,
+          onThemeModeChanged: (_) {},
+          onChangePassword: (_, __, ___) async {},
+          onLogout: () async {},
+          createDraft: (_) async => draft,
+          reminderCreationService: creationService,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(todayRepository.calls, 1);
+    expect(find.text('喝水'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('quick-create-action')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('quick-create-input')),
+      '今天晚上提醒我喝水',
+    );
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, '继续'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '确认'));
+    await tester.pumpAndSettle();
+
+    expect(todayRepository.calls, 2);
+    expect(find.text('喝水'), findsOneWidget);
+    expect(find.text('提醒已创建'), findsOneWidget);
+  });
+
+  testWidgets('workflow confirmation refreshes today after creating a plan',
+      (tester) async {
+    final now = DateTime.now();
+    final todayRepository = _SequenceTodayRepository([
+      TodaySnapshot(decisions: const [], timeline: const []),
+      TodaySnapshot(
+        decisions: const [],
+        timeline: <TimelineItem>[
+          TimelineItem(
+            id: 'plan-1',
+            title: '晚间用药',
+            subtitle: '拜新同 · 1片',
+            scheduledAt: DateTime(now.year, now.month, now.day, 20),
+            status: TimelineStatus.upcoming,
+            actionTarget: const ActionTarget(
+              resource: 'workflow',
+              id: 'plan-1',
+            ),
+          ),
+        ],
+      ),
+    ]);
+    final draft = QuickCreateDraft.workflow(
+      workflow: const WorkflowDraft(
+        id: 'workflow-draft-1',
+        title: '晚间用药',
+        templateHint: 'medication_cycle',
+        slots: {
+          'medicine_name': '拜新同',
+          'dose_text': '1片',
+          'frequency': 'daily',
+          'time_of_day': '20:00',
+        },
+        ambiguities: [],
+        policyDecision: 'allow',
+        riskLevel: 'R1',
+        policyQuestion: null,
+      ),
+    );
+    final creationService = ReminderCreationService(
+      confirmDraft: (_) async => 'reminder-1',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppShell(
+          todayRepository: todayRepository,
+          planRepository: const UnavailablePlanRepository(),
+          medicineRepository: _UnavailableMedicineRepository(),
+          user: const AuthUser(
+            id: 'user-1',
+            phoneMasked: '138****8000',
+            phoneVerified: true,
+          ),
+          themeMode: ThemeMode.system,
+          onThemeModeChanged: (_) {},
+          onChangePassword: (_, __, ___) async {},
+          onLogout: () async {},
+          createDraft: (_) async => draft,
+          confirmWorkflowDraft: (_) async => 'plan-1',
+          reminderCreationService: creationService,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(todayRepository.calls, 1);
+    expect(find.text('晚间用药'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('quick-create-action')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('quick-create-input')),
+      '每天晚上8点提醒我吃拜新同1片',
+    );
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, '继续'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '确认'));
+    await tester.pumpAndSettle();
+
+    expect(todayRepository.calls, 2);
+    expect(find.text('晚间用药'), findsOneWidget);
+    expect(find.text('计划已确认，但手机通知未安排'), findsOneWidget);
+  });
+
   testWidgets('editing a workflow draft re-parses the expression in place',
       (tester) async {
     QuickCreateDraft buildDraft() => QuickCreateDraft.workflow(

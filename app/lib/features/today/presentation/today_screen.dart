@@ -22,6 +22,7 @@ class TodayScreen extends StatefulWidget {
     this.onOpenAttention,
     this.onOpenTimeline,
     this.bottomContentPadding = 0,
+    this.refreshRevision = 0,
     super.key,
   });
 
@@ -32,6 +33,7 @@ class TodayScreen extends StatefulWidget {
   final AttentionActionCallback? onOpenAttention;
   final ValueChanged<TimelineItem>? onOpenTimeline;
   final double bottomContentPadding;
+  final int refreshRevision;
 
   @override
   State<TodayScreen> createState() => _TodayScreenState();
@@ -52,7 +54,11 @@ class _TodayScreenState extends State<TodayScreen> {
   @override
   void didUpdateWidget(covariant TodayScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.repository != widget.repository) _load(clearSnapshot: true);
+    if (oldWidget.repository != widget.repository) {
+      _load(clearSnapshot: true);
+    } else if (oldWidget.refreshRevision != widget.refreshRevision) {
+      _load();
+    }
   }
 
   Future<void> _load({bool clearSnapshot = false}) async {
