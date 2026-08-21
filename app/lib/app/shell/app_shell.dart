@@ -382,6 +382,9 @@ class _AppShellState extends State<AppShell> {
       } else {
         _showSnackBar('暂不支持直接处理这个事项');
       }
+    } on ActionCenterApiException catch (error) {
+      _showSnackBar(error.userMessage);
+      _refreshToday();
     } catch (_) {
       _showSnackBar('处理失败，请稍后重试');
       rethrow;

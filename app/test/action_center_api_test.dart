@@ -165,4 +165,23 @@ void main() {
       ),
     );
   });
+
+  test('maps already actioned medication errors to a refreshable message',
+      () async {
+    final api = ActionCenterApi(
+      baseUrl: 'https://api.invalid',
+      client: RecordingClient([
+        jsonResponse(409, {'code': 'medication_occurrence_already_actioned'})
+      ]),
+    );
+
+    try {
+      await api.markMedicationTaken('occurrence-1');
+      fail('expected ActionCenterApiException');
+    } on ActionCenterApiException catch (error) {
+      expect(error.statusCode, 409);
+      expect(error.code, 'medication_occurrence_already_actioned');
+      expect(error.userMessage, '这条用药提醒已处理，正在刷新');
+    }
+  });
 }

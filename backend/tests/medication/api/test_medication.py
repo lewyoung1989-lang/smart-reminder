@@ -265,6 +265,87 @@ def test_mark_taken_refreshes_low_stock_alerts(api_client, user):
 
 
 @pytest.mark.django_db
+def test_mark_taken_keeps_record_when_inventory_deduction_fails(
+    api_client, user, mocker
+):
+    medicine = MedicineItem.objects.create(owner=user, name="依巴斯汀")
+    plan = MedicationPlan.objects.create(
+        owner=user,
+        medicine=medicine,
+        dosage_text="一片",
+        dose_quantity="1",
+        dose_unit="片",
+        timezone="Asia/Shanghai",
+        schedule_json={"times": ["08:00"]},
+    )
+    occurrence = MedicationOccurrence.objects.create(
+        plan=plan,
+        scheduled_at=datetime(2026, 8, 8, 0, tzinfo=timezone.utc),
+        index=0,
+        idempotency_key="deduction-failure-still-records",
+    )
+    mocker.patch(
+        "apps.medication.api.views.deduct_inventory_for_intake",
+        side_effect=RuntimeError("inventory is temporarily unavailable"),
+    )
+    api_client.force_authenticate(user)
+
+    response = api_client.post(
+        f"/api/v1/medication/occurrences/{occurrence.id}/actions",
+        {"action": "taken"},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["status"] == "taken"
+    assert response.data["inventory_deduction"] == {
+        "status": "failed",
+        "deducted_quantity": "0",
+        "unit": "片",
+        "remaining_quantity": None,
+        "message": "已记录服药，但药箱余量更新失败，请稍后在药箱中检查库存",
+    }
+    occurrence.refresh_from_db()
+    assert occurrence.status == MedicationOccurrence.Status.TAKEN
+    assert IntakeEvent.objects.get(occurrence=occurrence).action == "taken"
+
+
+@pytest.mark.django_db
+def test_mark_taken_repairs_legacy_actioned_occurrence_without_event(
+    api_client, user
+):
+    medicine = MedicineItem.objects.create(owner=user, name="依巴斯汀")
+    plan = MedicationPlan.objects.create(
+        owner=user,
+        medicine=medicine,
+        dosage_text="一片",
+        dose_quantity="1",
+        dose_unit="片",
+        timezone="Asia/Shanghai",
+        schedule_json={"times": ["08:00"]},
+    )
+    occurrence = MedicationOccurrence.objects.create(
+        plan=plan,
+        scheduled_at=datetime(2026, 8, 8, 0, tzinfo=timezone.utc),
+        index=0,
+        status=MedicationOccurrence.Status.TAKEN,
+        acted_at=datetime(2026, 8, 8, 0, 5, tzinfo=timezone.utc),
+        idempotency_key="legacy-action-without-event",
+    )
+    api_client.force_authenticate(user)
+
+    response = api_client.post(
+        f"/api/v1/medication/occurrences/{occurrence.id}/actions",
+        {"action": "taken"},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["status"] == "taken"
+    assert IntakeEvent.objects.get(occurrence=occurrence).action == "taken"
+
+
+@pytest.mark.django_db
 def test_mark_taken_uses_earliest_expiring_batch_first(api_client, user):
     medicine = MedicineItem.objects.create(owner=user, name="降压药")
     later = InventoryBatch.objects.create(

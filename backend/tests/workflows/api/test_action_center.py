@@ -498,6 +498,43 @@ def test_today_includes_due_and_upcoming_medication_occurrences(api_client, user
 
 
 @pytest.mark.django_db
+def test_today_does_not_include_historical_pending_medication_occurrences(
+    api_client, user, mocker
+):
+    medicine = MedicineItem.objects.create(owner=user, name="依巴斯汀")
+    plan = MedicationPlan.objects.create(
+        owner=user,
+        medicine=medicine,
+        dosage_text="一片",
+        timezone="Asia/Shanghai",
+        schedule_json={"times": ["08:00"]},
+    )
+    yesterday = MedicationOccurrence.objects.create(
+        plan=plan,
+        scheduled_at=NOW - timedelta(days=1),
+        index=1,
+        idempotency_key="yesterday-medication",
+    )
+    today = MedicationOccurrence.objects.create(
+        plan=plan,
+        scheduled_at=NOW - timedelta(minutes=10),
+        index=2,
+        idempotency_key="today-medication",
+    )
+    mocker.patch("apps.workflows.api.action.timezone.now", return_value=NOW)
+    api_client.force_authenticate(user)
+
+    response = api_client.get("/api/v1/action-center/today")
+
+    assert response.status_code == 200
+    decision_ids = {
+        item["id"] for item in response.json()["need_decision"]["results"]
+    }
+    assert str(today.id) in decision_ids
+    assert str(yesterday.id) not in decision_ids
+
+
+@pytest.mark.django_db
 def test_today_includes_due_and_upcoming_ordinary_reminders(
     api_client, user, django_user_model, mocker
 ):

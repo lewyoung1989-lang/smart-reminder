@@ -119,11 +119,33 @@ class MedicationActionResult {
 }
 
 class ActionCenterApiException implements Exception {
-  const ActionCenterApiException(this.statusCode, this.body);
+  ActionCenterApiException(this.statusCode, this.body) : code = _code(body);
 
   final int statusCode;
   final String body;
+  final String? code;
+
+  String get userMessage {
+    if (code == 'medication_occurrence_already_actioned') {
+      return '这条用药提醒已处理，正在刷新';
+    }
+    if (statusCode == 404) return '这条提醒状态已变化，正在刷新';
+    return '处理失败，请稍后重试';
+  }
 
   @override
   String toString() => 'ActionCenterApiException($statusCode)';
+
+  static String? _code(String body) {
+    try {
+      final payload = jsonDecode(body);
+      if (payload is Map<String, dynamic>) {
+        final code = payload['code'];
+        return code is String ? code : null;
+      }
+    } catch (_) {
+      return null;
+    }
+    return null;
+  }
 }

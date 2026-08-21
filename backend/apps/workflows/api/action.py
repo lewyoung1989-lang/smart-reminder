@@ -101,6 +101,7 @@ class TodayActionCenterView(APIView):
             plan__owner=request.user,
             plan__enabled=True,
             status=MedicationOccurrence.Status.PENDING,
+            scheduled_at__gte=today_start,
             scheduled_at__lte=now,
         ).select_related("plan__medicine")
         active_expiry_alerts = ExpiryAlertState.objects.filter(

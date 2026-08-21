@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
 from django.utils import timezone
 from rest_framework import status
@@ -134,21 +135,37 @@ class MedicationOccurrenceActionView(APIView):
                     status=status.HTTP_409_CONFLICT,
                 )
             else:
-                event = occurrence.intake_event
+                try:
+                    event = occurrence.intake_event
+                except ObjectDoesNotExist:
+                    event = IntakeEvent(
+                        occurrence=occurrence,
+                        user=request.user,
+                        action=action,
+                    )
+                    event.full_clean()
+                    event.save()
 
-            deduction = (
-                deduct_inventory_for_intake(event)
-                if action == MedicationOccurrence.Status.TAKEN
-                else None
-            )
-            if action == MedicationOccurrence.Status.TAKEN and occurrence.plan.medicine_id:
-                refresh_low_stock_alerts_for_medicine(
-                    medicine=occurrence.plan.medicine,
-                    today=timezone.localdate(),
-                )
+        deduction = None
+        deduction_failed = False
+        if action == MedicationOccurrence.Status.TAKEN:
+            try:
+                with transaction.atomic():
+                    deduction = deduct_inventory_for_intake(event)
+                    if occurrence.plan.medicine_id:
+                        refresh_low_stock_alerts_for_medicine(
+                            medicine=occurrence.plan.medicine,
+                            today=timezone.localdate(),
+                        )
+            except Exception:
+                deduction_failed = True
 
         return Response(
-            _occurrence_payload(occurrence, deduction=deduction),
+            _occurrence_payload(
+                occurrence,
+                deduction=deduction,
+                deduction_failed=deduction_failed,
+            ),
             status=status.HTTP_200_OK,
         )
 
@@ -168,7 +185,12 @@ class MedicationOccurrenceListView(APIView):
         return Response({"results": [_occurrence_payload(item) for item in occurrences]})
 
 
-def _occurrence_payload(occurrence: MedicationOccurrence, *, deduction=None) -> dict:
+def _occurrence_payload(
+    occurrence: MedicationOccurrence,
+    *,
+    deduction=None,
+    deduction_failed=False,
+) -> dict:
     payload = {
         "id": str(occurrence.id),
         "plan_id": str(occurrence.plan_id),
@@ -178,4 +200,12 @@ def _occurrence_payload(occurrence: MedicationOccurrence, *, deduction=None) -> 
     }
     if deduction is not None:
         payload["inventory_deduction"] = deduction_payload(deduction)
+    elif deduction_failed:
+        payload["inventory_deduction"] = {
+            "status": "failed",
+            "deducted_quantity": "0",
+            "unit": occurrence.plan.dose_unit,
+            "remaining_quantity": None,
+            "message": "已记录服药，但药箱余量更新失败，请稍后在药箱中检查库存",
+        }
     return payload
