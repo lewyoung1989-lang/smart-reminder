@@ -17,11 +17,11 @@ class AppSemanticColors extends ThemeExtension<AppSemanticColors> {
   final Color infoSurface;
 
   static const light = AppSemanticColors(
-    success: Color(0xFF278564),
-    warning: Color(0xFF9A6700),
-    warningSurface: Color(0xFFFFF3D6),
-    info: Color(0xFF286A9B),
-    infoSurface: Color(0xFFE7F1FA),
+    success: Color(0xFF2F8B69),
+    warning: Color(0xFF8D6508),
+    warningSurface: Color(0xFFFFF1CC),
+    info: Color(0xFF236B90),
+    infoSurface: Color(0xFFE4F2F8),
   );
 
   static const dark = AppSemanticColors(

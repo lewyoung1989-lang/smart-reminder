@@ -9,6 +9,7 @@ import '../../../app/theme/app_spacing.dart';
 import '../../quick_create/domain/voice_input_controller.dart';
 import '../../../core/data/feature_unavailable_exception.dart';
 import '../../../ui/components/app_content_state.dart';
+import '../../../ui/components/app_list_row.dart';
 import '../../../ui/components/app_page_header.dart';
 import '../../../ui/components/app_segmented_control.dart';
 import '../../../ui/components/app_status_banner.dart';
@@ -661,6 +662,21 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
       );
     }
     if (visible.isEmpty) {
+      final isUnfilteredEmpty = collection.items.isEmpty &&
+          _query.trim().isEmpty &&
+          _filter == _ExpiryFilter.all;
+      if (isUnfilteredEmpty) {
+        slivers.addAll(
+          _stateSlivers(
+            _MedicineCabinetEmptyState(
+              entryEnabled: !_isOpeningEntry &&
+                  (widget.onCapture != null || widget.onCreateBatch != null),
+              onCreate: _openEntrySheet,
+            ),
+          ),
+        );
+        return slivers;
+      }
       slivers.addAll(_stateSlivers(const AppContentState.empty(
         title: '没有符合条件的药品',
         message: '调整搜索或有效期筛选后再查看',
@@ -678,12 +694,23 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
         sliver: DecoratedSliver(
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+            boxShadow: [
+              BoxShadow(
+                color: Theme.of(context)
+                    .colorScheme
+                    .shadow
+                    .withValues(alpha: 0.05),
+                blurRadius: 18,
+                offset: const Offset(0, 6),
+              ),
+            ],
           ),
           sliver: SliverList.builder(
             itemCount: visible.length,
             itemBuilder: (context, index) => _MedicineRow(
               medicine: visible[index],
-              showDivider: index < visible.length - 1,
+              position: _listRowPosition(index, visible.length),
               onTap: () => _openMedicine(visible[index], expanded),
             ),
           ),
@@ -699,6 +726,13 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
           sliver: SliverToBoxAdapter(child: state),
         ),
       ];
+
+  static AppListRowPosition _listRowPosition(int index, int length) {
+    if (length == 1) return AppListRowPosition.single;
+    if (index == 0) return AppListRowPosition.first;
+    if (index == length - 1) return AppListRowPosition.last;
+    return AppListRowPosition.middle;
+  }
 
   List<Widget> _permissionRecoverySlivers() {
     if (widget.captureAvailability !=
@@ -1902,12 +1936,250 @@ class _PermissionRecoveryBanner extends StatelessWidget {
   }
 }
 
+class _MedicineCabinetEmptyState extends StatelessWidget {
+  const _MedicineCabinetEmptyState({
+    required this.entryEnabled,
+    required this.onCreate,
+  });
+
+  final bool entryEnabled;
+  final VoidCallback onCreate;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Semantics(
+      container: true,
+      label: '药箱还是空的。录入第一款药品后，可以集中查看库存和有效期。',
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxl),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const ExcludeSemantics(child: _MedicineCabinetIllustration()),
+                const SizedBox(height: AppSpacing.lg),
+                Text(
+                  '药箱还是空的',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.titleLarge,
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  '录入药品后，可以集中查看库存和有效期',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xl),
+                FilledButton.icon(
+                  key: const ValueKey('medicine-empty-create-action'),
+                  onPressed: entryEnabled ? onCreate : null,
+                  icon: const Icon(LucideIcons.plus),
+                  label: const Text('录入第一款药品'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MedicineCabinetIllustration extends StatelessWidget {
+  const _MedicineCabinetIllustration();
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    return SizedBox(
+      key: const ValueKey('medicine-cabinet-empty-illustration'),
+      width: 190,
+      height: 150,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned(
+            bottom: 4,
+            child: Container(
+              width: 156,
+              height: 22,
+              decoration: BoxDecoration(
+                color: primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(50),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 24,
+            top: 13,
+            child: Transform.rotate(
+              angle: -0.05,
+              child: Container(
+                width: 142,
+                height: 122,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF7E8D1),
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+                  border: Border.all(
+                    color: const Color(0xFFE6CDAA),
+                    width: 2,
+                  ),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x1A6D4D30),
+                      blurRadius: 14,
+                      offset: Offset(7, 9),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 34,
+            top: 20,
+            child: Container(
+              width: 128,
+              height: 108,
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFFCF6),
+                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+              ),
+              child: Stack(
+                children: [
+                  Positioned(
+                    left: 10,
+                    right: 10,
+                    top: 50,
+                    child: Container(height: 3, color: const Color(0xFFE6CDAA)),
+                  ),
+                  Positioned(
+                    left: 10,
+                    right: 10,
+                    bottom: 10,
+                    child: Container(height: 3, color: const Color(0xFFE6CDAA)),
+                  ),
+                  Positioned(
+                    left: 18,
+                    top: 15,
+                    child: _IllustrationBottle(
+                      body: const Color(0xFF9AD3BE),
+                      cap: primary,
+                    ),
+                  ),
+                  const Positioned(
+                    right: 20,
+                    top: 24,
+                    child: _IllustrationBox(color: Color(0xFFF1AE85)),
+                  ),
+                  const Positioned(
+                    left: 18,
+                    bottom: 13,
+                    child: _IllustrationBox(color: Color(0xFFF3CB70)),
+                  ),
+                  Positioned(
+                    right: 19,
+                    bottom: 14,
+                    child: Transform.rotate(
+                      angle: -0.45,
+                      child: Container(
+                        width: 29,
+                        height: 13,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF3A4A1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: const Color(0xFFD77F7C)),
+                        ),
+                        child: Align(
+                          alignment: Alignment.center,
+                          child: Container(
+                            width: 1,
+                            color: const Color(0xFFD77F7C),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Positioned(
+            right: 14,
+            top: 4,
+            child: Icon(LucideIcons.sparkles, size: 22, color: primary),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _IllustrationBottle extends StatelessWidget {
+  const _IllustrationBottle({required this.body, required this.cap});
+
+  final Color body;
+  final Color cap;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        children: [
+          Container(
+            width: 21,
+            height: 7,
+            decoration: BoxDecoration(
+              color: cap,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(AppSpacing.radiusSm),
+              ),
+            ),
+          ),
+          Container(
+            width: 26,
+            height: 27,
+            decoration: BoxDecoration(
+              color: body,
+              borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+            ),
+          ),
+        ],
+      );
+}
+
+class _IllustrationBox extends StatelessWidget {
+  const _IllustrationBox({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: 32,
+        height: 24,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(AppSpacing.xs),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x14000000),
+              blurRadius: 4,
+              offset: Offset(2, 3),
+            ),
+          ],
+        ),
+      );
+}
+
 class _MedicineRow extends StatelessWidget {
   const _MedicineRow(
-      {required this.medicine, required this.showDivider, required this.onTap});
+      {required this.medicine, required this.position, required this.onTap});
 
   final MedicineSummary medicine;
-  final bool showDivider;
+  final AppListRowPosition position;
   final VoidCallback onTap;
 
   @override
@@ -1929,81 +2201,15 @@ class _MedicineRow extends StatelessWidget {
       _formatExpiry(medicine.nearestExpiry),
     ].join(' · ');
 
-    return Semantics(
-      container: true,
-      button: true,
-      label: '${medicine.name}，$subtitle，$status',
+    return AppListRow(
+      key: ValueKey('medicine-row-${medicine.id}'),
+      icon: LucideIcons.pill,
+      title: medicine.name,
+      subtitle: subtitle,
+      statusText: status,
+      statusColor: color,
+      position: position,
       onTap: onTap,
-      excludeSemantics: true,
-      child: Material(
-        key: ValueKey('medicine-row-${medicine.id}'),
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          child: Container(
-            constraints: const BoxConstraints(minHeight: 80),
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.lg,
-              AppSpacing.md,
-              AppSpacing.lg,
-              0,
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Icon(
-                    LucideIcons.pill,
-                    size: 22,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                    decoration: BoxDecoration(
-                      border: showDivider
-                          ? Border(
-                              bottom: BorderSide(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .outlineVariant,
-                                width: 0.5,
-                              ),
-                            )
-                          : null,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          medicine.name,
-                          style: Theme.of(context).textTheme.titleSmall,
-                        ),
-                        const SizedBox(height: AppSpacing.xs),
-                        Text(
-                          subtitle,
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        const SizedBox(height: AppSpacing.sm),
-                        Text(
-                          status,
-                          style: Theme.of(context)
-                              .textTheme
-                              .labelMedium
-                              ?.copyWith(color: color),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

@@ -10,6 +10,7 @@ import 'package:smart_reminder_app/ui/components/app_page_header.dart';
 import 'package:smart_reminder_app/ui/components/app_property_row.dart';
 import 'package:smart_reminder_app/ui/components/app_segmented_control.dart';
 import 'package:smart_reminder_app/ui/components/app_status_banner.dart';
+import 'package:smart_reminder_app/ui/components/app_status_tag.dart';
 
 import 'support/test_app.dart';
 
@@ -180,7 +181,7 @@ void main() {
               find.byKey(const ValueKey('app-segmented-control-indicator')),
             )
             .height,
-        2,
+        initialSize.height - 6,
       );
 
       setState(() => count = 999);
@@ -323,7 +324,7 @@ void main() {
       );
     });
 
-    testWidgets('uses text weight and an underline without a check icon', (
+    testWidgets('uses a rounded selected surface without a check icon', (
       tester,
     ) async {
       await tester.pumpApp(
@@ -339,12 +340,44 @@ void main() {
 
       final selected = tester.widget<Text>(find.text('进行中'));
       final pending = tester.widget<Text>(find.text('待处理'));
-      expect(selected.style?.fontWeight, FontWeight.w600);
-      expect(pending.style?.fontWeight, FontWeight.w400);
+      expect(selected.style?.fontWeight, FontWeight.w700);
+      expect(pending.style?.fontWeight, FontWeight.w500);
       expect(find.byIcon(LucideIcons.check), findsNothing);
       expect(find.byKey(const ValueKey('app-segmented-control-indicator')),
           findsOneWidget);
+      final indicator = tester.widget<DecoratedBox>(
+        find.descendant(
+          of: find.byKey(
+            const ValueKey('app-segmented-control-indicator'),
+          ),
+          matching: find.byType(DecoratedBox),
+        ),
+      );
+      final decoration = indicator.decoration as BoxDecoration;
+      expect(decoration.borderRadius, isNotNull);
+      expect(decoration.boxShadow, isNotEmpty);
     });
+  });
+
+  testWidgets('AppStatusTag exposes text through semantics', (tester) async {
+    await tester.pumpApp(
+      const AppStatusTag(
+        text: '即将开始',
+        semanticLabel: '状态：即将开始',
+      ),
+    );
+
+    expect(
+      tester.getSemantics(find.byType(AppStatusTag)).label,
+      '状态：即将开始',
+    );
+    final decorated = tester.widget<DecoratedBox>(
+      find.descendant(
+        of: find.byType(AppStatusTag),
+        matching: find.byType(DecoratedBox),
+      ),
+    );
+    expect((decorated.decoration as BoxDecoration).borderRadius, isNotNull);
   });
 
   group('AppContentState', () {
@@ -475,7 +508,7 @@ void main() {
     expect(taps, 1);
   });
 
-  testWidgets('AppListRow positions form a flat continuous divided list', (
+  testWidgets('AppListRow positions form a rounded continuous divided list', (
     tester,
   ) async {
     await tester.pumpApp(
@@ -520,11 +553,11 @@ void main() {
     final middle = decorationFor('中间行');
     final last = decorationFor('最后一行');
     expect(first.border, isNull);
-    expect(first.borderRadius, isNull);
+    expect(first.borderRadius, isNotNull);
     expect(middle.border, isNull);
-    expect(middle.borderRadius, isNull);
+    expect(middle.borderRadius, BorderRadius.zero);
     expect(last.border, isNull);
-    expect(last.borderRadius, isNull);
+    expect(last.borderRadius, isNotNull);
     final firstRow = find.ancestor(
       of: find.text('第一行'),
       matching: find.byType(AppListRow),
@@ -585,7 +618,7 @@ void main() {
     );
 
     final title = tester.widget<Text>(find.text('今天'));
-    expect(title.style?.fontSize, 32);
+    expect(title.style?.fontSize, 36);
     expect(
         tester.getSemantics(find.text('今天')).flagsCollection.isHeader, isTrue);
   });

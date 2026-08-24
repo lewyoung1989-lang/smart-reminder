@@ -7,14 +7,14 @@ abstract final class AppTheme {
   static const fontFamily = 'PingFang SC';
 
   static ThemeData light() {
-    const background = Color(0xFFF2F2F7);
+    const background = Color(0xFFF3F7F4);
     const surface = Color(0xFFFFFFFF);
-    const surfaceMuted = Color(0xFFE5E5EA);
-    const primary = Color(0xFF176B52);
+    const surfaceMuted = Color(0xFFE4ECE7);
+    const primary = Color(0xFF087759);
     const onPrimary = Color(0xFFFFFFFF);
-    const textPrimary = Color(0xFF1C1C1E);
-    const textSecondary = Color(0xFF6C6C70);
-    const outline = Color(0xFFC6C6C8);
+    const textPrimary = Color(0xFF14221D);
+    const textSecondary = Color(0xFF5C6C65);
+    const outline = Color(0xFFD9E5DE);
     const error = Color(0xFFB42318);
     const errorSurface = Color(0xFFFFE9E7);
 
@@ -43,7 +43,7 @@ abstract final class AppTheme {
       tertiaryFixed: surfaceMuted,
       tertiaryFixedDim: outline,
       onTertiaryFixed: primary,
-      onTertiaryFixedVariant: Color(0xFF278564),
+      onTertiaryFixedVariant: Color(0xFF2F8B69),
       error: error,
       onError: onPrimary,
       errorContainer: errorSurface,
@@ -64,7 +64,7 @@ abstract final class AppTheme {
       scrim: Color(0xFF000000),
       inverseSurface: textPrimary,
       onInverseSurface: background,
-      inversePrimary: Color(0xFF78D5B2),
+      inversePrimary: Color(0xFF86D8B8),
       surfaceTint: Colors.transparent,
     );
 
@@ -159,11 +159,11 @@ abstract final class AppTheme {
     final textTheme = TextTheme(
       displayLarge: _textStyle(40, 48, FontWeight.w600, textPrimary),
       displayMedium: _textStyle(34, 42, FontWeight.w600, textPrimary),
-      displaySmall: _textStyle(32, 40, FontWeight.w600, textPrimary),
+      displaySmall: _textStyle(36, 44, FontWeight.w700, textPrimary),
       headlineLarge: _textStyle(28, 34, FontWeight.w600, textPrimary),
       headlineMedium: _textStyle(24, 30, FontWeight.w600, textPrimary),
       headlineSmall: _textStyle(22, 28, FontWeight.w600, textPrimary),
-      titleLarge: _textStyle(20, 25, FontWeight.w600, textPrimary),
+      titleLarge: _textStyle(20, 26, FontWeight.w700, textPrimary),
       titleMedium: _textStyle(17, 22, FontWeight.w600, textPrimary),
       titleSmall: _textStyle(16, 21, FontWeight.w600, textPrimary),
       bodyLarge: _textStyle(17, 22, FontWeight.w400, textPrimary),
@@ -204,10 +204,12 @@ abstract final class AppTheme {
       cardTheme: CardThemeData(
         color: colorScheme.surface,
         surfaceTintColor: Colors.transparent,
-        shadowColor: Colors.transparent,
-        elevation: 0,
+        shadowColor: colorScheme.shadow.withValues(alpha: 0.08),
+        elevation: 1,
         margin: EdgeInsets.zero,
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+        ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
@@ -276,7 +278,7 @@ abstract final class AppTheme {
             enabled: colorScheme.onSurface,
             disabled: disabledForeground,
           ),
-          shape: WidgetStatePropertyAll(componentShape),
+          shape: const WidgetStatePropertyAll(CircleBorder()),
         ),
       ),
       listTileTheme: ListTileThemeData(
@@ -290,7 +292,9 @@ abstract final class AppTheme {
         ),
         titleTextStyle: textTheme.bodyLarge,
         subtitleTextStyle: textTheme.bodySmall,
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+        ),
       ),
       tabBarTheme: TabBarThemeData(
         labelColor: colorScheme.primary,
@@ -316,7 +320,7 @@ abstract final class AppTheme {
         }),
       ),
       navigationBarTheme: NavigationBarThemeData(
-        height: 68,
+        height: 72,
         backgroundColor: colorScheme.surface,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
@@ -325,14 +329,14 @@ abstract final class AppTheme {
           final isSelected = states.contains(WidgetState.selected);
           return textTheme.labelSmall?.copyWith(
             color: isSelected ? colorScheme.primary : textSecondary,
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
           );
         }),
         iconTheme: WidgetStateProperty.resolveWith((states) {
           final isSelected = states.contains(WidgetState.selected);
           return IconThemeData(
             color: isSelected ? colorScheme.primary : textSecondary,
-            size: 24,
+            size: isSelected ? 22 : 20,
           );
         }),
       ),
@@ -346,8 +350,8 @@ abstract final class AppTheme {
         unselectedLabelTextStyle: textTheme.labelSmall?.copyWith(
           color: textSecondary,
         ),
-        selectedIconTheme: IconThemeData(color: colorScheme.primary, size: 24),
-        unselectedIconTheme: IconThemeData(color: textSecondary, size: 24),
+        selectedIconTheme: IconThemeData(color: colorScheme.primary, size: 22),
+        unselectedIconTheme: IconThemeData(color: textSecondary, size: 20),
         useIndicator: true,
         indicatorColor: Colors.transparent,
         minWidth: 72,
@@ -360,7 +364,7 @@ abstract final class AppTheme {
         modalElevation: 1,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(
-            top: Radius.circular(AppSpacing.radiusLg),
+            top: Radius.circular(AppSpacing.radiusXl),
           ),
         ),
         showDragHandle: true,
@@ -372,7 +376,7 @@ abstract final class AppTheme {
         surfaceTintColor: Colors.transparent,
         elevation: 2,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+          borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
         ),
       ),
       dividerTheme: DividerThemeData(

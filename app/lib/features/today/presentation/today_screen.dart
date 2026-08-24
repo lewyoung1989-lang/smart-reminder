@@ -8,6 +8,7 @@ import '../../../ui/components/app_content_state.dart';
 import '../../../ui/components/app_list_row.dart';
 import '../../../ui/components/app_page_header.dart';
 import '../../../ui/components/app_status_banner.dart';
+import '../../../ui/components/app_status_tag.dart';
 import '../data/today_repository.dart';
 import '../domain/today_models.dart';
 
@@ -235,7 +236,7 @@ class _TodayScreenState extends State<TodayScreen> {
               for (var index = 0; index < decisions.length; index += 1) ...[
                 _DecisionRow(
                   item: decisions[index],
-                  showDivider: index < decisions.length - 1,
+                  position: _listRowPosition(index, decisions.length),
                   onOpen:
                       widget.onOpenAttention == null ? null : _openAttention,
                 ),
@@ -297,7 +298,7 @@ class _TodayScreenState extends State<TodayScreen> {
             children: <Widget>[
               Text(title, style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: AppSpacing.md),
-              child,
+              _SoftSectionSurface(child: child),
             ],
           ),
         ),
@@ -327,21 +328,61 @@ class _TodayScreenState extends State<TodayScreen> {
   }
 }
 
+class _SoftSectionSurface extends StatelessWidget {
+  const _SoftSectionSurface({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+        boxShadow: [
+          BoxShadow(
+            color: scheme.shadow.withValues(alpha: 0.05),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+        child: child,
+      ),
+    );
+  }
+}
+
 class _DecisionRow extends StatelessWidget {
   const _DecisionRow({
     required this.item,
-    required this.showDivider,
+    required this.position,
     this.onOpen,
   });
 
   final AttentionItem item;
-  final bool showDivider;
+  final AppListRowPosition position;
   final AttentionActionCallback? onOpen;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final visuals = _attentionVisuals(context, item.kind);
+    final showDivider = position != AppListRowPosition.single &&
+        position != AppListRowPosition.last;
+    final borderRadius = switch (position) {
+      AppListRowPosition.single => BorderRadius.circular(AppSpacing.radiusLg),
+      AppListRowPosition.first => const BorderRadius.vertical(
+          top: Radius.circular(AppSpacing.radiusLg),
+        ),
+      AppListRowPosition.middle => BorderRadius.zero,
+      AppListRowPosition.last => const BorderRadius.vertical(
+          bottom: Radius.circular(AppSpacing.radiusLg),
+        ),
+    };
     final enabled = onOpen != null;
     final actionSemantics = enabled
         ? '${item.actionLabel}：${item.title}'
@@ -356,6 +397,7 @@ class _DecisionRow extends StatelessWidget {
         key: ValueKey('today-decision-row-${item.id}'),
         decoration: BoxDecoration(
           color: theme.colorScheme.surface,
+          borderRadius: borderRadius,
           border: showDivider
               ? Border(
                   bottom: BorderSide(
@@ -367,7 +409,10 @@ class _DecisionRow extends StatelessWidget {
         ),
         child: Material(
           color: Colors.transparent,
+          borderRadius: borderRadius,
+          clipBehavior: Clip.antiAlias,
           child: InkWell(
+            borderRadius: borderRadius,
             onTap: enabled ? () => onOpen!(item) : null,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(
@@ -593,13 +638,30 @@ class _TodayOverview extends StatelessWidget {
       container: true,
       label: '今日概览：$accessibilityText',
       child: ExcludeSemantics(
-        child: Wrap(
-          spacing: AppSpacing.lg,
-          runSpacing: AppSpacing.sm,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            for (final item in items) _OverviewMetric(item: item),
-          ],
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+            boxShadow: [
+              BoxShadow(
+                color: Theme.of(context)
+                    .colorScheme
+                    .shadow
+                    .withValues(alpha: 0.05),
+                blurRadius: 18,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Wrap(
+            spacing: AppSpacing.xxl,
+            runSpacing: AppSpacing.sm,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              for (final item in items) _OverviewMetric(item: item),
+            ],
+          ),
         ),
       ),
     );
@@ -656,10 +718,22 @@ class _DecisionDetails extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Semantics(
-          label: '状态：${visuals.label}',
-          child: ExcludeSemantics(
-            child: Icon(visuals.icon, color: visuals.color, size: 22),
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Semantics(
+            label: '状态：${visuals.label}',
+            child: ExcludeSemantics(
+              child: SizedBox.square(
+                dimension: 36,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: visuals.color.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                  ),
+                  child: Icon(visuals.icon, color: visuals.color, size: 20),
+                ),
+              ),
+            ),
           ),
         ),
         const SizedBox(width: AppSpacing.md),
@@ -678,11 +752,10 @@ class _DecisionDetails extends StatelessWidget {
                 spacing: AppSpacing.sm,
                 runSpacing: AppSpacing.xs,
                 children: <Widget>[
-                  Text(
-                    visuals.label,
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: visuals.color,
-                    ),
+                  AppStatusTag(
+                    text: visuals.label,
+                    color: visuals.color,
+                    semanticLabel: '状态：${visuals.label}',
                   ),
                   Text(
                     _formatDue(item.dueAt),

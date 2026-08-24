@@ -29,15 +29,6 @@ class AppPageHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (eyebrow != null) ...[
-                Text(
-                  eyebrow!,
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.xs),
-              ],
               Semantics(
                 header: true,
                 child: Text(
@@ -47,6 +38,15 @@ class AppPageHeader extends StatelessWidget {
                       : theme.textTheme.titleLarge,
                 ),
               ),
+              if (eyebrow != null) ...[
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  eyebrow!,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
             ],
           ),
         ),

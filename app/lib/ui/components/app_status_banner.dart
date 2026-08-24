@@ -37,8 +37,14 @@ class AppStatusBanner extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: visuals.surface,
-          border: Border.all(color: visuals.foreground.withValues(alpha: 0.4)),
           borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+          boxShadow: [
+            BoxShadow(
+              color: theme.colorScheme.shadow.withValues(alpha: 0.05),
+              blurRadius: 18,
+              offset: const Offset(0, 6),
+            ),
+          ],
         ),
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.lg),

@@ -141,7 +141,7 @@ void main() {
     expect(status.style?.color, isNot(Colors.green));
   });
 
-  testWidgets('uses native cabinet tabs and a continuous neutral list',
+  testWidgets('uses rounded cabinet tabs and a soft list surface',
       (tester) async {
     final repository = _Repository(status: MedicineStatus.expired);
     await tester.pumpWidget(
@@ -160,9 +160,9 @@ void main() {
     final personal = tester.widget<Text>(find.text('个人药箱'));
     final family = tester.widget<Text>(find.text('家庭药箱'));
     expect(personal.style?.fontSize, 13);
-    expect(personal.style?.fontWeight, FontWeight.w600);
-    expect(personal.style?.color, const Color(0xFF176B52));
-    expect(family.style?.color, const Color(0xFF6C6C70));
+    expect(personal.style?.fontWeight, FontWeight.w700);
+    expect(personal.style?.color, const Color(0xFF087759));
+    expect(family.style?.color, const Color(0xFF5C6C65));
     expect(
       tester.getSemantics(find.text('个人药箱')).flagsCollection.isSelected,
       Tristate.isTrue,
@@ -173,7 +173,7 @@ void main() {
     );
     final decoration = search.decoration!;
     expect(decoration.filled, isTrue);
-    expect(decoration.fillColor, const Color(0xFFE5E5EA));
+    expect(decoration.fillColor, const Color(0xFFE4ECE7));
     expect((decoration.enabledBorder as OutlineInputBorder).borderSide,
         BorderSide.none);
 
@@ -181,7 +181,7 @@ void main() {
     expect(scaffold.backgroundColor, isNull);
     expect(
       Theme.of(tester.element(find.text('药箱'))).scaffoldBackgroundColor,
-      const Color(0xFFF2F2F7),
+      const Color(0xFFF3F7F4),
     );
     expect(find.text('已过期'), findsWidgets);
     expect(
@@ -206,6 +206,7 @@ void main() {
     );
     expect(search.controller?.text, '拜新同');
     expect(find.text('没有符合条件的药品'), findsOneWidget);
+    expect(find.text('录入第一款药品'), findsNothing);
     expect(
       find.descendant(
         of: find.byKey(const ValueKey('cabinet-filter-tabs')),
@@ -213,6 +214,52 @@ void main() {
       ),
       findsNWidgets(3),
     );
+  });
+
+  testWidgets('shows a medicine cabinet illustration and first-entry action',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: MedicineCabinetScreen(
+          repository: _Repository(itemCount: 0),
+          onCreateBatch: (_) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('药箱还是空的'), findsOneWidget);
+    expect(
+      find.byKey(
+        const ValueKey('medicine-cabinet-empty-illustration'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('录入第一款药品'), findsOneWidget);
+    expect(find.text('没有符合条件的药品'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('empty inventory search uses no-result recovery without CTA',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: MedicineCabinetScreen(
+          repository: _Repository(itemCount: 0),
+          onCreateBatch: (_) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const Key('medicine-search')), '维生素');
+    await tester.pumpAndSettle();
+
+    expect(find.text('没有符合条件的药品'), findsOneWidget);
+    expect(find.text('录入第一款药品'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('cabinet tabs remain usable at narrow width and 200 percent text',
@@ -733,7 +780,7 @@ class _Repository implements MedicineRepository {
     scopes.add(scope);
     return MedicineCollection(
       items: [
-        detail.summary,
+        if (itemCount > 0) detail.summary,
         for (var index = 2; index <= itemCount; index += 1)
           MedicineSummary(
             id: 'medicine-$index',

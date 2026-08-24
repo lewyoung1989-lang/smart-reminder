@@ -192,6 +192,17 @@ void main() {
     expect(find.byKey(const Key('quick-create-bar')), findsOneWidget);
     expect(find.byType(FloatingActionButton), findsOneWidget);
     expect(find.bySemanticsLabel('创建提醒'), findsOneWidget);
+    final fabDecorations = tester
+        .widgetList<DecoratedBox>(
+          find.ancestor(
+            of: find.byType(FloatingActionButton),
+            matching: find.byType(DecoratedBox),
+          ),
+        )
+        .map((box) => box.decoration)
+        .whereType<BoxDecoration>();
+    expect(fabDecorations.any((decoration) => decoration.gradient != null),
+        isTrue);
 
     await tester.tap(find.text('周期'));
     await tester.pumpAndSettle();

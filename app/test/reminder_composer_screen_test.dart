@@ -75,9 +75,14 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, '继续'));
     await tester.pump();
 
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
-    expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
-        isNull);
+    final progress = find.byType(CircularProgressIndicator);
+    expect(progress, findsOneWidget);
+    final submittingButton = find.ancestor(
+      of: progress,
+      matching: find.byType(FilledButton),
+    );
+    expect(submittingButton, findsOneWidget);
+    expect(tester.widget<FilledButton>(submittingButton).onPressed, isNull);
 
     completer.complete(testDraft());
     await tester.pumpAndSettle();

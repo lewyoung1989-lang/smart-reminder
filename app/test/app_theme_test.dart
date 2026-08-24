@@ -9,11 +9,11 @@ void main() {
       final theme = AppTheme.light();
       final semanticColors = theme.extension<AppSemanticColors>();
 
-      expect(theme.colorScheme.primary, const Color(0xFF176B52));
-      expect(theme.scaffoldBackgroundColor, const Color(0xFFF2F2F7));
+      expect(theme.colorScheme.primary, const Color(0xFF087759));
+      expect(theme.scaffoldBackgroundColor, const Color(0xFFF3F7F4));
       expect(theme.colorScheme.surface, const Color(0xFFFFFFFF));
-      expect(semanticColors?.warning, const Color(0xFF9A6700));
-      expect(theme.cardTheme.elevation, 0);
+      expect(semanticColors?.warning, const Color(0xFF8D6508));
+      expect(theme.cardTheme.elevation, 1);
       expect(theme.materialTapTargetSize, MaterialTapTargetSize.padded);
       expect(theme.textTheme.bodyMedium?.letterSpacing, 0);
       expect(theme.textTheme.bodyMedium?.fontFamily, AppTheme.fontFamily);
@@ -27,7 +27,7 @@ void main() {
       expect(theme.colorScheme.surface, const Color(0xFF1C1C1E));
       expect(theme.colorScheme.primary, const Color(0xFF78D5B2));
       expect(semanticColors?.warning, const Color(0xFFFFC95C));
-      expect(theme.cardTheme.elevation, 0);
+      expect(theme.cardTheme.elevation, 1);
     });
 
     for (final entry in <String, ThemeData Function()>{
@@ -101,9 +101,9 @@ void main() {
       test('${entry.key} theme preserves the approved typography', () {
         final textTheme = entry.value().textTheme;
         final approvedStyles = <(TextStyle?, (double, double, FontWeight))>[
-          (textTheme.displaySmall, (32, 40, FontWeight.w600)),
+          (textTheme.displaySmall, (36, 44, FontWeight.w700)),
           (textTheme.headlineSmall, (22, 28, FontWeight.w600)),
-          (textTheme.titleLarge, (20, 25, FontWeight.w600)),
+          (textTheme.titleLarge, (20, 26, FontWeight.w700)),
           (textTheme.titleMedium, (17, 22, FontWeight.w600)),
           (textTheme.bodyLarge, (17, 22, FontWeight.w400)),
           (textTheme.bodyMedium, (15, 20, FontWeight.w400)),
@@ -135,6 +135,18 @@ void main() {
             44,
           );
         }
+        expect(
+          theme.filledButtonTheme.style?.shape?.resolve(<WidgetState>{}),
+          isA<RoundedRectangleBorder>(),
+        );
+        expect(
+          theme.outlinedButtonTheme.style?.shape?.resolve(<WidgetState>{}),
+          isA<RoundedRectangleBorder>(),
+        );
+        expect(
+          theme.iconButtonTheme.style?.shape?.resolve(<WidgetState>{}),
+          isA<CircleBorder>(),
+        );
       });
     }
 
@@ -144,7 +156,7 @@ void main() {
       expect(border, isA<OutlineInputBorder>());
       expect((border! as OutlineInputBorder).borderSide, BorderSide.none);
       expect(AppTheme.light().inputDecorationTheme.fillColor,
-          const Color(0xFFE5E5EA));
+          const Color(0xFFE4ECE7));
     });
 
     test('dark theme uses a native filled input without a resting border', () {

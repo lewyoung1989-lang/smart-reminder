@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../app/theme/app_spacing.dart';
+import 'app_status_tag.dart';
 
 enum AppListRowPosition { single, first, middle, last }
 
@@ -31,6 +32,16 @@ class AppListRow extends StatelessWidget {
     final scheme = theme.colorScheme;
     final showDivider = position != AppListRowPosition.single &&
         position != AppListRowPosition.last;
+    final borderRadius = switch (position) {
+      AppListRowPosition.single => BorderRadius.circular(AppSpacing.radiusLg),
+      AppListRowPosition.first => const BorderRadius.vertical(
+          top: Radius.circular(AppSpacing.radiusLg),
+        ),
+      AppListRowPosition.middle => BorderRadius.zero,
+      AppListRowPosition.last => const BorderRadius.vertical(
+          bottom: Radius.circular(AppSpacing.radiusLg),
+        ),
+    };
     final semanticsLabel = [
       title,
       subtitle,
@@ -47,10 +58,14 @@ class AppListRow extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: scheme.surface,
+          borderRadius: borderRadius,
         ),
         child: Material(
           color: Colors.transparent,
+          borderRadius: borderRadius,
+          clipBehavior: Clip.antiAlias,
           child: InkWell(
+            borderRadius: borderRadius,
             onTap: onTap,
             child: ConstrainedBox(
               constraints: const BoxConstraints(minHeight: 64),
@@ -73,7 +88,22 @@ class AppListRow extends StatelessWidget {
                       children: [
                         Padding(
                           padding: const EdgeInsets.only(top: AppSpacing.xs),
-                          child: Icon(icon, size: 22, color: scheme.primary),
+                          child: SizedBox.square(
+                            dimension: 36,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: scheme.primary.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(
+                                  AppSpacing.radiusMd,
+                                ),
+                              ),
+                              child: Icon(
+                                icon,
+                                size: 20,
+                                color: scheme.primary,
+                              ),
+                            ),
+                          ),
                         ),
                         const SizedBox(width: AppSpacing.md),
                         Expanded(
@@ -101,7 +131,7 @@ class AppListRow extends StatelessWidget {
                         ),
                         if (!useCompactLayout && statusText != null) ...[
                           const SizedBox(width: AppSpacing.lg),
-                          _StatusText(text: statusText!, color: statusColor),
+                          AppStatusTag(text: statusText!, color: statusColor),
                         ],
                         if (onTap != null) ...[
                           const SizedBox(width: AppSpacing.sm),
@@ -152,27 +182,9 @@ class _RowText extends StatelessWidget {
         Text(subtitle, style: theme.textTheme.bodySmall),
         if (compactStatus != null) ...[
           const SizedBox(height: AppSpacing.sm),
-          _StatusText(text: compactStatus!, color: statusColor),
+          AppStatusTag(text: compactStatus!, color: statusColor),
         ],
       ],
-    );
-  }
-}
-
-class _StatusText extends StatelessWidget {
-  const _StatusText({required this.text, this.color});
-
-  final String text;
-  final Color? color;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final foreground = color ?? theme.colorScheme.onSurfaceVariant;
-
-    return Text(
-      text,
-      style: theme.textTheme.labelMedium?.copyWith(color: foreground),
     );
   }
 }

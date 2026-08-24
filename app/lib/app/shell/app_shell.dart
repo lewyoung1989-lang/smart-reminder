@@ -501,23 +501,66 @@ class _AppShellState extends State<AppShell> {
   static const _destinations = [
     NavigationDestination(
       icon: Icon(LucideIcons.calendarClock),
+      selectedIcon: _SelectedNavigationIcon(icon: LucideIcons.calendarClock),
       label: '今天',
     ),
-    NavigationDestination(icon: Icon(LucideIcons.repeat2), label: '周期'),
-    NavigationDestination(icon: Icon(LucideIcons.pill), label: '药箱'),
+    NavigationDestination(
+      icon: Icon(LucideIcons.repeat2),
+      selectedIcon: _SelectedNavigationIcon(icon: LucideIcons.repeat2),
+      label: '周期',
+    ),
+    NavigationDestination(
+      icon: Icon(LucideIcons.pill),
+      selectedIcon: _SelectedNavigationIcon(icon: LucideIcons.pill),
+      label: '药箱',
+    ),
   ];
 
   static const _railDestinations = [
     NavigationRailDestination(
       icon: Icon(LucideIcons.calendarClock),
+      selectedIcon: _SelectedNavigationIcon(icon: LucideIcons.calendarClock),
       label: Text('今天'),
     ),
     NavigationRailDestination(
       icon: Icon(LucideIcons.repeat2),
+      selectedIcon: _SelectedNavigationIcon(icon: LucideIcons.repeat2),
       label: Text('周期'),
     ),
-    NavigationRailDestination(icon: Icon(LucideIcons.pill), label: Text('药箱')),
+    NavigationRailDestination(
+      icon: Icon(LucideIcons.pill),
+      selectedIcon: _SelectedNavigationIcon(icon: LucideIcons.pill),
+      label: Text('药箱'),
+    ),
   ];
+}
+
+class _SelectedNavigationIcon extends StatelessWidget {
+  const _SelectedNavigationIcon({required this.icon});
+
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.primary;
+    return SizedBox(
+      width: 24,
+      height: 27,
+      child: Stack(
+        alignment: Alignment.topCenter,
+        children: [
+          Icon(icon, size: 22, color: color),
+          Positioned(
+            bottom: 0,
+            child: DecoratedBox(
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+              child: const SizedBox.square(dimension: 4),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _QuickCreateBar extends StatelessWidget {
@@ -530,25 +573,55 @@ class _QuickCreateBar extends StatelessWidget {
   final VoidCallback onPressed;
 
   @override
-  Widget build(BuildContext context) => Semantics(
-        key: const Key('quick-create-bar'),
-        label: '创建提醒',
-        button: true,
-        enabled: enabled,
-        excludeSemantics: true,
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final colors = enabled
+        ? <Color>[scheme.primary, const Color(0xFF35A37C)]
+        : <Color>[
+            scheme.onSurface.withValues(alpha: 0.12),
+            scheme.onSurface.withValues(alpha: 0.12),
+          ];
+    return Semantics(
+      key: const Key('quick-create-bar'),
+      label: '创建提醒',
+      button: true,
+      enabled: enabled,
+      excludeSemantics: true,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: colors,
+          ),
+          boxShadow: enabled
+              ? [
+                  BoxShadow(
+                    color: scheme.primary.withValues(alpha: 0.24),
+                    blurRadius: 18,
+                    offset: const Offset(0, 8),
+                  ),
+                ]
+              : null,
+        ),
         child: FloatingActionButton(
           key: const Key('quick-create-action'),
           tooltip: '创建提醒',
           onPressed: enabled ? onPressed : null,
-          backgroundColor: enabled
-              ? Theme.of(context).colorScheme.primary
-              : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.12),
+          backgroundColor: Colors.transparent,
           foregroundColor: enabled
-              ? Theme.of(context).colorScheme.onPrimary
-              : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.38),
+              ? scheme.onPrimary
+              : scheme.onSurface.withValues(alpha: 0.38),
           elevation: 0,
+          focusElevation: 0,
+          hoverElevation: 0,
+          highlightElevation: 0,
+          disabledElevation: 0,
           shape: const CircleBorder(),
           child: const Icon(LucideIcons.plus),
         ),
-      );
+      ),
+    );
+  }
 }

@@ -362,7 +362,7 @@ void main() {
       );
     });
 
-    testWidgets('renders decisions as a continuous neutral list', (
+    testWidgets('renders decisions as a rounded continuous surface', (
       tester,
     ) async {
       final snapshot = TodaySnapshot(
@@ -405,10 +405,10 @@ void main() {
       final laterDecoration =
           tester.widget<DecoratedBox>(laterRow).decoration as BoxDecoration;
       expect(earlyDecoration.color, theme.colorScheme.surface);
-      expect(earlyDecoration.borderRadius, isNull);
+      expect(earlyDecoration.borderRadius, isNotNull);
       expect(earlyDecoration.border, isNotNull);
       expect(laterDecoration.color, theme.colorScheme.surface);
-      expect(laterDecoration.borderRadius, isNull);
+      expect(laterDecoration.borderRadius, isNotNull);
       expect(laterDecoration.border, isNull);
       expect(
         tester.getTopLeft(laterRow).dy,
