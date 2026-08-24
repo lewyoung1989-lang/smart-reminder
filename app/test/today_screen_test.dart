@@ -43,7 +43,7 @@ void main() {
         lessThan(tester.getTopLeft(find.text('药品临期')).dy),
       );
       expect(find.text('仅用于演示待确认流程，不代表已接入生产能力'), findsNothing);
-      expect(find.text('待确认'), findsOneWidget);
+      expect(find.text('待确认'), findsNothing);
       expect(find.text('已完成'), findsNothing);
       expect(find.text('即将开始'), findsWidgets);
       expect(find.byKey(const ValueKey('today-overview')), findsOneWidget);

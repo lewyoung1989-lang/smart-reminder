@@ -721,6 +721,7 @@ class _DecisionDetails extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final showReason = item.kind != AttentionKind.confirmation;
+    final showStatusTag = item.kind != AttentionKind.confirmation;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -759,11 +760,12 @@ class _DecisionDetails extends StatelessWidget {
                 spacing: AppSpacing.sm,
                 runSpacing: AppSpacing.xs,
                 children: <Widget>[
-                  AppStatusTag(
-                    text: visuals.label,
-                    color: visuals.color,
-                    semanticLabel: '状态：${visuals.label}',
-                  ),
+                  if (showStatusTag)
+                    AppStatusTag(
+                      text: visuals.label,
+                      color: visuals.color,
+                      semanticLabel: '状态：${visuals.label}',
+                    ),
                   Text(
                     _formatDue(item.dueAt),
                     style: theme.textTheme.labelMedium?.copyWith(
