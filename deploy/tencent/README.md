@@ -131,6 +131,21 @@ install -m 0600 deploy/tencent/env.production.example \
 
 生产只接受 `8 <= ASR_TIMEOUT_SECONDS <= 75` 秒，单次音频最长 60 秒，Gunicorn worker timeout 固定为 `90` 秒，API 域名的 Nginx `proxy_read_timeout` 为 `100` 秒。HTTPX 使用连接 2 秒、连接池 1 秒、上传 4 秒、读取 `ASR_TIMEOUT_SECONDS-7` 秒的显式阶段预算，四阶段预算总和不超过 ASR 总预算，并在请求完成后用单调时钟把超预算结果映射为 `504 asr_timeout`。HTTPX 阶段超时无法保证任意分块读取严格服从单一硬截止，因此必须继续保持 `ASR <= 75 < Gunicorn 90 < Nginx 100` 的外层余量。
 
+正式首页还需要在环境文件中填写公开信息：
+
+```dotenv
+SITE_OWNER_NAME=与ICP备案一致的主体名称
+SITE_CONTACT_EMAIL=用于隐私请求的公开联系邮箱
+ICP_FILING_NUMBER=粤ICP备实际备案号-站点序号
+```
+
+`ICP_FILING_NUMBER` 必须使用腾讯云备案详情或工信部查询结果中的完整号码，不能填写公安联网备案数据码。公安联网备案审核通过后再补充以下两项；两项必须同时存在，未通过前保持为空，首页不会展示占位公安备案号：
+
+```dotenv
+PUBLIC_SECURITY_FILING_NUMBER=粤公网安备实际号码号
+PUBLIC_SECURITY_RECORD_CODE=公安备案号中的纯数字部分
+```
+
 检查权限和配置，不显示文件内容：
 
 ```bash

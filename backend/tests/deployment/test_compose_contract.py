@@ -233,6 +233,24 @@ def test_backend_services_receive_auth_cache_and_jwt_configuration():
         )
 
 
+def test_backend_services_receive_public_site_configuration():
+    services = load_production_compose()["services"]
+    for name in ("api", "worker", "ocr-worker", "beat"):
+        environment = services[name]["environment"]
+        assert environment["SITE_OWNER_NAME"] == (
+            "${SITE_OWNER_NAME:?SITE_OWNER_NAME is required}"
+        )
+        assert environment["SITE_CONTACT_EMAIL"] == (
+            "${SITE_CONTACT_EMAIL:?SITE_CONTACT_EMAIL is required}"
+        )
+        assert environment["ICP_FILING_NUMBER"] == (
+            "${ICP_FILING_NUMBER:?ICP_FILING_NUMBER is required}"
+        )
+        assert environment["PUBLIC_SECURITY_FILING_NUMBER"] == (
+            "${PUBLIC_SECURITY_FILING_NUMBER:-}"
+        )
+
+
 def test_funasr_uses_one_immutable_image_and_read_only_model_volume():
     services = load_production_compose()["services"]
     expected_image = "smart-reminder-funasr:${APP_VERSION:?APP_VERSION is required}"

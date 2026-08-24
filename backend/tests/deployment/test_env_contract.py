@@ -32,6 +32,9 @@ def parse_example_values():
 def valid_example_values():
     values = parse_example_values()
     values.update(
+        SITE_OWNER_NAME="test-owner",
+        SITE_CONTACT_EMAIL="owner@example.com",
+        ICP_FILING_NUMBER="粤ICP备12345678号-1",
         DJANGO_SECRET_KEY="test-django-secret",
         JWT_SIGNING_KEY="test-jwt-signing-secret-at-least-32-bytes",
         POSTGRES_PASSWORD="test-postgres-secret",
@@ -71,6 +74,15 @@ def test_example_lists_required_production_variables_without_secrets():
     assert values["OCR_DEBUG_TEXT_LOGGING"] == "false"
     assert values["AUTH_CACHE_URL"] == "redis://redis:6379/4"
     assert values["OCR_ENABLED"] == "false"
+    assert values["SITE_NAME"] == "智能提醒"
+    for public_value in (
+        "SITE_OWNER_NAME",
+        "SITE_CONTACT_EMAIL",
+        "ICP_FILING_NUMBER",
+        "PUBLIC_SECURITY_FILING_NUMBER",
+        "PUBLIC_SECURITY_RECORD_CODE",
+    ):
+        assert values[public_value] == ""
     for secret in (
         "DJANGO_SECRET_KEY",
         "JWT_SIGNING_KEY",
@@ -113,6 +125,33 @@ def test_validator_rejects_missing_secrets(tmp_path):
     assert "POSTGRES_PASSWORD" in result.stderr
     assert "DEEPSEEK_API_KEY" in result.stderr
     assert "CERTBOT_EMAIL" in result.stderr
+    assert "SITE_OWNER_NAME" in result.stderr
+    assert "SITE_CONTACT_EMAIL" in result.stderr
+    assert "ICP_FILING_NUMBER" in result.stderr
+
+
+def test_validator_rejects_invalid_public_site_configuration(tmp_path):
+    values = valid_example_values()
+    values["SITE_CONTACT_EMAIL"] = "not-an-email"
+    values["ICP_FILING_NUMBER"] = "12345678"
+    values["PUBLIC_SECURITY_FILING_NUMBER"] = "粤公网安备44030002000001号"
+
+    result = run_validator(tmp_path, values)
+
+    assert result.returncode == 1
+    assert "SITE_CONTACT_EMAIL" in result.stderr
+    assert "ICP_FILING_NUMBER" in result.stderr
+    assert "PUBLIC_SECURITY_RECORD_CODE" in result.stderr
+
+
+def test_validator_accepts_complete_public_security_filing(tmp_path):
+    values = valid_example_values()
+    values["PUBLIC_SECURITY_FILING_NUMBER"] = "粤公网安备44030002000001号"
+    values["PUBLIC_SECURITY_RECORD_CODE"] = "44030002000001"
+
+    result = run_validator(tmp_path, values)
+
+    assert result.returncode == 0
 
 
 def test_readme_does_not_compile_a_shared_token_into_the_app():

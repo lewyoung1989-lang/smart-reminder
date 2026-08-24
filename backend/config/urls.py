@@ -1,6 +1,6 @@
 from django.urls import include, path
 
-from apps.core.views import health
+from apps.core.views import health, home, privacy, terms
 from apps.reminders.api.views import (
     ReminderActionView,
     ReminderCancelView,
@@ -16,6 +16,9 @@ from apps.workflows.api.views import (
 
 
 urlpatterns = [
+    path("", home, name="home"),
+    path("privacy/", privacy, name="privacy"),
+    path("terms/", terms, name="terms"),
     path("api/v1/health", health, name="health"),
     path(
         "api/v1/workflow-drafts",
