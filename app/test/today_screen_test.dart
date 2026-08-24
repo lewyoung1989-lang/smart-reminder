@@ -619,6 +619,16 @@ void main() {
 
       expect(find.widgetWithText(FilledButton, '完成'), findsOneWidget);
       expect(find.widgetWithText(OutlinedButton, '稍后'), findsOneWidget);
+      final details = find.byKey(
+        const ValueKey('today-decision-details-reminder-1'),
+      );
+      final actions = find.byKey(
+        const ValueKey('today-decision-actions-reminder-1'),
+      );
+      expect(
+        tester.getTopLeft(actions).dy,
+        greaterThanOrEqualTo(tester.getBottomLeft(details).dy),
+      );
 
       await tester.tap(find.widgetWithText(OutlinedButton, '稍后'));
       await tester.pumpAndSettle();

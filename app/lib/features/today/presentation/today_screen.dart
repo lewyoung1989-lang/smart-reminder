@@ -423,23 +423,30 @@ class _DecisionRow extends StatelessWidget {
               ),
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final accessibilityLayout =
-                      MediaQuery.textScalerOf(context).scale(14) > 20;
-                  final details =
-                      _DecisionDetails(item: item, visuals: visuals);
-                  final actions = _DecisionActions(
-                    item: item,
-                    enabled: enabled,
-                    primarySemantics: actionSemantics,
-                    onOpen: onOpen,
+                  final textScaler = MediaQuery.textScalerOf(context);
+                  final stackedLayout =
+                      constraints.maxWidth < AppSpacing.breakpointMedium ||
+                          textScaler.scale(14) > 18;
+                  final details = KeyedSubtree(
+                    key: ValueKey('today-decision-details-${item.id}'),
+                    child: _DecisionDetails(item: item, visuals: visuals),
+                  );
+                  final actions = KeyedSubtree(
+                    key: ValueKey('today-decision-actions-${item.id}'),
+                    child: _DecisionActions(
+                      item: item,
+                      enabled: enabled,
+                      primarySemantics: actionSemantics,
+                      onOpen: onOpen,
+                    ),
                   );
 
-                  if (accessibilityLayout) {
+                  if (stackedLayout) {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: <Widget>[
                         details,
-                        const SizedBox(height: AppSpacing.sm),
+                        const SizedBox(height: AppSpacing.md),
                         actions,
                       ],
                     );
