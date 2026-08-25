@@ -1,5 +1,5 @@
-from django.db import transaction
 from django.core.exceptions import ObjectDoesNotExist
+from django.db import transaction
 from django.db import models
 from django.utils import timezone
 from rest_framework import status
@@ -110,7 +110,7 @@ class MedicationOccurrenceActionView(APIView):
             try:
                 occurrence = (
                     MedicationOccurrence.objects.select_for_update()
-                    .select_related("plan__medicine")
+                    .select_related("plan")
                     .get(id=occurrence_id, plan__owner=request.user)
                 )
             except MedicationOccurrence.DoesNotExist:

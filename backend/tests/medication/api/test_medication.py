@@ -311,6 +311,40 @@ def test_mark_taken_keeps_record_when_inventory_deduction_fails(
 
 
 @pytest.mark.django_db
+def test_mark_taken_allows_unlinked_medication_plan(api_client, user):
+    plan = MedicationPlan.objects.create(
+        owner=user,
+        medicine=None,
+        medicine_name="依巴斯汀",
+        dosage_text="一片",
+        dose_quantity="1",
+        dose_unit="片",
+        timezone="Asia/Shanghai",
+        schedule_json={"times": ["08:00"]},
+    )
+    occurrence = MedicationOccurrence.objects.create(
+        plan=plan,
+        scheduled_at=datetime(2026, 8, 8, 0, tzinfo=timezone.utc),
+        index=0,
+        idempotency_key="unlinked-medication-still-records",
+    )
+    api_client.force_authenticate(user)
+
+    response = api_client.post(
+        f"/api/v1/medication/occurrences/{occurrence.id}/actions",
+        {"action": "taken"},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["status"] == "taken"
+    assert response.data["inventory_deduction"]["status"] == "medicine_unlinked"
+    occurrence.refresh_from_db()
+    assert occurrence.status == MedicationOccurrence.Status.TAKEN
+    assert IntakeEvent.objects.get(occurrence=occurrence).action == "taken"
+
+
+@pytest.mark.django_db
 def test_mark_taken_repairs_legacy_actioned_occurrence_without_event(
     api_client, user
 ):
