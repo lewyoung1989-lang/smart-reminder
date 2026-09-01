@@ -250,8 +250,12 @@ class _AppShellState extends State<AppShell> {
       _showSnackBar('这个提醒暂时没有详情页');
       return;
     }
+    await _openPlanDetail(target!.id);
+  }
+
+  Future<void> _openPlanDetail(String planId) async {
     try {
-      final detail = await widget.planRepository.getById(target!.id);
+      final detail = await widget.planRepository.getById(planId);
       if (!mounted) return;
       await Navigator.of(context).push<void>(
         MaterialPageRoute(
@@ -283,6 +287,7 @@ class _AppShellState extends State<AppShell> {
     await _cancelPlanNotification(detail.summary.id);
     if (!mounted) return;
     Navigator.of(context).pop();
+    _refreshToday();
     _showSnackBar('计划已暂停');
   }
 
@@ -291,6 +296,7 @@ class _AppShellState extends State<AppShell> {
     final scheduled = await _schedulePlanNotification(updated.summary.id);
     if (!mounted) return;
     Navigator.of(context).pop();
+    _refreshToday();
     _showSnackBar(scheduled ? '计划已恢复，手机通知已安排' : '计划已恢复，但手机通知未安排');
   }
 
@@ -299,6 +305,7 @@ class _AppShellState extends State<AppShell> {
     await _cancelPlanNotification(detail.summary.id);
     if (!mounted) return;
     Navigator.of(context).pop();
+    _refreshToday();
     _showSnackBar('计划已删除');
   }
 
@@ -351,9 +358,19 @@ class _AppShellState extends State<AppShell> {
   }
 
   Future<void> _handleAttentionAction(AttentionItem item) async {
-    final actions = widget.actionCenterActions;
     final target = item.actionTarget;
-    if (actions == null || target == null) {
+    if (target == null) {
+      _showSnackBar('这个动作暂时只能查看，稍后会接入处理入口');
+      return;
+    }
+
+    if (target.resource == 'workflow') {
+      await _openPlanDetail(target.id);
+      return;
+    }
+
+    final actions = widget.actionCenterActions;
+    if (actions == null) {
       _showSnackBar('这个动作暂时只能查看，稍后会接入处理入口');
       return;
     }

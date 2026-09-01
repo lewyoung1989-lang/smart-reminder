@@ -916,6 +916,68 @@ void main() {
     expect(find.text('创建时说的话'), findsOneWidget);
     expect(find.text('每天晚上六点半提醒我饭后吃拜新同一片'), findsOneWidget);
   });
+
+  testWidgets('opens paused workflow detail from today decisions',
+      (tester) async {
+    final now = DateTime.now();
+    final detail = PlanDetail(
+      summary: PlanSummary(
+        id: 'plan-paused-1',
+        title: '用药提醒',
+        subtitle: '拜新同 · 1片',
+        nextRunAt: DateTime(now.year, now.month, now.day, 21),
+        status: PlanStatus.paused,
+        kind: PlanKind.medication,
+      ),
+      queriedSources: const [],
+      reminderLabel: '每天 21:00 通知提醒',
+      executions: const [],
+      sourceText: '每天晚上九点提醒我吃拜新同一片',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppShell(
+          todayRepository: _SequenceTodayRepository([
+            TodaySnapshot(
+              decisions: <AttentionItem>[
+                AttentionItem(
+                  id: 'plan-paused-1',
+                  title: '用药提醒',
+                  reason: '工作流已暂停，需要你确认后继续',
+                  dueAt: DateTime(now.year, now.month, now.day, 21),
+                  kind: AttentionKind.permission,
+                  actionLabel: '查看',
+                  actionTarget: const ActionTarget(
+                    resource: 'workflow',
+                    id: 'plan-paused-1',
+                  ),
+                ),
+              ],
+              timeline: const <TimelineItem>[],
+            ),
+          ]),
+          planRepository: _SinglePlanRepository(detail),
+          medicineRepository: _UnavailableMedicineRepository(),
+          user: const AuthUser(
+            id: 'user-1',
+            phoneMasked: '138****8000',
+            phoneVerified: true,
+          ),
+          themeMode: ThemeMode.system,
+          onThemeModeChanged: (_) {},
+          onChangePassword: (_, __, ___) async {},
+          onLogout: () async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(TextButton, '查看'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('创建时说的话'), findsOneWidget);
+    expect(find.text('每天晚上九点提醒我吃拜新同一片'), findsOneWidget);
+  });
 }
 
 class _ThrowingNotificationScheduler implements ReminderNotificationScheduler {

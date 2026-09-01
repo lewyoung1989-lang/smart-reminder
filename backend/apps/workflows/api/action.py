@@ -68,7 +68,8 @@ class TodayActionCenterView(APIView):
             template_key__isnull=False,
             enabled=False,
             paused_reason__isnull=False,
-        )
+            cancelled_at__isnull=True,
+        ).exclude(paused_reason__in=["user_paused", "user_deleted"])
         due_outbox = NotificationOutbox.objects.filter(
             workflow_run__workflow__owner=request.user,
             status=NotificationOutbox.Status.PENDING,

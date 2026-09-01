@@ -381,6 +381,48 @@ def test_today_includes_paused_rules_without_a_next_run(api_client, user, mocker
 
 
 @pytest.mark.django_db
+def test_today_excludes_user_paused_and_deleted_workflows(api_client, user, mocker):
+    create_workflow_rule(
+        user,
+        title="user paused medication",
+        enabled=False,
+        paused_reason="user_paused",
+        next_run_at=NOW,
+    )
+    create_workflow_rule(
+        user,
+        title="deleted medication",
+        enabled=False,
+        paused_reason="user_deleted",
+        cancelled_at=NOW,
+        next_run_at=NOW,
+    )
+    system_paused = create_workflow_rule(
+        user,
+        title="system paused medication",
+        enabled=False,
+        paused_reason="medicine_access_lost",
+        next_run_at=NOW,
+    )
+    mocker.patch("apps.workflows.api.action.timezone.now", return_value=NOW)
+    api_client.force_authenticate(user)
+
+    response = api_client.get("/api/v1/action-center/today")
+
+    assert response.status_code == 200
+    assert response.json()["need_decision"]["results"] == [
+        {
+            "id": str(system_paused.id),
+            "title": "system paused medication",
+            "kind": "workflow",
+            "status": "paused",
+            "occurred_at": "2026-08-08T09:00:00+08:00",
+            "action_target": {"resource": "workflow", "id": str(system_paused.id)},
+        }
+    ]
+
+
+@pytest.mark.django_db
 def test_today_includes_immediately_due_pending_outbox(api_client, user, mocker):
     outbox = create_outbox(
         user,
