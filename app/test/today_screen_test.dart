@@ -576,6 +576,65 @@ void main() {
       expect(find.text('今天没有待处理事项'), findsOneWidget);
     });
 
+    testWidgets('tapping decision content opens detail instead of completing', (
+      tester,
+    ) async {
+      final repository = _SequenceTodayRepository([
+        TodaySnapshot(
+          decisions: <AttentionItem>[
+            AttentionItem(
+              id: 'reminder-1',
+              title: '医院复查',
+              reason: '提醒时间到了',
+              dueAt: DateTime(2026, 9, 2, 10, 20),
+              kind: AttentionKind.confirmation,
+              actionLabel: '完成',
+              actionTarget: const ActionTarget(
+                resource: 'reminder',
+                id: 'reminder-1',
+                action: 'complete',
+              ),
+              secondaryActionLabel: '稍后',
+              secondaryActionTarget: const ActionTarget(
+                resource: 'reminder',
+                id: 'reminder-1',
+                action: 'snooze',
+              ),
+            ),
+          ],
+          timeline: const <TimelineItem>[],
+        ),
+        TodaySnapshot(decisions: const [], timeline: const []),
+      ]);
+      final completedActions = <String>[];
+      await pumpTodayScreen(
+        tester,
+        repository,
+        surfaceSize: const Size(390, 900),
+        onOpenAttention: (item) async {
+          completedActions.add(item.id);
+        },
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('医院复查'));
+      await tester.pumpAndSettle();
+
+      expect(completedActions, isEmpty);
+      expect(repository.calls, 1);
+      expect(find.byKey(const ValueKey('today-attention-detail-sheet')),
+          findsOneWidget);
+      expect(find.text('提醒详情'), findsOneWidget);
+
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, '完成'));
+      await tester.pumpAndSettle();
+
+      expect(completedActions, ['reminder-1']);
+      expect(repository.calls, 2);
+    });
+
     testWidgets('shows complete and snooze actions for ordinary reminders', (
       tester,
     ) async {

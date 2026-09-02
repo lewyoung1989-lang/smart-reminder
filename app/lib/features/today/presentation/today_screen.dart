@@ -13,6 +13,7 @@ import '../data/today_repository.dart';
 import '../domain/today_models.dart';
 
 typedef AttentionActionCallback = Future<void> Function(AttentionItem item);
+typedef AttentionInspectCallback = Future<void> Function(AttentionItem item);
 
 class TodayScreen extends StatefulWidget {
   const TodayScreen({
@@ -21,6 +22,7 @@ class TodayScreen extends StatefulWidget {
     this.onOpenSettings,
     this.onOpenReminderManager,
     this.onOpenAttention,
+    this.onInspectAttention,
     this.onOpenTimeline,
     this.bottomContentPadding = 0,
     this.refreshRevision = 0,
@@ -32,6 +34,7 @@ class TodayScreen extends StatefulWidget {
   final VoidCallback? onOpenSettings;
   final VoidCallback? onOpenReminderManager;
   final AttentionActionCallback? onOpenAttention;
+  final AttentionInspectCallback? onInspectAttention;
   final ValueChanged<TimelineItem>? onOpenTimeline;
   final double bottomContentPadding;
   final int refreshRevision;
@@ -94,6 +97,20 @@ class _TodayScreenState extends State<TodayScreen> {
     if (callback == null) return;
     await callback(item);
     await _load();
+  }
+
+  Future<void> _inspectAttention(AttentionItem item) async {
+    final callback = widget.onInspectAttention;
+    if (callback != null) {
+      await callback(item);
+      return;
+    }
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (_) => _AttentionDetailSheet(item: item),
+    );
   }
 
   @override
@@ -237,6 +254,7 @@ class _TodayScreenState extends State<TodayScreen> {
                 _DecisionRow(
                   item: decisions[index],
                   position: _listRowPosition(index, decisions.length),
+                  onInspect: _inspectAttention,
                   onOpen:
                       widget.onOpenAttention == null ? null : _openAttention,
                 ),
@@ -360,11 +378,13 @@ class _DecisionRow extends StatelessWidget {
   const _DecisionRow({
     required this.item,
     required this.position,
+    this.onInspect,
     this.onOpen,
   });
 
   final AttentionItem item;
   final AppListRowPosition position;
+  final AttentionInspectCallback? onInspect;
   final AttentionActionCallback? onOpen;
 
   @override
@@ -383,8 +403,8 @@ class _DecisionRow extends StatelessWidget {
           bottom: Radius.circular(AppSpacing.radiusLg),
         ),
     };
-    final enabled = onOpen != null;
-    final actionSemantics = enabled
+    final actionEnabled = onOpen != null;
+    final actionSemantics = actionEnabled
         ? '${item.actionLabel}：${item.title}'
         : '${item.actionLabel}：${item.title}（未提供打开处理回调）';
 
@@ -411,59 +431,173 @@ class _DecisionRow extends StatelessWidget {
           color: Colors.transparent,
           borderRadius: borderRadius,
           clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            borderRadius: borderRadius,
-            onTap: enabled ? () => onOpen!(item) : null,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg,
-                AppSpacing.md,
-                AppSpacing.lg,
-                AppSpacing.md,
-              ),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final textScaler = MediaQuery.textScalerOf(context);
-                  final stackedLayout =
-                      constraints.maxWidth < AppSpacing.breakpointMedium ||
-                          textScaler.scale(14) > 18;
-                  final details = KeyedSubtree(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.md,
+              AppSpacing.lg,
+              AppSpacing.md,
+            ),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final textScaler = MediaQuery.textScalerOf(context);
+                final stackedLayout =
+                    constraints.maxWidth < AppSpacing.breakpointMedium ||
+                        textScaler.scale(14) > 18;
+                final details = _DecisionDetailTapTarget(
+                  item: item,
+                  borderRadius: borderRadius,
+                  onInspect: onInspect,
+                  child: KeyedSubtree(
                     key: ValueKey('today-decision-details-${item.id}'),
                     child: _DecisionDetails(item: item, visuals: visuals),
-                  );
-                  final actions = KeyedSubtree(
-                    key: ValueKey('today-decision-actions-${item.id}'),
-                    child: _DecisionActions(
-                      item: item,
-                      enabled: enabled,
-                      primarySemantics: actionSemantics,
-                      onOpen: onOpen,
-                    ),
-                  );
+                  ),
+                );
+                final actions = KeyedSubtree(
+                  key: ValueKey('today-decision-actions-${item.id}'),
+                  child: _DecisionActions(
+                    item: item,
+                    enabled: actionEnabled,
+                    primarySemantics: actionSemantics,
+                    onOpen: onOpen,
+                  ),
+                );
 
-                  if (stackedLayout) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: <Widget>[
-                        details,
-                        const SizedBox(height: AppSpacing.md),
-                        actions,
-                      ],
-                    );
-                  }
-
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
+                if (stackedLayout) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: <Widget>[
-                      Expanded(child: details),
-                      const SizedBox(width: AppSpacing.sm),
+                      details,
+                      const SizedBox(height: AppSpacing.md),
                       actions,
                     ],
                   );
-                },
-              ),
+                }
+
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: <Widget>[
+                    Expanded(child: details),
+                    const SizedBox(width: AppSpacing.sm),
+                    actions,
+                  ],
+                );
+              },
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DecisionDetailTapTarget extends StatelessWidget {
+  const _DecisionDetailTapTarget({
+    required this.item,
+    required this.borderRadius,
+    required this.child,
+    this.onInspect,
+  });
+
+  final AttentionItem item;
+  final BorderRadius borderRadius;
+  final Widget child;
+  final AttentionInspectCallback? onInspect;
+
+  @override
+  Widget build(BuildContext context) {
+    final callback = onInspect;
+    if (callback == null) return child;
+    return Semantics(
+      button: true,
+      label: '查看详情：${item.title}',
+      onTap: () => callback(item),
+      child: InkWell(
+        borderRadius: borderRadius,
+        onTap: () => callback(item),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+class _AttentionDetailSheet extends StatelessWidget {
+  const _AttentionDetailSheet({required this.item});
+
+  final AttentionItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final visuals = _attentionVisuals(context, item.kind);
+    return SafeArea(
+      key: const ValueKey('today-attention-detail-sheet'),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          0,
+          AppSpacing.lg,
+          AppSpacing.lg,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text('提醒详情', style: theme.textTheme.titleLarge),
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                SizedBox.square(
+                  dimension: 36,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: visuals.color.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                    ),
+                    child: Icon(visuals.icon, color: visuals.color, size: 20),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(item.title, style: theme.textTheme.titleMedium),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        item.reason,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Wrap(
+              spacing: AppSpacing.sm,
+              runSpacing: AppSpacing.xs,
+              children: <Widget>[
+                AppStatusTag(
+                  text: visuals.label,
+                  color: visuals.color,
+                  semanticLabel: '状态：${visuals.label}',
+                ),
+                Text(
+                  _formatDue(item.dueAt),
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
