@@ -35,6 +35,7 @@ import 'features/voice_input/data/voice_transcription_api.dart';
 import 'features/voice_input/services/voice_input_service.dart';
 import 'features/voice_input/services/voice_input_service_controller.dart';
 import 'platform/notifications/local_notification_scheduler.dart';
+import 'platform/notifications/notification_sync_service.dart';
 import 'platform/notifications/reminder_notification_scheduler.dart';
 import 'platform/permissions/camera_permission_gateway.dart';
 
@@ -97,6 +98,7 @@ class _SmartReminderAppState extends State<SmartReminderApp>
   late final VoiceInputService _voiceInput;
   late final VoiceInputServiceController _voiceInputController;
   var _medicineOcrEnabled = false;
+  var _notificationSyncInFlight = false;
 
   @override
   void initState() {
@@ -183,6 +185,7 @@ class _SmartReminderAppState extends State<SmartReminderApp>
     unawaited(_refreshCameraPermission());
     if (_authController.status == AuthStatus.authenticated) {
       unawaited(_refreshMedicineOcrCapability());
+      unawaited(_syncUpcomingNotifications());
     }
   }
 
@@ -202,6 +205,7 @@ class _SmartReminderAppState extends State<SmartReminderApp>
       _medicineOcrEnabled = false;
     } else {
       unawaited(_refreshMedicineOcrCapability());
+      unawaited(_syncUpcomingNotifications());
     }
     if (mounted) setState(() {});
   }
@@ -212,7 +216,35 @@ class _SmartReminderAppState extends State<SmartReminderApp>
       unawaited(_refreshCameraPermission());
       if (_authController.status == AuthStatus.authenticated) {
         unawaited(_refreshMedicineOcrCapability());
+        unawaited(_syncUpcomingNotifications());
       }
+    }
+  }
+
+  Future<void> _syncUpcomingNotifications() async {
+    if (_notificationSyncInFlight ||
+        _authController.status != AuthStatus.authenticated) {
+      return;
+    }
+    _notificationSyncInFlight = true;
+    try {
+      final scheduler = widget.notificationScheduler;
+      if (scheduler is LocalNotificationScheduler) {
+        await scheduler.initializeGateway();
+      }
+      await NotificationSyncService(
+        listReminders: _reminderApi.list,
+        loadPlans: _planRepository.load,
+        loadPlanDetail: _planRepository.getById,
+        reminderScheduler: scheduler,
+        planScheduler: scheduler is PlanNotificationScheduler
+            ? scheduler as PlanNotificationScheduler
+            : null,
+      ).syncUpcoming();
+    } catch (_) {
+      // 自动补排通知是恢复能力，不能阻塞登录、首屏和回到前台。
+    } finally {
+      _notificationSyncInFlight = false;
     }
   }
 
