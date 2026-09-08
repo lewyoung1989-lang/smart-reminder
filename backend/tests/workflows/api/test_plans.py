@@ -2,6 +2,7 @@ from datetime import datetime, timezone as datetime_timezone
 
 import pytest
 
+from apps.medication.models import MedicationOccurrence, MedicationPlan
 from apps.reminders.models import ReminderRule
 from apps.workflows.domain.schemas import TaskSpec
 from apps.workflows.models import WorkflowDraft, WorkflowRun
@@ -70,6 +71,32 @@ def create_plan(user, **overrides):
     }
     values.update(overrides)
     return ReminderRule.objects.create(**values)
+
+
+def create_pending_medication_draft(user, *, medicine_name="布洛芬", dose_text="1片"):
+    task = TaskSpec(
+        template_hint="medication_cycle",
+        title=f"{medicine_name}服药提醒",
+        slots={
+            "medicine_name": medicine_name,
+            "dose_text": dose_text,
+            "frequency": "daily",
+            "time_of_day": "14:00",
+        },
+        requested_capabilities=[
+            "medicine.schedule",
+            "notification.important",
+        ],
+    )
+    workflow = WorkflowCompiler().compile(task)
+    return WorkflowDraft.objects.create(
+        user=user,
+        source_text=f"每天14点吃{medicine_name}{dose_text}",
+        task_spec_json=task.model_dump(mode="json"),
+        workflow_spec_json=workflow.model_dump(mode="json"),
+        policy_json={"decision": "needs_confirmation"},
+        expires_at=NOW.replace(day=12),
+    )
 
 
 @pytest.mark.django_db
@@ -219,6 +246,63 @@ def test_plan_can_be_paused_resumed_and_soft_deleted(api_client, user):
     assert plan.enabled is False
     assert ReminderRule.objects.filter(id=plan.id).exists()
     assert api_client.get("/api/v1/plans").json()["results"] == []
+
+
+@pytest.mark.django_db
+def test_plan_update_replaces_existing_rule_and_medication_plan(
+    api_client,
+    user,
+    mocker,
+):
+    plan = create_plan(user)
+    medication_plan = MedicationPlan.objects.create(
+        owner=user,
+        medicine_name="布洛芬",
+        source_workflow_draft=plan.workflow_draft,
+        dosage_text="1片",
+        dose_quantity=1,
+        dose_unit="片",
+        timezone="Asia/Shanghai",
+        schedule_json={"times": ["20:00"]},
+    )
+    MedicationOccurrence.objects.create(
+        plan=medication_plan,
+        scheduled_at=NOW,
+        index=123,
+        idempotency_key=f"medication:{medication_plan.id}:123",
+    )
+    draft = create_pending_medication_draft(
+        user,
+        medicine_name="盐酸普罗帕酮片",
+        dose_text="每次三片",
+    )
+    mocker.patch("apps.workflows.api.plans.timezone.now", return_value=NOW)
+    api_client.force_authenticate(user)
+
+    response = api_client.put(
+        f"/api/v1/plans/{plan.id}",
+        {"workflow_draft_id": str(draft.id)},
+        format="json",
+    )
+
+    assert response.status_code == 200
+    assert ReminderRule.objects.count() == 1
+    plan.refresh_from_db()
+    assert plan.workflow_draft == draft
+    assert plan.title == "盐酸普罗帕酮片服药提醒"
+    assert plan.next_run_at.isoformat() == "2026-08-12T06:00:00+00:00"
+    draft.refresh_from_db()
+    assert draft.status == WorkflowDraft.Status.CONFIRMED
+    medication_plan.refresh_from_db()
+    assert MedicationPlan.objects.count() == 1
+    assert medication_plan.source_workflow_draft == draft
+    assert medication_plan.medicine_name == "盐酸普罗帕酮片"
+    assert medication_plan.dosage_text == "每次三片"
+    assert medication_plan.schedule_json == {"times": ["14:00"]}
+    assert MedicationOccurrence.objects.filter(plan=medication_plan).count() == 30
+    assert not MedicationOccurrence.objects.filter(index=123).exists()
+    assert response.json()["summary"]["id"] == str(plan.id)
+    assert response.json()["source_text"] == "每天14点吃盐酸普罗帕酮片每次三片"
 
 
 @pytest.mark.django_db

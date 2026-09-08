@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from apps.medication.models import MedicationPlan
+from apps.medication.models import MedicationOccurrence, MedicationPlan
 from apps.medication.services.dosage import parse_structured_dose
 from apps.medication.services.occurrences import materialize_occurrences
 from apps.medicines.models import MedicineItem
@@ -46,7 +46,72 @@ def ensure_medication_plan_for_workflow(*, draft, task, now):
     return plan
 
 
-def resolve_medicine_candidate(user, medicine_name, *, medicine_id=None, dose_unit=""):
+def update_medication_plan_for_workflow(
+    *,
+    previous_draft,
+    draft,
+    task,
+    now,
+    enabled=True,
+):
+    existing = None
+    if previous_draft is not None:
+        existing = MedicationPlan.objects.filter(
+            source_workflow_draft=previous_draft
+        ).first()
+    if task.template_hint != "medication_cycle":
+        if existing is not None:
+            existing.enabled = False
+            existing.save(update_fields=["enabled", "updated_at"])
+        return None
+
+    slots = task.slots
+    medicine_name = slots["medicine_name"]
+    dosage_text = slots["dose_text"]
+    dose_quantity, dose_unit = parse_structured_dose(dosage_text)
+    medicine = resolve_medicine_candidate(
+        draft.user,
+        medicine_name,
+        medicine_id=slots.get("medicine_id"),
+        dose_unit=dose_unit,
+    )
+    times = slots.get("times")
+    if not isinstance(times, list) or not all(
+        isinstance(value, str) for value in times
+    ):
+        times = [slots["time_of_day"]]
+
+    if existing is None:
+        existing = MedicationPlan(
+            owner=draft.user,
+            source_workflow_draft=draft,
+        )
+
+    existing.medicine = medicine
+    existing.medicine_name = medicine_name
+    existing.source_workflow_draft = draft
+    existing.dosage_text = dosage_text
+    existing.dose_quantity = dose_quantity
+    existing.dose_unit = dose_unit
+    existing.timezone = "Asia/Shanghai"
+    existing.schedule_json = {"times": times}
+    existing.enabled = enabled
+    existing.full_clean()
+    existing.save()
+    existing.occurrences.filter(
+        status=MedicationOccurrence.Status.PENDING
+    ).delete()
+    materialize_occurrences(existing, now=now)
+    return existing
+
+
+def resolve_medicine_candidate(
+    user,
+    medicine_name,
+    *,
+    medicine_id=None,
+    dose_unit="",
+):
     if not isinstance(medicine_name, str) or not medicine_name.strip():
         return None
     medicine_name = medicine_name.strip()

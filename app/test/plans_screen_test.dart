@@ -454,6 +454,13 @@ class _DeletablePlanRepository implements PlanRepository, PlanActions {
   }
 
   @override
+  Future<PlanDetail> updateFromDraft(
+    String id, {
+    required String workflowDraftId,
+  }) async =>
+      departureDetail;
+
+  @override
   Future<PlanDetail> pause(String id) async => departureDetail;
 
   @override

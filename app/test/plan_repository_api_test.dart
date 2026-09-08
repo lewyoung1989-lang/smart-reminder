@@ -193,6 +193,50 @@ void main() {
     expect(client.requests[2].url.path, '/api/v1/plans/plan-1');
   });
 
+  test('updates a periodic plan from a workflow draft', () async {
+    final client = RecordingClient([
+      jsonResponse(200, {
+        'summary': {
+          'id': 'plan-1',
+          'title': '盐酸普罗帕酮片服药提醒',
+          'subtitle': '盐酸普罗帕酮片 · 每次三片',
+          'next_run_at': '2026-09-05T06:00:00+00:00',
+          'status': 'active',
+          'kind': 'medication',
+        },
+        'queried_sources': <String>[],
+        'reminder_label': '每天 14:00 通知提醒',
+        'executions': <Object>[],
+        'source_text': '每天14点吃盐酸普罗帕酮片每次三片',
+        'notification_schedule': {
+          'scheduled_at': '2026-09-05T06:00:00+00:00',
+          'repeat': 'daily',
+          'title': '盐酸普罗帕酮片服药提醒',
+          'timezone': 'Asia/Shanghai',
+        },
+      }),
+    ]);
+    final repository = ApiPlanRepository(
+      baseUrl: 'https://api.invalid',
+      client: client,
+    );
+
+    final detail = await repository.updateFromDraft(
+      'plan-1',
+      workflowDraftId: 'workflow-draft-2',
+    );
+
+    expect(client.requests.single.method, 'PUT');
+    expect(client.requests.single.url.path, '/api/v1/plans/plan-1');
+    expect(
+      jsonDecode((client.requests.single as http.Request).body),
+      {'workflow_draft_id': 'workflow-draft-2'},
+    );
+    expect(detail.summary.id, 'plan-1');
+    expect(detail.summary.title, '盐酸普罗帕酮片服药提醒');
+    expect(detail.reminderLabel, '每天 14:00 通知提醒');
+  });
+
   test('throws a stable exception for server errors', () async {
     final repository = ApiPlanRepository(
       baseUrl: 'https://api.invalid',

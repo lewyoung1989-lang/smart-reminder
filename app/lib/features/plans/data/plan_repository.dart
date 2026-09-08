@@ -8,6 +8,9 @@ abstract interface class PlanRepository {
 }
 
 abstract interface class PlanActions {
+  Future<PlanDetail> updateFromDraft(String id,
+      {required String workflowDraftId});
+
   Future<PlanDetail> pause(String id);
 
   Future<PlanDetail> resume(String id);

@@ -99,6 +99,7 @@ class _AppShellState extends State<AppShell> {
   var _selectedIndex = 0;
   var _familyMembershipRevision = 0;
   var _todayRefreshRevision = 0;
+  var _planRefreshRevision = 0;
   bool? _hasFamilyMembership;
 
   void _selectDestination(int index) {
@@ -118,6 +119,11 @@ class _AppShellState extends State<AppShell> {
     setState(() => _todayRefreshRevision += 1);
   }
 
+  void _refreshPlans() {
+    if (!mounted) return;
+    setState(() => _planRefreshRevision += 1);
+  }
+
   void _openSettings() {
     Navigator.of(context).push<void>(
       MaterialPageRoute(
@@ -134,7 +140,10 @@ class _AppShellState extends State<AppShell> {
     );
   }
 
-  Future<void> _openQuickCreate({String? initialText}) async {
+  Future<void> _openQuickCreate({
+    String? initialText,
+    String? editingPlanId,
+  }) async {
     final createDraft = widget.createDraft;
     final service = widget.reminderCreationService;
     if (createDraft == null || service == null) return;
@@ -150,12 +159,15 @@ class _AppShellState extends State<AppShell> {
         onCancel: () => Navigator.of(sheetContext).pop(),
       ),
     );
-    if (mounted && result != null) await _showDraft(result, service);
+    if (mounted && result != null) {
+      await _showDraft(result, service, editingPlanId: editingPlanId);
+    }
   }
 
   Future<void> _reparseDraft(
     ReminderCreationService service,
     String text,
+    String? editingPlanId,
   ) async {
     final createDraft = widget.createDraft;
     if (createDraft == null) {
@@ -167,13 +179,15 @@ class _AppShellState extends State<AppShell> {
     await _showDraft(
       QuickCreateResult(sourceText: text, draft: draft),
       service,
+      editingPlanId: editingPlanId,
     );
   }
 
   Future<void> _showDraft(
     QuickCreateResult result,
-    ReminderCreationService service,
-  ) async {
+    ReminderCreationService service, {
+    String? editingPlanId,
+  }) async {
     final draft = result.draft;
     if (draft.isWorkflow) {
       final workflow = draft.workflow!;
@@ -183,8 +197,12 @@ class _AppShellState extends State<AppShell> {
           builder: (_) => WorkflowDraftScreen(
             sourceText: result.sourceText,
             draft: workflow,
-            onReparse: (text) => _reparseDraft(service, text),
-            onConfirm: _confirmWorkflowDraft,
+            onReparse: (text) => _reparseDraft(service, text, editingPlanId),
+            onConfirm: (draft) => _confirmWorkflowDraftForPlan(
+              draft,
+              editingPlanId: editingPlanId,
+            ),
+            editingPlanId: editingPlanId,
             onAnswer: answerWorkflowDraft == null
                 ? null
                 : (answer) => answerWorkflowDraft(workflow.id, answer),
@@ -198,26 +216,51 @@ class _AppShellState extends State<AppShell> {
         builder: (_) => ReminderDraftScreen(
           sourceText: result.sourceText,
           draft: draft.reminder!,
-          onReparse: (text) => _reparseDraft(service, text),
+          onReparse: (text) => _reparseDraft(service, text, null),
           onConfirm: () => _confirmDraft(draft.reminder!, service),
         ),
       ),
     );
   }
 
-  Future<void> _confirmWorkflowDraft(WorkflowDraft draft) async {
-    final confirm = widget.confirmWorkflowDraft;
-    if (confirm == null || !draft.canConfirm) return;
+  Future<void> _confirmWorkflowDraftForPlan(
+    WorkflowDraft draft, {
+    required String? editingPlanId,
+  }) async {
+    if (!draft.canConfirm) return;
     try {
-      final planId = await confirm(draft.id);
+      final String planId;
+      if (editingPlanId == null) {
+        final confirm = widget.confirmWorkflowDraft;
+        if (confirm == null) return;
+        planId = await confirm(draft.id);
+      } else {
+        final actions = widget.planRepository is PlanActions
+            ? widget.planRepository as PlanActions
+            : null;
+        if (actions == null) {
+          _showSnackBar('计划编辑暂时不可用，请稍后重试');
+          return;
+        }
+        await widget.planNotificationScheduler
+            ?.cancelPlan(planId: editingPlanId);
+        final updated = await actions.updateFromDraft(
+          editingPlanId,
+          workflowDraftId: draft.id,
+        );
+        planId = updated.summary.id;
+      }
       final notificationScheduled = await _schedulePlanNotification(planId);
       if (!mounted) return;
       Navigator.of(context).pop();
       _refreshToday();
+      _refreshPlans();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            notificationScheduled ? '计划已确认，手机通知已安排' : '计划已确认，但手机通知未安排',
+            editingPlanId == null
+                ? (notificationScheduled ? '计划已确认，手机通知已安排' : '计划已确认，但手机通知未安排')
+                : (notificationScheduled ? '计划已更新，手机通知已安排' : '计划已更新，但手机通知未安排'),
           ),
         ),
       );
@@ -311,7 +354,10 @@ class _AppShellState extends State<AppShell> {
 
   void _editPlanFromDetail(PlanDetail detail) {
     Navigator.of(context).pop();
-    _openQuickCreate(initialText: detail.sourceText);
+    _openQuickCreate(
+      initialText: detail.sourceText,
+      editingPlanId: detail.summary.id,
+    );
   }
 
   Future<void> _cancelPlanNotification(String planId) async {
@@ -445,7 +491,11 @@ class _AppShellState extends State<AppShell> {
           repository: widget.planRepository,
           onOpenSettings: _openSettings,
           notificationScheduler: widget.planNotificationScheduler,
-          onEditPlan: (sourceText) => _openQuickCreate(initialText: sourceText),
+          refreshRevision: _planRefreshRevision,
+          onEditPlan: (detail) => _openQuickCreate(
+            initialText: detail.sourceText,
+            editingPlanId: detail.summary.id,
+          ),
         ),
       ),
       KeyedSubtree(

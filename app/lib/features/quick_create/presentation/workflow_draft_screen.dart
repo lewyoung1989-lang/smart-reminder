@@ -18,6 +18,7 @@ class WorkflowDraftScreen extends StatefulWidget {
     required this.draft,
     required this.onConfirm,
     required this.onReparse,
+    this.editingPlanId,
     this.onAnswer,
     super.key,
   });
@@ -26,6 +27,7 @@ class WorkflowDraftScreen extends StatefulWidget {
   final WorkflowDraft draft;
   final Future<void> Function(WorkflowDraft draft) onConfirm;
   final Future<void> Function(String text) onReparse;
+  final String? editingPlanId;
   final Future<WorkflowDraft> Function(String answer)? onAnswer;
 
   @override
@@ -158,8 +160,16 @@ class _WorkflowDraftScreenState extends State<WorkflowDraftScreen> {
               severity: draft.canConfirm
                   ? AppStatusSeverity.info
                   : AppStatusSeverity.warning,
-              title: draft.canConfirm ? '请确认计划内容' : '请补充计划信息',
-              message: draft.canConfirm ? '请检查计划内容后确认创建' : '补充信息后再确认创建',
+              title: draft.canConfirm
+                  ? widget.editingPlanId == null
+                      ? '请确认计划内容'
+                      : '请确认修改内容'
+                  : '请补充计划信息',
+              message: draft.canConfirm
+                  ? widget.editingPlanId == null
+                      ? '请检查计划内容后确认创建'
+                      : '确认后会更新原周期计划，不会新增计划'
+                  : '补充信息后再确认创建',
             ),
             const SizedBox(height: AppSpacing.xl),
             if (_isEditing) ...[

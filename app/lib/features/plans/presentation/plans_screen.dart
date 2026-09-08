@@ -21,6 +21,7 @@ class PlansScreen extends StatefulWidget {
     this.onOpenPlan,
     this.notificationScheduler,
     this.onEditPlan,
+    this.refreshRevision = 0,
     super.key,
   });
 
@@ -28,7 +29,8 @@ class PlansScreen extends StatefulWidget {
   final VoidCallback? onOpenSettings;
   final ValueChanged<PlanSummary>? onOpenPlan;
   final PlanNotificationScheduler? notificationScheduler;
-  final ValueChanged<String>? onEditPlan;
+  final ValueChanged<PlanDetail>? onEditPlan;
+  final int refreshRevision;
 
   @override
   State<PlansScreen> createState() => _PlansScreenState();
@@ -56,7 +58,11 @@ class _PlansScreenState extends State<PlansScreen> {
   @override
   void didUpdateWidget(covariant PlansScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.repository != widget.repository) _load(clearCollection: true);
+    if (oldWidget.repository != widget.repository) {
+      _load(clearCollection: true);
+    } else if (oldWidget.refreshRevision != widget.refreshRevision) {
+      _load();
+    }
   }
 
   Future<void> _load({bool clearCollection = false}) async {
@@ -320,7 +326,7 @@ class _PlansScreenState extends State<PlansScreen> {
 
   void _editPlan(PlanDetail detail, {required bool compact}) {
     if (compact) Navigator.of(context).pop();
-    widget.onEditPlan?.call(detail.sourceText);
+    widget.onEditPlan?.call(detail);
   }
 
   Future<bool> _schedulePlanNotification(PlanDetail detail) async {

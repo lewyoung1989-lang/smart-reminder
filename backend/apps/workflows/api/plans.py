@@ -1,22 +1,27 @@
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.utils import timezone
+from pydantic import ValidationError as PydanticValidationError
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.reminders.models import ReminderRule
 from apps.medication.models import MedicationPlan
 from apps.medication.services.occurrences import materialize_occurrences
-from apps.workflows.models import WorkflowRun
-from apps.workflows.domain.schemas import WorkflowSpec
+from apps.medication.services.workflow_plans import update_medication_plan_for_workflow
+from apps.reminders.api.serializers import UpdatePlanFromWorkflowDraftSerializer
+from apps.reminders.models import ReminderRule
+from apps.workflows.domain.schemas import TaskSpec, WorkflowSpec
+from apps.workflows.models import WorkflowDraft, WorkflowRun
+from apps.workflows.services.compiler import WorkflowCompileError, WorkflowCompiler
 from apps.workflows.services.medication_schedule import (
     medication_times_from_config,
     next_daily_occurrences,
 )
+from apps.workflows.services.policy import evaluate
 
-from .views import _initial_next_run_at
+from .views import WORKFLOW_SCOPE, _initial_next_run_at, _policy_json
 
 
 def _workflow_rules(user):
@@ -95,7 +100,10 @@ def _execution_status(run: WorkflowRun, degraded: bool) -> str:
 def _result_is_degraded(result: dict) -> bool:
     route = result.get("route") if isinstance(result.get("route"), dict) else {}
     weather = result.get("weather") if isinstance(result.get("weather"), dict) else {}
-    return route.get("status") == "fallback_static" or weather.get("status") == "unavailable"
+    return (
+        route.get("status") == "fallback_static"
+        or weather.get("status") == "unavailable"
+    )
 
 
 def _execution_message(status_value: str) -> str:
@@ -264,9 +272,156 @@ class PlanDetailView(APIView):
             rule.cancelled_at = timezone.now()
             rule.paused_reason = "user_deleted"
             rule.revision = (rule.revision or 0) + 1
-            rule.save(update_fields=["enabled", "cancelled_at", "paused_reason", "revision"])
+            rule.save(
+                update_fields=[
+                    "enabled",
+                    "cancelled_at",
+                    "paused_reason",
+                    "revision",
+                ]
+            )
             _set_medication_plan_enabled(rule, False)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def put(self, request, plan_id):
+        serializer = UpdatePlanFromWorkflowDraftSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        draft_id = serializer.validated_data["workflow_draft_id"]
+
+        with transaction.atomic():
+            try:
+                rule = (
+                    _workflow_rules(request.user)
+                    .select_for_update()
+                    .get(id=plan_id)
+                )
+            except ReminderRule.DoesNotExist:
+                return Response(
+                    {"detail": "未找到该周期计划"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            try:
+                draft = WorkflowDraft.objects.select_for_update().get(
+                    id=draft_id,
+                    user=request.user,
+                )
+            except WorkflowDraft.DoesNotExist:
+                return Response(
+                    {"detail": "未找到该工作流草稿"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            if (
+                ReminderRule.objects.filter(workflow_draft=draft)
+                .exclude(id=rule.id)
+                .exists()
+            ):
+                return Response(
+                    {
+                        "code": "workflow_draft_already_confirmed",
+                        "detail": "这个草稿已被其他计划使用",
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            now = timezone.now()
+            if draft.expires_at <= now:
+                draft.status = WorkflowDraft.Status.EXPIRED
+                draft.save(update_fields=["status"])
+                return Response(
+                    {
+                        "code": "workflow_draft_expired",
+                        "detail": "工作流草稿已过期",
+                    },
+                    status=status.HTTP_410_GONE,
+                )
+
+            try:
+                task = TaskSpec.model_validate(draft.task_spec_json)
+            except PydanticValidationError:
+                return Response(
+                    {"code": "workflow_draft_invalid"},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            if task.ambiguities:
+                return Response(
+                    {"code": "workflow_needs_clarification"},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            try:
+                stored_workflow = WorkflowSpec.model_validate(draft.workflow_spec_json)
+                workflow = WorkflowCompiler().compile(task)
+            except (PydanticValidationError, WorkflowCompileError):
+                return Response(
+                    {"code": "workflow_needs_clarification"},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            if stored_workflow != workflow:
+                return Response(
+                    {"code": "workflow_needs_clarification"},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            if workflow.template_key != rule.template_key:
+                return Response(
+                    {
+                        "code": "plan_template_change_unsupported",
+                        "detail": "暂不支持把计划修改为另一种类型，请新建计划",
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            decision = evaluate(request.user, task, workflow, now, WORKFLOW_SCOPE)
+            if decision.decision == "needs_clarification":
+                return Response(
+                    {"code": "workflow_needs_clarification"},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            try:
+                next_run_at = _initial_next_run_at(workflow, now)
+            except ValueError:
+                return Response(
+                    {"code": "workflow_draft_invalid"},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            previous_draft = rule.workflow_draft
+            rule.title = task.title
+            rule.timezone = workflow.timezone
+            rule.template_version = workflow.template_version
+            rule.schema_version = workflow.schema_version
+            rule.workflow_spec_json = workflow.model_dump(mode="json")
+            rule.next_run_at = next_run_at
+            rule.workflow_draft = draft
+            rule.revision = (rule.revision or 0) + 1
+            rule.save(
+                update_fields=[
+                    "title",
+                    "timezone",
+                    "template_version",
+                    "schema_version",
+                    "workflow_spec_json",
+                    "next_run_at",
+                    "workflow_draft",
+                    "revision",
+                ]
+            )
+            draft.policy_json = _policy_json(decision)
+            draft.status = WorkflowDraft.Status.CONFIRMED
+            draft.confirmed_at = now
+            draft.save(update_fields=["policy_json", "status", "confirmed_at"])
+            update_medication_plan_for_workflow(
+                previous_draft=previous_draft,
+                draft=draft,
+                task=task,
+                now=now,
+                enabled=rule.enabled,
+            )
+            WorkflowRun.objects.filter(
+                workflow=rule,
+                status__in=[WorkflowRun.Status.PENDING, WorkflowRun.Status.RUNNING],
+            ).update(status=WorkflowRun.Status.CANCELLED)
+
+        return Response(_detail(rule), status=status.HTTP_200_OK)
 
 
 class PlanPauseView(APIView):
@@ -296,7 +451,10 @@ class PlanResumeView(APIView):
         try:
             rule = _workflow_rules(request.user).get(id=plan_id)
         except ReminderRule.DoesNotExist:
-            return Response({"detail": "未找到该周期计划"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"detail": "未找到该周期计划"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
         try:
             workflow = WorkflowSpec.model_validate(rule.workflow_spec_json)
             rule.next_run_at = _initial_next_run_at(workflow, timezone.now())
@@ -314,7 +472,10 @@ class PlanResumeView(APIView):
                 medication_plan.full_clean()
             except DjangoValidationError:
                 return Response(
-                    {"code": "medicine_access_lost", "detail": "已无法访问计划关联的药品"},
+                    {
+                        "code": "medicine_access_lost",
+                        "detail": "已无法访问计划关联的药品",
+                    },
                     status=status.HTTP_409_CONFLICT,
                 )
         with transaction.atomic():

@@ -549,6 +549,93 @@ void main() {
     expect(find.text('计划已确认，但手机通知未安排'), findsOneWidget);
   });
 
+  testWidgets('editing a periodic plan updates the existing plan', (
+    tester,
+  ) async {
+    final todayRepository = _SequenceTodayRepository([
+      TodaySnapshot(decisions: const [], timeline: const []),
+      TodaySnapshot(decisions: const [], timeline: const []),
+    ]);
+    final planRepository = _EditablePlanRepository();
+    final draft = QuickCreateDraft.workflow(
+      workflow: const WorkflowDraft(
+        id: 'workflow-draft-updated',
+        title: '盐酸普罗帕酮片服药提醒',
+        templateHint: 'medication_cycle',
+        slots: {
+          'medicine_name': '盐酸普罗帕酮片',
+          'dose_text': '每次三片',
+          'frequency': 'daily',
+          'time_of_day': '14:00',
+        },
+        ambiguities: [],
+        policyDecision: 'allow',
+        riskLevel: 'R1',
+        policyQuestion: null,
+      ),
+    );
+    final parsedTexts = <String>[];
+    final createdDraftIds = <String>[];
+    final creationService = ReminderCreationService(
+      confirmDraft: (_) async => 'reminder-1',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppShell(
+          todayRepository: todayRepository,
+          planRepository: planRepository,
+          medicineRepository: _UnavailableMedicineRepository(),
+          user: const AuthUser(
+            id: 'user-1',
+            phoneMasked: '138****8000',
+            phoneVerified: true,
+          ),
+          themeMode: ThemeMode.system,
+          onThemeModeChanged: (_) {},
+          onChangePassword: (_, __, ___) async {},
+          onLogout: () async {},
+          createDraft: (text) async {
+            parsedTexts.add(text);
+            return draft;
+          },
+          confirmWorkflowDraft: (draftId) async {
+            createdDraftIds.add(draftId);
+            return 'new-plan-id';
+          },
+          reminderCreationService: creationService,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('周期'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('服用盐酸普罗帕酮片'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('更多操作'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑计划'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('quick-create-input')),
+      '每天14点吃盐酸普罗帕酮片每次三片',
+    );
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, '继续'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '确认'));
+    await tester.pumpAndSettle();
+
+    expect(parsedTexts, ['每天14点吃盐酸普罗帕酮片每次三片']);
+    expect(createdDraftIds, isEmpty);
+    expect(planRepository.updatedPlanIds, ['plan-original']);
+    expect(planRepository.updatedWorkflowDraftIds, ['workflow-draft-updated']);
+    expect(planRepository.loadCalls, greaterThanOrEqualTo(2));
+    expect(todayRepository.calls, 2);
+    expect(find.text('计划已更新，但手机通知未安排'), findsOneWidget);
+  });
+
   testWidgets('editing a workflow draft re-parses the expression in place',
       (tester) async {
     QuickCreateDraft buildDraft() => QuickCreateDraft.workflow(
@@ -1038,6 +1125,58 @@ class _SinglePlanRepository implements PlanRepository {
   Future<PlanCollection> load() async {
     return PlanCollection(items: [detail.summary]);
   }
+}
+
+class _EditablePlanRepository implements PlanRepository, PlanActions {
+  final updatedPlanIds = <String>[];
+  final updatedWorkflowDraftIds = <String>[];
+  var loadCalls = 0;
+
+  PlanDetail get _detail => PlanDetail(
+        summary: PlanSummary(
+          id: 'plan-original',
+          title: '服用盐酸普罗帕酮片',
+          subtitle: '盐酸普罗帕酮片 · 150mg',
+          nextRunAt: DateTime(2026, 9, 5, 7, 30),
+          status: PlanStatus.active,
+          kind: PlanKind.medication,
+        ),
+        queriedSources: const [],
+        reminderLabel: '每天 07:30 通知提醒',
+        executions: const [],
+        sourceText: '每天7点半吃盐酸普罗帕酮片150mg',
+      );
+
+  @override
+  Future<PlanDetail> getById(String id) async {
+    if (id != _detail.summary.id) throw StateError('Unknown plan id: $id');
+    return _detail;
+  }
+
+  @override
+  Future<PlanCollection> load() async {
+    loadCalls += 1;
+    return PlanCollection(items: [_detail.summary]);
+  }
+
+  @override
+  Future<PlanDetail> updateFromDraft(
+    String id, {
+    required String workflowDraftId,
+  }) async {
+    updatedPlanIds.add(id);
+    updatedWorkflowDraftIds.add(workflowDraftId);
+    return _detail;
+  }
+
+  @override
+  Future<void> delete(String id) async {}
+
+  @override
+  Future<PlanDetail> pause(String id) async => _detail;
+
+  @override
+  Future<PlanDetail> resume(String id) async => _detail;
 }
 
 class _SequenceTodayRepository implements TodayRepository {

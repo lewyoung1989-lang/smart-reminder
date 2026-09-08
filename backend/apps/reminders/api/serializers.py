@@ -44,6 +44,18 @@ class ConfirmWorkflowDraftSerializer(serializers.Serializer):
         return attrs
 
 
+class UpdatePlanFromWorkflowDraftSerializer(serializers.Serializer):
+    workflow_draft_id = serializers.UUIDField()
+
+    def validate(self, attrs):
+        unexpected_fields = set(self.initial_data) - {"workflow_draft_id"}
+        if unexpected_fields:
+            raise serializers.ValidationError(
+                {field: "不支持该字段" for field in unexpected_fields}
+            )
+        return attrs
+
+
 class ReminderActionSerializer(serializers.Serializer):
     action = serializers.ChoiceField(choices=("complete", "snooze"))
     snooze_minutes = serializers.IntegerField(required=False)

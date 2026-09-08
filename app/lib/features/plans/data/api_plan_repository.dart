@@ -54,6 +54,22 @@ class ApiPlanRepository implements PlanRepository, PlanActions {
   @override
   Future<PlanDetail> resume(String id) => _postAction(id, 'resume');
 
+  @override
+  Future<PlanDetail> updateFromDraft(
+    String id, {
+    required String workflowDraftId,
+  }) async {
+    final response = await _client.put(
+      _baseUri.resolve('/api/v1/plans/$id'),
+      headers: _headers,
+      body: jsonEncode({'workflow_draft_id': workflowDraftId}),
+    );
+    if (response.statusCode != 200) {
+      throw PlanApiException(response.statusCode, response.body);
+    }
+    return _detail(jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
   Future<PlanDetail> _postAction(String id, String action) async {
     final response = await _client.post(
       _baseUri.resolve('/api/v1/plans/$id/$action'),
