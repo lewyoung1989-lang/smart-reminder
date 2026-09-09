@@ -12,6 +12,10 @@ UNIT_ALIASES = {
     "g": "克",
     "ml": "毫升",
 }
+MASS_UNIT_TO_MILLIGRAMS = {
+    "毫克": Decimal("1"),
+    "克": Decimal("1000"),
+}
 CHINESE_DIGITS = {
     "零": 0,
     "〇": 0,
@@ -37,6 +41,27 @@ def parse_structured_dose(text: str):
         return None, ""
     raw_unit = match.group("unit").lower()
     return quantity, UNIT_ALIASES.get(raw_unit, raw_unit)
+
+
+def convert_mass_dose_to_inventory_units(
+    quantity: Decimal | None,
+    unit: str,
+    specification: str,
+):
+    """Convert a mass dose to the number of dosage units described by a strength."""
+    if quantity is None or unit not in MASS_UNIT_TO_MILLIGRAMS:
+        return None
+    strength_quantity, strength_unit = parse_structured_dose(specification)
+    if strength_quantity is None or strength_unit not in MASS_UNIT_TO_MILLIGRAMS:
+        return None
+    requested_milligrams = quantity * MASS_UNIT_TO_MILLIGRAMS[unit]
+    strength_milligrams = (
+        strength_quantity * MASS_UNIT_TO_MILLIGRAMS[strength_unit]
+    )
+    if strength_milligrams <= 0:
+        return None
+    converted = requested_milligrams / strength_milligrams
+    return converted if converted > 0 else None
 
 
 def _parse_quantity(value: str):

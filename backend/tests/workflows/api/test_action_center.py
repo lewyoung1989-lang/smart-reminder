@@ -540,7 +540,46 @@ def test_today_includes_due_and_upcoming_medication_occurrences(api_client, user
 
 
 @pytest.mark.django_db
-def test_today_does_not_include_historical_pending_medication_occurrences(
+def test_today_keeps_pending_medication_actionable_for_48_hours(
+    api_client, user, mocker
+):
+    medicine = MedicineItem.objects.create(owner=user, name="历史用药")
+    plan = MedicationPlan.objects.create(
+        owner=user,
+        medicine=medicine,
+        medicine_name=medicine.name,
+        dosage_text="一次一片",
+        timezone="Asia/Shanghai",
+        schedule_json={"times": ["08:00"]},
+        enabled=False,
+    )
+    retained = MedicationOccurrence.objects.create(
+        plan=plan,
+        scheduled_at=NOW - timedelta(hours=47),
+        index=1,
+        idempotency_key="retained-overdue-medication",
+    )
+    expired = MedicationOccurrence.objects.create(
+        plan=plan,
+        scheduled_at=NOW - timedelta(hours=49),
+        index=2,
+        idempotency_key="expired-overdue-medication",
+    )
+    mocker.patch("apps.workflows.api.action.timezone.now", return_value=NOW)
+    api_client.force_authenticate(user)
+
+    response = api_client.get("/api/v1/action-center/today")
+
+    assert response.status_code == 200
+    ids = {
+        item["id"] for item in response.json()["need_decision"]["results"]
+    }
+    assert str(retained.id) in ids
+    assert str(expired.id) not in ids
+
+
+@pytest.mark.django_db
+def test_today_includes_recent_but_not_stale_pending_medication_occurrences(
     api_client, user, mocker
 ):
     medicine = MedicineItem.objects.create(owner=user, name="依巴斯汀")
@@ -556,6 +595,12 @@ def test_today_does_not_include_historical_pending_medication_occurrences(
         scheduled_at=NOW - timedelta(days=1),
         index=1,
         idempotency_key="yesterday-medication",
+    )
+    stale = MedicationOccurrence.objects.create(
+        plan=plan,
+        scheduled_at=NOW - timedelta(hours=49),
+        index=3,
+        idempotency_key="stale-medication",
     )
     today = MedicationOccurrence.objects.create(
         plan=plan,
@@ -573,7 +618,8 @@ def test_today_does_not_include_historical_pending_medication_occurrences(
         item["id"] for item in response.json()["need_decision"]["results"]
     }
     assert str(today.id) in decision_ids
-    assert str(yesterday.id) not in decision_ids
+    assert str(yesterday.id) in decision_ids
+    assert str(stale.id) not in decision_ids
 
 
 @pytest.mark.django_db

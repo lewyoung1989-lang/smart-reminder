@@ -59,6 +59,7 @@ class TodayActionCenterView(APIView):
         local_now = now.astimezone(LOCAL_TIMEZONE)
         today_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
         tomorrow_start = today_start + timedelta(days=1)
+        medication_history_start = now - timedelta(days=2)
         failed_outbox = NotificationOutbox.objects.filter(
             workflow_run__workflow__owner=request.user,
             status=NotificationOutbox.Status.FAILED,
@@ -100,9 +101,8 @@ class TodayActionCenterView(APIView):
         ).filter(Q(template_key__isnull=True) | Q(template_key=""))
         due_medication = MedicationOccurrence.objects.filter(
             plan__owner=request.user,
-            plan__enabled=True,
             status=MedicationOccurrence.Status.PENDING,
-            scheduled_at__gte=today_start,
+            scheduled_at__gte=medication_history_start,
             scheduled_at__lte=now,
         ).select_related("plan__medicine")
         active_expiry_alerts = ExpiryAlertState.objects.filter(

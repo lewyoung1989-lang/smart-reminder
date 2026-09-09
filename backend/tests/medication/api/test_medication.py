@@ -545,6 +545,99 @@ def test_mark_taken_links_matching_cabinet_medicine_before_deducting(api_client,
 
 
 @pytest.mark.django_db
+def test_mark_taken_converts_strength_dose_to_inventory_units(api_client, user):
+    medicine = MedicineItem.objects.create(
+        owner=user,
+        name="盐酸普罗帕酮片",
+        specification="150mg",
+    )
+    batch = InventoryBatch.objects.create(
+        medicine=medicine,
+        quantity=10,
+        package_unit="盒",
+        units_per_package="10",
+        unit_name="片",
+    )
+    plan = MedicationPlan.objects.create(
+        owner=user,
+        medicine=medicine,
+        medicine_name=medicine.name,
+        dosage_text="一次150毫克",
+        dose_quantity="150",
+        dose_unit="毫克",
+        timezone="Asia/Shanghai",
+        schedule_json={"times": ["08:00"]},
+    )
+    occurrence = MedicationOccurrence.objects.create(
+        plan=plan,
+        scheduled_at=datetime(2026, 8, 8, 0, tzinfo=timezone.utc),
+        index=0,
+        idempotency_key="strength-dose-conversion",
+    )
+    api_client.force_authenticate(user)
+
+    response = api_client.post(
+        f"/api/v1/medication/occurrences/{occurrence.id}/actions",
+        {"action": "taken"},
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["inventory_deduction"] == {
+        "status": "deducted",
+        "deducted_quantity": "1",
+        "unit": "片",
+        "remaining_quantity": "99",
+        "message": "已记录服药，已扣减1片，精确库存剩余99片",
+    }
+    batch.refresh_from_db()
+    assert batch.total_remaining_units == 99
+
+
+@pytest.mark.django_db
+def test_repeated_taken_retries_a_previous_non_deducted_attempt(api_client, user):
+    medicine = MedicineItem.objects.create(owner=user, name="测试药")
+    plan = MedicationPlan.objects.create(
+        owner=user,
+        medicine=medicine,
+        medicine_name=medicine.name,
+        dosage_text="一次一片",
+        dose_quantity="1",
+        dose_unit="片",
+        timezone="Asia/Shanghai",
+        schedule_json={"times": ["08:00"]},
+    )
+    occurrence = MedicationOccurrence.objects.create(
+        plan=plan,
+        scheduled_at=datetime(2026, 8, 8, 0, tzinfo=timezone.utc),
+        index=0,
+        idempotency_key="retry-non-deducted-attempt",
+    )
+    api_client.force_authenticate(user)
+    url = f"/api/v1/medication/occurrences/{occurrence.id}/actions"
+
+    first = api_client.post(url, {"action": "taken"}, format="json")
+    assert first.data["inventory_deduction"]["status"] == "not_configured"
+    batch = InventoryBatch.objects.create(
+        medicine=medicine,
+        quantity=1,
+        package_unit="盒",
+        units_per_package="10",
+        unit_name="片",
+    )
+
+    second = api_client.post(url, {"action": "taken"}, format="json")
+
+    assert second.status_code == status.HTTP_200_OK
+    assert second.data["inventory_deduction"]["status"] == "deducted"
+    batch.refresh_from_db()
+    assert batch.total_remaining_units == 9
+    assert InventoryDeductionAttempt.objects.filter(
+        intake_event__occurrence=occurrence
+    ).count() == 1
+
+
+@pytest.mark.django_db
 def test_skipped_occurrence_does_not_create_inventory_attempt(api_client, user):
     medicine = MedicineItem.objects.create(owner=user, name="测试药")
     plan = MedicationPlan.objects.create(

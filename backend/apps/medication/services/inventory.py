@@ -9,6 +9,7 @@ from apps.medication.models import (
     InventoryDeductionAttempt,
     InventoryDeductionEntry,
 )
+from apps.medication.services.dosage import convert_mass_dose_to_inventory_units
 from apps.medication.services.workflow_plans import resolve_medicine_candidate
 from apps.medicines.models import InventoryBatch, MedicineItem
 from apps.medicines.services.access import medicine_access_query
@@ -25,9 +26,18 @@ STATUS_MESSAGES = {
 
 
 def deduct_inventory_for_intake(event: IntakeEvent):
-    existing = InventoryDeductionAttempt.objects.filter(intake_event=event).first()
-    if existing is not None:
+    existing = (
+        InventoryDeductionAttempt.objects.select_for_update()
+        .filter(intake_event=event)
+        .first()
+    )
+    if (
+        existing is not None
+        and existing.status == InventoryDeductionAttempt.Status.DEDUCTED
+    ):
         return existing
+    if existing is not None:
+        existing.delete()
 
     plan = event.occurrence.plan
     _link_plan_medicine_from_cabinet(plan, event.user)
@@ -72,6 +82,17 @@ def deduct_inventory_for_intake(event: IntakeEvent):
             unit_name=unit_name,
         )
     matching = [batch for batch in batches if batch.unit_name == unit_name]
+    if not matching:
+        inventory_units = {batch.unit_name for batch in batches}
+        converted = convert_mass_dose_to_inventory_units(
+            requested,
+            unit_name,
+            plan.medicine.specification,
+        )
+        if converted is not None and len(inventory_units) == 1:
+            requested = converted
+            unit_name = inventory_units.pop()
+            matching = batches
     if not matching:
         return _record_attempt(
             event,
