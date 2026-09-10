@@ -739,12 +739,13 @@ void main() {
       TodaySnapshot(decisions: const [], timeline: const []),
     ]);
     final actions = _RecordingActionCenterActions();
+    final medicineRepository = _RecordingMedicineRepository();
     await tester.pumpWidget(
       MaterialApp(
         home: AppShell(
           todayRepository: todayRepository,
           planRepository: const UnavailablePlanRepository(),
-          medicineRepository: _UnavailableMedicineRepository(),
+          medicineRepository: medicineRepository,
           user: const AuthUser(
             id: 'user-1',
             phoneMasked: '138****8000',
@@ -765,6 +766,10 @@ void main() {
 
     expect(actions.takenOccurrences, ['occurrence-1']);
     expect(todayRepository.calls, 2);
+    expect(medicineRepository.scopes, [
+      MedicineCabinetScope.personal,
+      MedicineCabinetScope.personal,
+    ]);
     expect(find.text('服用布洛芬'), findsNothing);
     expect(find.text('已记录服药'), findsOneWidget);
   });

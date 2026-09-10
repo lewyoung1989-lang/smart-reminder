@@ -100,6 +100,7 @@ class _AppShellState extends State<AppShell> {
   var _familyMembershipRevision = 0;
   var _todayRefreshRevision = 0;
   var _planRefreshRevision = 0;
+  var _medicineRefreshRevision = 0;
   bool? _hasFamilyMembership;
 
   void _selectDestination(int index) {
@@ -122,6 +123,11 @@ class _AppShellState extends State<AppShell> {
   void _refreshPlans() {
     if (!mounted) return;
     setState(() => _planRefreshRevision += 1);
+  }
+
+  void _refreshMedicine() {
+    if (!mounted) return;
+    setState(() => _medicineRefreshRevision += 1);
   }
 
   void _openSettings() {
@@ -424,6 +430,7 @@ class _AppShellState extends State<AppShell> {
     try {
       if (target.resource == 'medication_occurrence') {
         final result = await actions.markMedicationTaken(target.id);
+        _refreshMedicine();
         _showSnackBar(result.message);
       } else if (target.resource == 'inventory_batch') {
         await actions.handleExpiryBatch(target.id);
@@ -513,6 +520,7 @@ class _AppShellState extends State<AppShell> {
           voiceInputController: widget.voiceInputController,
           onOpenSettings: _openSettings,
           familyMembershipRevision: _familyMembershipRevision,
+          refreshRevision: _medicineRefreshRevision,
           hasFamilyMembership: _hasFamilyMembership,
         ),
       ),

@@ -38,6 +38,7 @@ class MedicineCabinetScreen extends StatefulWidget {
     this.onParseDescription,
     this.voiceInputController,
     this.familyMembershipRevision = 0,
+    this.refreshRevision = 0,
     this.hasFamilyMembership,
     super.key,
   }) : assert(
@@ -62,6 +63,7 @@ class MedicineCabinetScreen extends StatefulWidget {
       onParseDescription;
   final VoiceInputController? voiceInputController;
   final int familyMembershipRevision;
+  final int refreshRevision;
   final bool? hasFamilyMembership;
 
   @override
@@ -106,10 +108,12 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
   void didUpdateWidget(covariant MedicineCabinetScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     var shouldReload = false;
+    var clearCollection = false;
     if (oldWidget.repository != widget.repository &&
         widget.repository != null) {
       _repository = widget.repository!;
       shouldReload = true;
+      clearCollection = true;
     }
     if (oldWidget.familyMembershipRevision != widget.familyMembershipRevision &&
         widget.hasFamilyMembership != null) {
@@ -117,8 +121,12 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
           ? MedicineCabinetScope.family
           : MedicineCabinetScope.personal;
       shouldReload = true;
+      clearCollection = true;
     }
-    if (shouldReload) _load(clearCollection: true);
+    if (oldWidget.refreshRevision != widget.refreshRevision) {
+      shouldReload = true;
+    }
+    if (shouldReload) _load(clearCollection: clearCollection);
   }
 
   @override
