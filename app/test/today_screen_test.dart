@@ -362,6 +362,62 @@ void main() {
       );
     });
 
+    testWidgets('puts todays decisions before recent overdue history', (
+      tester,
+    ) async {
+      final snapshot = TodaySnapshot(
+        decisions: <AttentionItem>[
+          AttentionItem(
+            id: 'history-newer',
+            title: '昨天未确认用药',
+            reason: '尚未确认',
+            dueAt: DateTime(2026, 8, 5, 20),
+            kind: AttentionKind.confirmation,
+            actionLabel: '记录',
+          ),
+          AttentionItem(
+            id: 'today-later',
+            title: '今天稍晚处理',
+            reason: '今天事项',
+            dueAt: DateTime(2026, 8, 6, 11),
+            kind: AttentionKind.confirmation,
+            actionLabel: '确认',
+          ),
+          AttentionItem(
+            id: 'history-older',
+            title: '前天未确认用药',
+            reason: '尚未确认',
+            dueAt: DateTime(2026, 8, 4, 20),
+            kind: AttentionKind.confirmation,
+            actionLabel: '记录',
+          ),
+          AttentionItem(
+            id: 'today-earlier',
+            title: '今天优先处理',
+            reason: '今天事项',
+            dueAt: DateTime(2026, 8, 6, 9),
+            kind: AttentionKind.confirmation,
+            actionLabel: '确认',
+          ),
+        ],
+        timeline: const <TimelineItem>[],
+      );
+      await pumpTodayScreen(
+        tester,
+        FakeTodayRepository.success(snapshot: snapshot),
+        surfaceSize: const Size(800, 1200),
+      );
+      await tester.pumpAndSettle();
+
+      final todayEarlier = tester.getTopLeft(find.text('今天优先处理')).dy;
+      final todayLater = tester.getTopLeft(find.text('今天稍晚处理')).dy;
+      final historyNewer = tester.getTopLeft(find.text('昨天未确认用药')).dy;
+      final historyOlder = tester.getTopLeft(find.text('前天未确认用药')).dy;
+      expect(todayEarlier, lessThan(todayLater));
+      expect(todayLater, lessThan(historyNewer));
+      expect(historyNewer, lessThan(historyOlder));
+    });
+
     testWidgets('renders decisions as a rounded continuous surface', (
       tester,
     ) async {

@@ -551,7 +551,7 @@ def test_today_keeps_pending_medication_actionable_for_48_hours(
         dosage_text="一次一片",
         timezone="Asia/Shanghai",
         schedule_json={"times": ["08:00"]},
-        enabled=False,
+        enabled=True,
     )
     retained = MedicationOccurrence.objects.create(
         plan=plan,
@@ -576,6 +576,81 @@ def test_today_keeps_pending_medication_actionable_for_48_hours(
     }
     assert str(retained.id) in ids
     assert str(expired.id) not in ids
+
+
+@pytest.mark.django_db
+def test_today_hides_pending_occurrences_from_stopped_medication_plans(
+    api_client, user, mocker
+):
+    medicine = MedicineItem.objects.create(owner=user, name="已停用药")
+    plan = MedicationPlan.objects.create(
+        owner=user,
+        medicine=medicine,
+        medicine_name=medicine.name,
+        dosage_text="一次一片",
+        timezone="Asia/Shanghai",
+        schedule_json={"times": ["08:00"]},
+        enabled=False,
+    )
+    occurrence = MedicationOccurrence.objects.create(
+        plan=plan,
+        scheduled_at=NOW - timedelta(hours=20),
+        index=1,
+        idempotency_key="stopped-plan-medication",
+    )
+    mocker.patch("apps.workflows.api.action.timezone.now", return_value=NOW)
+    api_client.force_authenticate(user)
+
+    response = api_client.get("/api/v1/action-center/today")
+
+    assert response.status_code == 200
+    ids = {
+        item["id"] for item in response.json()["need_decision"]["results"]
+    }
+    assert str(occurrence.id) not in ids
+
+
+@pytest.mark.django_db
+def test_today_places_active_medication_history_after_current_decisions(
+    api_client, user, mocker
+):
+    medicine = MedicineItem.objects.create(owner=user, name="排序测试药")
+    plan = MedicationPlan.objects.create(
+        owner=user,
+        medicine=medicine,
+        medicine_name=medicine.name,
+        dosage_text="一次一片",
+        timezone="Asia/Shanghai",
+        schedule_json={"times": ["08:00"]},
+    )
+    older = MedicationOccurrence.objects.create(
+        plan=plan,
+        scheduled_at=NOW - timedelta(hours=30),
+        index=1,
+        idempotency_key="older-medication-history",
+    )
+    newer = MedicationOccurrence.objects.create(
+        plan=plan,
+        scheduled_at=NOW - timedelta(hours=20),
+        index=2,
+        idempotency_key="newer-medication-history",
+    )
+    current = MedicationOccurrence.objects.create(
+        plan=plan,
+        scheduled_at=NOW - timedelta(minutes=10),
+        index=3,
+        idempotency_key="current-medication-decision",
+    )
+    mocker.patch("apps.workflows.api.action.timezone.now", return_value=NOW)
+    api_client.force_authenticate(user)
+
+    response = api_client.get("/api/v1/action-center/today")
+
+    assert response.status_code == 200
+    ids = [
+        item["id"] for item in response.json()["need_decision"]["results"]
+    ]
+    assert ids == [str(current.id), str(newer.id), str(older.id)]
 
 
 @pytest.mark.django_db

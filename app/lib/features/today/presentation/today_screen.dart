@@ -243,7 +243,7 @@ class _TodayScreenState extends State<TodayScreen> {
 
     if (snapshot.decisions.isNotEmpty) {
       final decisions = List<AttentionItem>.of(snapshot.decisions)
-        ..sort((left, right) => left.dueAt.compareTo(right.dueAt));
+        ..sort((left, right) => _compareDecisionTimes(left, right, now));
       slivers.add(
         _sectionSliver(
           key: const ValueKey('today-decisions-section'),
@@ -343,6 +343,19 @@ class _TodayScreenState extends State<TodayScreen> {
                 item.status == TimelineStatus.due),
       ),
     )..sort((left, right) => left.scheduledAt.compareTo(right.scheduledAt));
+  }
+
+  static int _compareDecisionTimes(
+    AttentionItem left,
+    AttentionItem right,
+    DateTime now,
+  ) {
+    final startOfToday = DateTime(now.year, now.month, now.day);
+    final leftIsHistory = left.dueAt.isBefore(startOfToday);
+    final rightIsHistory = right.dueAt.isBefore(startOfToday);
+    if (leftIsHistory != rightIsHistory) return leftIsHistory ? 1 : -1;
+    if (leftIsHistory) return right.dueAt.compareTo(left.dueAt);
+    return left.dueAt.compareTo(right.dueAt);
   }
 }
 

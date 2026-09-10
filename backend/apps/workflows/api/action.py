@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from django.db.models import Q
@@ -101,6 +101,7 @@ class TodayActionCenterView(APIView):
         ).filter(Q(template_key__isnull=True) | Q(template_key=""))
         due_medication = MedicationOccurrence.objects.filter(
             plan__owner=request.user,
+            plan__enabled=True,
             status=MedicationOccurrence.Status.PENDING,
             scheduled_at__gte=medication_history_start,
             scheduled_at__lte=now,
@@ -216,6 +217,27 @@ class TodayActionCenterView(APIView):
                 "days_remaining", "medicine__name", "id"
             )[:window]
         )
+        current_decisions = []
+        medication_history = []
+        for item in need_decision:
+            occurred_at = item.get("occurred_at")
+            is_medication_history = (
+                item.get("kind") == "medication"
+                and isinstance(occurred_at, str)
+                and datetime.fromisoformat(occurred_at).astimezone(
+                    LOCAL_TIMEZONE
+                ).date()
+                < local_now.date()
+            )
+            if is_medication_history:
+                medication_history.append(item)
+            else:
+                current_decisions.append(item)
+        medication_history.sort(
+            key=lambda item: item["occurred_at"],
+            reverse=True,
+        )
+        need_decision = current_decisions + medication_history
 
         upcoming = [
             (
