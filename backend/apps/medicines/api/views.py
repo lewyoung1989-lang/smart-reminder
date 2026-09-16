@@ -53,6 +53,14 @@ from .serializers import (
 logger = logging.getLogger(__name__)
 
 
+def _locked_accessible_batch_queryset(user):
+    return (
+        InventoryBatch.objects.select_for_update(of=("self",))
+        .select_related("medicine")
+        .filter(inventory_access_query(user))
+    )
+
+
 class MedicineDescriptionParseView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -202,9 +210,7 @@ class InventoryBatchExpiryActionView(APIView):
         with transaction.atomic():
             try:
                 batch = (
-                    InventoryBatch.objects.select_for_update()
-                    .select_related("medicine")
-                    .filter(inventory_access_query(request.user))
+                    _locked_accessible_batch_queryset(request.user)
                     .get(id=pk)
                 )
             except InventoryBatch.DoesNotExist:
@@ -272,9 +278,7 @@ class InventoryBatchExpiryDateCorrectionView(APIView):
         with transaction.atomic():
             try:
                 batch = (
-                    InventoryBatch.objects.select_for_update()
-                    .select_related("medicine")
-                    .filter(inventory_access_query(request.user))
+                    _locked_accessible_batch_queryset(request.user)
                     .get(id=pk)
                 )
             except InventoryBatch.DoesNotExist:

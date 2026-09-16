@@ -8,6 +8,15 @@ from apps.medicines.models import (
     InventoryBatch,
     MedicineItem,
 )
+from apps.medicines.api.views import _locked_accessible_batch_queryset
+
+
+@pytest.mark.django_db
+def test_expiry_actions_lock_only_the_inventory_batch(user):
+    queryset = _locked_accessible_batch_queryset(user)
+
+    assert queryset.query.select_for_update is True
+    assert queryset.query.select_for_update_of == ("self",)
 
 
 @pytest.mark.django_db
