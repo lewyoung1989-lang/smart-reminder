@@ -418,6 +418,42 @@ void main() {
       expect(historyNewer, lessThan(historyOlder));
     });
 
+    testWidgets('shows the date for overdue decisions but not todays items', (
+      tester,
+    ) async {
+      final snapshot = TodaySnapshot(
+        decisions: <AttentionItem>[
+          AttentionItem(
+            id: 'today',
+            title: '今天的用药',
+            reason: '尚未确认',
+            dueAt: DateTime(2026, 8, 6, 8),
+            kind: AttentionKind.confirmation,
+            actionLabel: '记录',
+          ),
+          AttentionItem(
+            id: 'history',
+            title: '昨天的用药',
+            reason: '尚未确认',
+            dueAt: DateTime(2026, 8, 5, 22),
+            kind: AttentionKind.confirmation,
+            actionLabel: '记录',
+          ),
+        ],
+        timeline: const <TimelineItem>[],
+      );
+
+      await pumpTodayScreen(
+        tester,
+        FakeTodayRepository.success(snapshot: snapshot),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('8:00 已到'), findsOneWidget);
+      expect(find.text('8月5日 22:00 已到'), findsOneWidget);
+      expect(find.text('8月6日 8:00 已到'), findsNothing);
+    });
+
     testWidgets('renders decisions as a rounded continuous surface', (
       tester,
     ) async {

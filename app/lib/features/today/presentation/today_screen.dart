@@ -109,7 +109,10 @@ class _TodayScreenState extends State<TodayScreen> {
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder: (_) => _AttentionDetailSheet(item: item),
+      builder: (_) => _AttentionDetailSheet(
+        item: item,
+        referenceDate: widget.now ?? DateTime.now(),
+      ),
     );
   }
 
@@ -253,6 +256,7 @@ class _TodayScreenState extends State<TodayScreen> {
               for (var index = 0; index < decisions.length; index += 1) ...[
                 _DecisionRow(
                   item: decisions[index],
+                  referenceDate: now,
                   position: _listRowPosition(index, decisions.length),
                   onInspect: _inspectAttention,
                   onOpen:
@@ -390,12 +394,14 @@ class _SoftSectionSurface extends StatelessWidget {
 class _DecisionRow extends StatelessWidget {
   const _DecisionRow({
     required this.item,
+    required this.referenceDate,
     required this.position,
     this.onInspect,
     this.onOpen,
   });
 
   final AttentionItem item;
+  final DateTime referenceDate;
   final AppListRowPosition position;
   final AttentionInspectCallback? onInspect;
   final AttentionActionCallback? onOpen;
@@ -425,7 +431,7 @@ class _DecisionRow extends StatelessWidget {
       container: true,
       explicitChildNodes: true,
       label:
-          '${visuals.label}：${item.title}，${item.reason}，${_formatDue(item.dueAt)}',
+          '${visuals.label}：${item.title}，${item.reason}，${_formatDue(item.dueAt, referenceDate)}',
       child: DecoratedBox(
         key: ValueKey('today-decision-row-${item.id}'),
         decoration: BoxDecoration(
@@ -463,7 +469,11 @@ class _DecisionRow extends StatelessWidget {
                   onInspect: onInspect,
                   child: KeyedSubtree(
                     key: ValueKey('today-decision-details-${item.id}'),
-                    child: _DecisionDetails(item: item, visuals: visuals),
+                    child: _DecisionDetails(
+                      item: item,
+                      visuals: visuals,
+                      referenceDate: referenceDate,
+                    ),
                   ),
                 );
                 final actions = KeyedSubtree(
@@ -538,9 +548,13 @@ class _DecisionDetailTapTarget extends StatelessWidget {
 }
 
 class _AttentionDetailSheet extends StatelessWidget {
-  const _AttentionDetailSheet({required this.item});
+  const _AttentionDetailSheet({
+    required this.item,
+    required this.referenceDate,
+  });
 
   final AttentionItem item;
+  final DateTime referenceDate;
 
   @override
   Widget build(BuildContext context) {
@@ -603,7 +617,7 @@ class _AttentionDetailSheet extends StatelessWidget {
                   semanticLabel: '状态：${visuals.label}',
                 ),
                 Text(
-                  _formatDue(item.dueAt),
+                  _formatDue(item.dueAt, referenceDate),
                   style: theme.textTheme.labelLarge?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
@@ -859,10 +873,15 @@ class _OverviewMetric extends StatelessWidget {
 }
 
 class _DecisionDetails extends StatelessWidget {
-  const _DecisionDetails({required this.item, required this.visuals});
+  const _DecisionDetails({
+    required this.item,
+    required this.visuals,
+    required this.referenceDate,
+  });
 
   final AttentionItem item;
   final _AttentionVisuals visuals;
+  final DateTime referenceDate;
 
   @override
   Widget build(BuildContext context) {
@@ -914,7 +933,7 @@ class _DecisionDetails extends StatelessWidget {
                       semanticLabel: '状态：${visuals.label}',
                     ),
                   Text(
-                    _formatDue(item.dueAt),
+                    _formatDue(item.dueAt, referenceDate),
                     style: theme.textTheme.labelMedium?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -1040,7 +1059,12 @@ String _formatDate(DateTime value) {
   return '${value.month}月${value.day}日 ${weekdays[value.weekday - 1]}';
 }
 
-String _formatDue(DateTime value) => '${_formatTime(value)} 已到';
+String _formatDue(DateTime value, DateTime referenceDate) {
+  if (_isSameLocalDate(value, referenceDate)) {
+    return '${_formatTime(value)} 已到';
+  }
+  return '${value.month}月${value.day}日 ${_formatTime(value)} 已到';
+}
 
 DateTime? _nextScheduledAt(
   List<AttentionItem> decisions,
