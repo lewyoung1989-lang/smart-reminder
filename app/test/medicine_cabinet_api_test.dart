@@ -112,10 +112,14 @@ void main() {
       looseUnits: 3,
     );
 
-    expect(jsonDecode(client.requestBodies.single), containsPair('package_unit', '盒'));
-    expect(jsonDecode(client.requestBodies.single), containsPair('units_per_package', 7.0));
-    expect(jsonDecode(client.requestBodies.single), containsPair('unit_name', '片'));
-    expect(jsonDecode(client.requestBodies.single), containsPair('loose_units', 3.0));
+    expect(jsonDecode(client.requestBodies.single),
+        containsPair('package_unit', '盒'));
+    expect(jsonDecode(client.requestBodies.single),
+        containsPair('units_per_package', 7.0));
+    expect(jsonDecode(client.requestBodies.single),
+        containsPair('unit_name', '片'));
+    expect(jsonDecode(client.requestBodies.single),
+        containsPair('loose_units', 3.0));
     expect(batch.totalRemainingUnits, 17);
   });
 

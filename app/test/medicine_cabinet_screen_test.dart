@@ -141,7 +141,7 @@ void main() {
     expect(status.style?.color, isNot(Colors.green));
   });
 
-  testWidgets('uses rounded cabinet tabs and a soft list surface',
+  testWidgets('uses pill cabinet filters and grouped list surfaces',
       (tester) async {
     final repository = _Repository(status: MedicineStatus.expired);
     await tester.pumpWidget(
@@ -153,16 +153,17 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('cabinet-scope-tabs')), findsOneWidget);
-    expect(find.byKey(const ValueKey('cabinet-filter-tabs')), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('medicine-expiry-filter')), findsOneWidget);
     expect(
         find.byType(AppSegmentedControl<MedicineCabinetScope>), findsOneWidget);
 
     final personal = tester.widget<Text>(find.text('个人药箱'));
     final family = tester.widget<Text>(find.text('家庭药箱'));
-    expect(personal.style?.fontSize, 13);
+    expect(personal.style?.fontSize, 16);
     expect(personal.style?.fontWeight, FontWeight.w700);
-    expect(personal.style?.color, const Color(0xFF087759));
-    expect(family.style?.color, const Color(0xFF5C6C65));
+    expect(personal.style?.color, const Color(0xFF176B52));
+    expect(family.style?.color, const Color(0xFF66706B));
     expect(
       tester.getSemantics(find.text('个人药箱')).flagsCollection.isSelected,
       Tristate.isTrue,
@@ -181,7 +182,7 @@ void main() {
     expect(scaffold.backgroundColor, isNull);
     expect(
       Theme.of(tester.element(find.text('药箱'))).scaffoldBackgroundColor,
-      const Color(0xFFF3F7F4),
+      const Color(0xFFF2F6F3),
     );
     expect(find.text('已过期'), findsWidgets);
     expect(
@@ -207,13 +208,9 @@ void main() {
     expect(search.controller?.text, '拜新同');
     expect(find.text('没有符合条件的药品'), findsOneWidget);
     expect(find.text('录入第一款药品'), findsNothing);
-    expect(
-      find.descendant(
-        of: find.byKey(const ValueKey('cabinet-filter-tabs')),
-        matching: find.text('0'),
-      ),
-      findsNWidgets(3),
-    );
+    await tester.tap(find.byKey(const ValueKey('medicine-expiry-filter')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('全部（0）'), findsOneWidget);
   });
 
   testWidgets('shows a medicine cabinet illustration and first-entry action',
@@ -283,8 +280,8 @@ void main() {
 
     expect(find.text('个人药箱'), findsOneWidget);
     expect(find.text('家庭药箱'), findsOneWidget);
-    expect(find.text('全部'), findsOneWidget);
-    expect(find.text('1'), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('medicine-expiry-filter')), findsOneWidget);
     expect(tester.takeException(), isNull);
     expect(
       tester.getSize(find.byKey(const ValueKey('cabinet-scope-tabs'))).height,
@@ -307,7 +304,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final controls = find.byKey(const ValueKey('cabinet-filter-tabs'));
+    final controls = find.byKey(const ValueKey('cabinet-scope-tabs'));
     final firstRow = find.byKey(const ValueKey('medicine-row-medicine-1'));
     final list = find.byKey(const PageStorageKey('cabinet-list-scroll'));
     final scrollable = find.descendant(

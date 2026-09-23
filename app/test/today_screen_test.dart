@@ -44,12 +44,13 @@ void main() {
       );
       expect(find.text('仅用于演示待确认流程，不代表已接入生产能力'), findsNothing);
       expect(find.text('待确认'), findsNothing);
-      expect(find.text('已完成'), findsNothing);
+      expect(find.text('已完成'), findsWidgets);
+      expect(find.byKey(const ValueKey('today-completed-section')),
+          findsOneWidget);
       expect(find.text('即将开始'), findsWidgets);
       expect(find.byKey(const ValueKey('today-overview')), findsOneWidget);
-      expect(find.textContaining('项待决定'), findsOneWidget);
-      expect(find.textContaining('项日程'), findsOneWidget);
-      expect(find.textContaining('下一项'), findsOneWidget);
+      expect(find.text('下一件事'), findsOneWidget);
+      expect(find.text('洗车计划'), findsWidgets);
     });
 
     testWidgets(
@@ -265,16 +266,17 @@ void main() {
 
       expect(find.text('即将开始'), findsOneWidget);
       expect(find.text('现在处理'), findsOneWidget);
-      expect(find.text('完成项目'), findsNothing);
+      expect(find.text('完成项目'), findsOneWidget);
       expect(find.text('跳过项目'), findsNothing);
       expect(find.text('明天项目'), findsNothing);
-      expect(find.text('已完成'), findsNothing);
+      expect(find.text('已完成'), findsOneWidget);
       expect(find.text('已跳过'), findsNothing);
-      expect(find.textContaining('2 项日程'), findsOneWidget);
+      expect(
+          find.byKey(const ValueKey('today-timeline-section')), findsOneWidget);
     });
 
     testWidgets(
-        'shows empty state when only completed and skipped timeline rows exist',
+        'shows completed rows when only completed and skipped timeline rows exist',
         (tester) async {
       final snapshot = TodaySnapshot(
         decisions: const <AttentionItem>[],
@@ -301,8 +303,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('今天没有待处理事项'), findsOneWidget);
-      expect(find.text('完成事项'), findsNothing);
+      expect(find.text('今天没有待处理事项'), findsNothing);
+      expect(find.text('完成事项'), findsOneWidget);
+      expect(find.byKey(const ValueKey('today-completed-section')),
+          findsOneWidget);
       expect(find.text('跳过事项'), findsNothing);
     });
 

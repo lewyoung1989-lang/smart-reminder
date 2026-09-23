@@ -21,13 +21,13 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('工作日出门'), findsOneWidget);
-      expect(find.text('早间用药'), findsNothing);
+      expect(find.text('早间用药'), findsOneWidget);
       expect(find.byType(AppListRow), findsWidgets);
       final rows = tester.widgetList<AppListRow>(find.byType(AppListRow));
       expect(rows.first.position, AppListRowPosition.first);
       expect(rows.last.position, AppListRowPosition.last);
 
-      await tester.tap(find.text('待确认'));
+      await tester.tap(find.text('待确认').first);
       await tester.pumpAndSettle();
 
       expect(find.text('早间用药'), findsOneWidget);
@@ -42,7 +42,7 @@ void main() {
       await tester.tap(find.byTooltip('筛选计划'));
       await tester.pumpAndSettle();
       expect(find.text('计划类型'), findsOneWidget);
-      expect(find.text('运行中'), findsWidgets);
+      expect(find.text('进行中'), findsWidgets);
 
       await tester.tap(find.text('用药'));
       await tester.pumpAndSettle();

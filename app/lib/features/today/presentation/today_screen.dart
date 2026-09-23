@@ -24,6 +24,8 @@ class TodayScreen extends StatefulWidget {
     this.onOpenAttention,
     this.onInspectAttention,
     this.onOpenTimeline,
+    this.onQuickCreate,
+    this.onCaptureMedicine,
     this.bottomContentPadding = 0,
     this.refreshRevision = 0,
     super.key,
@@ -36,6 +38,8 @@ class TodayScreen extends StatefulWidget {
   final AttentionActionCallback? onOpenAttention;
   final AttentionInspectCallback? onInspectAttention;
   final ValueChanged<TimelineItem>? onOpenTimeline;
+  final VoidCallback? onQuickCreate;
+  final Future<void> Function()? onCaptureMedicine;
   final double bottomContentPadding;
   final int refreshRevision;
 
@@ -131,7 +135,7 @@ class _TodayScreenState extends State<TodayScreen> {
                 AppSpacing.lg,
                 AppSpacing.xl,
                 AppSpacing.lg,
-                AppSpacing.xxl,
+                AppSpacing.sm,
               ),
               child: AppPageHeader(
                 eyebrow: _formatDate(now),
@@ -175,26 +179,40 @@ class _TodayScreenState extends State<TodayScreen> {
   List<Widget> _contentSlivers(BuildContext context, {required DateTime now}) {
     final snapshot = _snapshot;
     if (snapshot == null) {
-      if (_isLoading) return _stateSlivers(const AppContentState.loading());
+      if (_isLoading) {
+        return [
+          ..._quickActionSlivers(),
+          ..._stateSlivers(const AppContentState.loading())
+        ];
+      }
       if (_error is FeatureUnavailableException) {
-        return _stateSlivers(
-          const AppContentState.unavailable(
-            title: '今天暂时不可用',
-            message: '请稍后再试',
-          ),
-        );
+        return [
+          ..._quickActionSlivers(),
+          ..._stateSlivers(
+            const AppContentState.unavailable(
+              title: '今天暂时不可用',
+              message: '请稍后再试',
+            ),
+          )
+        ];
       }
       if (_error != null) {
-        return _stateSlivers(
-          AppContentState.error(
-            title: '今天的内容加载失败',
-            message: '请检查网络后重试',
-            actionLabel: '重试',
-            onAction: _load,
-          ),
-        );
+        return [
+          ..._quickActionSlivers(),
+          ..._stateSlivers(
+            AppContentState.error(
+              title: '今天的内容加载失败',
+              message: '请检查网络后重试',
+              actionLabel: '重试',
+              onAction: _load,
+            ),
+          )
+        ];
       }
-      return _stateSlivers(const AppContentState.loading());
+      return [
+        ..._quickActionSlivers(),
+        ..._stateSlivers(const AppContentState.loading())
+      ];
     }
 
     final slivers = <Widget>[];
@@ -218,7 +236,12 @@ class _TodayScreenState extends State<TodayScreen> {
     }
 
     final activeTimeline = _activeTimelineItems(snapshot.timeline, now: now);
-    if (snapshot.decisions.isEmpty && activeTimeline.isEmpty) {
+    final completedTimeline =
+        _completedTimelineItems(snapshot.timeline, now: now);
+    if (snapshot.decisions.isEmpty &&
+        activeTimeline.isEmpty &&
+        completedTimeline.isEmpty) {
+      slivers.addAll(_quickActionSlivers());
       slivers.addAll(
         _stateSlivers(
           const AppContentState.empty(
@@ -230,23 +253,37 @@ class _TodayScreenState extends State<TodayScreen> {
       return slivers;
     }
 
+    final decisions = List<AttentionItem>.of(snapshot.decisions)
+      ..sort((left, right) => _compareDecisionTimes(left, right, now));
+    final nextDecision = decisions.firstOrNull;
+    final nextTimeline = activeTimeline.firstOrNull;
+    final showDecisionAsNext = nextDecision != null &&
+        (nextTimeline == null ||
+            !nextDecision.dueAt.isAfter(nextTimeline.scheduledAt));
+
     slivers.add(
       SliverPadding(
         padding: const EdgeInsets.fromLTRB(
           AppSpacing.lg,
           0,
           AppSpacing.lg,
-          AppSpacing.xxl,
+          AppSpacing.lg,
         ),
         sliver: SliverToBoxAdapter(
-          child: _TodayOverview(snapshot: snapshot, timeline: activeTimeline),
+          child: _NextThingCard(
+            decision: showDecisionAsNext ? nextDecision : null,
+            timeline: showDecisionAsNext ? null : nextTimeline,
+            referenceDate: now,
+            onInspect: _inspectAttention,
+            onOpenTimeline: widget.onOpenTimeline,
+          ),
         ),
       ),
     );
 
+    slivers.addAll(_quickActionSlivers());
+
     if (snapshot.decisions.isNotEmpty) {
-      final decisions = List<AttentionItem>.of(snapshot.decisions)
-        ..sort((left, right) => _compareDecisionTimes(left, right, now));
       slivers.add(
         _sectionSliver(
           key: const ValueKey('today-decisions-section'),
@@ -273,7 +310,7 @@ class _TodayScreenState extends State<TodayScreen> {
       slivers.add(
         _sectionSliver(
           key: const ValueKey('today-timeline-section'),
-          title: '今天稍后',
+          title: '接下来',
           child: Column(
             children: <Widget>[
               for (var index = 0; index < activeTimeline.length; index += 1)
@@ -288,7 +325,48 @@ class _TodayScreenState extends State<TodayScreen> {
       );
     }
 
+    if (completedTimeline.isNotEmpty) {
+      slivers.add(
+        _sectionSliver(
+          key: const ValueKey('today-completed-section'),
+          title: '已完成 · ${completedTimeline.length} 项',
+          child: Column(
+            children: <Widget>[
+              for (var index = 0; index < completedTimeline.length; index += 1)
+                _TimelineRow(
+                  item: completedTimeline[index],
+                  position: _listRowPosition(index, completedTimeline.length),
+                  onOpen: widget.onOpenTimeline,
+                ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return slivers;
+  }
+
+  List<Widget> _quickActionSlivers() {
+    if (widget.onQuickCreate == null && widget.onCaptureMedicine == null) {
+      return const <Widget>[];
+    }
+    return <Widget>[
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          0,
+          AppSpacing.lg,
+          AppSpacing.xl,
+        ),
+        sliver: SliverToBoxAdapter(
+          child: _QuickActions(
+            onQuickCreate: widget.onQuickCreate,
+            onCaptureMedicine: widget.onCaptureMedicine,
+          ),
+        ),
+      ),
+    ];
   }
 
   List<Widget> _stateSlivers(Widget state) {
@@ -318,7 +396,7 @@ class _TodayScreenState extends State<TodayScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Text(title, style: Theme.of(context).textTheme.titleLarge),
+              Text(title, style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: AppSpacing.md),
               _SoftSectionSurface(child: child),
             ],
@@ -349,6 +427,19 @@ class _TodayScreenState extends State<TodayScreen> {
     )..sort((left, right) => left.scheduledAt.compareTo(right.scheduledAt));
   }
 
+  static List<TimelineItem> _completedTimelineItems(
+    List<TimelineItem> timeline, {
+    required DateTime now,
+  }) {
+    return List<TimelineItem>.of(
+      timeline.where(
+        (item) =>
+            _isSameLocalDate(item.scheduledAt, now) &&
+            item.status == TimelineStatus.completed,
+      ),
+    )..sort((left, right) => right.scheduledAt.compareTo(left.scheduledAt));
+  }
+
   static int _compareDecisionTimes(
     AttentionItem left,
     AttentionItem right,
@@ -375,13 +466,6 @@ class _SoftSectionSurface extends StatelessWidget {
       decoration: BoxDecoration(
         color: scheme.surface,
         borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
-        boxShadow: [
-          BoxShadow(
-            color: scheme.shadow.withValues(alpha: 0.05),
-            blurRadius: 18,
-            offset: const Offset(0, 6),
-          ),
-        ],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
@@ -765,70 +849,131 @@ class _SnoozeOption extends StatelessWidget {
   }
 }
 
-class _TodayOverview extends StatelessWidget {
-  const _TodayOverview({required this.snapshot, required this.timeline});
+class _NextThingCard extends StatelessWidget {
+  const _NextThingCard({
+    required this.decision,
+    required this.timeline,
+    required this.referenceDate,
+    this.onInspect,
+    this.onOpenTimeline,
+  });
 
-  final TodaySnapshot snapshot;
-  final List<TimelineItem> timeline;
+  final AttentionItem? decision;
+  final TimelineItem? timeline;
+  final DateTime referenceDate;
+  final AttentionInspectCallback? onInspect;
+  final ValueChanged<TimelineItem>? onOpenTimeline;
 
   @override
   Widget build(BuildContext context) {
-    final nextAt = _nextScheduledAt(snapshot.decisions, timeline);
-    final items =
-        <({String label, String value, bool emphasized, bool labelFirst})>[
-      (
-        label: '项待决定',
-        value: '${snapshot.decisions.length}',
-        emphasized: snapshot.decisions.isNotEmpty,
-        labelFirst: false,
-      ),
-      (
-        label: '项日程',
-        value: '${timeline.length}',
-        emphasized: false,
-        labelFirst: false,
-      ),
-      (
-        label: '下一项',
-        value: nextAt == null ? '暂无' : _formatTime(nextAt),
-        emphasized: false,
-        labelFirst: true,
-      ),
-    ];
-    final accessibilityText = items
-        .map((item) => item.labelFirst
-            ? '${item.label}${item.value}'
-            : '${item.value}${item.label}')
-        .join('，');
+    final itemTitle = decision?.title ?? timeline?.title ?? '暂无安排';
+    final itemSubtitle = decision?.reason ?? timeline?.subtitle ?? '今天可以从容一点';
+    final scheduledAt = decision?.dueAt ?? timeline?.scheduledAt;
+    final semantic = _semanticColors(context);
+    final onTap = decision != null
+        ? (onInspect == null ? null : () => onInspect!(decision!))
+        : timeline?.actionTarget == null || onOpenTimeline == null
+            ? null
+            : () => onOpenTimeline!(timeline!);
 
     return Semantics(
       key: const ValueKey('today-overview'),
       container: true,
-      label: '今日概览：$accessibilityText',
+      label: scheduledAt == null
+          ? '下一件事：$itemTitle，$itemSubtitle'
+          : '下一件事：$itemTitle，${_formatDue(scheduledAt, referenceDate)}，$itemSubtitle',
       child: ExcludeSemantics(
-        child: Container(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
-            boxShadow: [
-              BoxShadow(
-                color: Theme.of(context)
-                    .colorScheme
-                    .shadow
-                    .withValues(alpha: 0.05),
-                blurRadius: 18,
-                offset: const Offset(0, 6),
+        child: Material(
+          color: semantic.heroBackground,
+          borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.xl),
+              child: Stack(
+                children: <Widget>[
+                  Positioned(
+                    right: -58,
+                    top: -48,
+                    child: IgnorePointer(
+                      child: Container(
+                        width: 168,
+                        height: 168,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color:
+                                semantic.heroForeground.withValues(alpha: 0.12),
+                          ),
+                        ),
+                        child: Center(
+                          child: Container(
+                            width: 128,
+                            height: 128,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: semantic.heroForeground
+                                    .withValues(alpha: 0.06),
+                                width: 16,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        '下一件事',
+                        style:
+                            Theme.of(context).textTheme.labelMedium?.copyWith(
+                                  color: semantic.heroForeground
+                                      .withValues(alpha: 0.76),
+                                ),
+                      ),
+                      if (scheduledAt != null) ...[
+                        const SizedBox(height: AppSpacing.xs),
+                        Text(
+                          _formatTime(scheduledAt),
+                          style:
+                              Theme.of(context).textTheme.labelMedium?.copyWith(
+                                    color: semantic.heroForeground
+                                        .withValues(alpha: 0.76),
+                                  ),
+                        ),
+                      ],
+                      const SizedBox(height: AppSpacing.sm),
+                      RichText(
+                        textScaler: MediaQuery.textScalerOf(context),
+                        text: TextSpan(
+                          text: itemTitle,
+                          style: Theme.of(context)
+                              .textTheme
+                              .headlineSmall
+                              ?.copyWith(color: semantic.heroForeground),
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      RichText(
+                        textScaler: MediaQuery.textScalerOf(context),
+                        text: TextSpan(
+                          text: itemSubtitle,
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: semantic.heroForeground
+                                        .withValues(alpha: 0.78),
+                                  ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-            ],
-          ),
-          child: Wrap(
-            spacing: AppSpacing.xxl,
-            runSpacing: AppSpacing.sm,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              for (final item in items) _OverviewMetric(item: item),
-            ],
+            ),
           ),
         ),
       ),
@@ -836,38 +981,65 @@ class _TodayOverview extends StatelessWidget {
   }
 }
 
-class _OverviewMetric extends StatelessWidget {
-  const _OverviewMetric({required this.item});
+class _QuickActions extends StatelessWidget {
+  const _QuickActions({this.onQuickCreate, this.onCaptureMedicine});
+  final VoidCallback? onQuickCreate;
+  final Future<void> Function()? onCaptureMedicine;
 
-  final ({
-    String label,
-    String value,
-    bool emphasized,
-    bool labelFirst,
-  }) item;
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: <Widget>[
+        if (onQuickCreate != null)
+          Expanded(
+              child: _QuickAction(
+                  key: const Key('today-quick-create-action'),
+                  icon: LucideIcons.sparkles,
+                  label: '快速创建',
+                  onTap: onQuickCreate!)),
+        if (onQuickCreate != null && onCaptureMedicine != null)
+          const SizedBox(width: AppSpacing.md),
+        if (onCaptureMedicine != null)
+          Expanded(
+              child: _QuickAction(
+                  icon: LucideIcons.camera,
+                  label: '拍照录入',
+                  onTap: () => onCaptureMedicine!())),
+      ],
+    );
+  }
+}
+
+class _QuickAction extends StatelessWidget {
+  const _QuickAction(
+      {super.key,
+      required this.icon,
+      required this.label,
+      required this.onTap});
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final foreground = item.emphasized
-        ? theme.colorScheme.primary
-        : theme.colorScheme.onSurfaceVariant;
-    final value = TextSpan(
-      text: item.value,
-      style: theme.textTheme.titleMedium?.copyWith(color: foreground),
-    );
-    final label = TextSpan(
-      text: item.label,
-      style: theme.textTheme.bodySmall?.copyWith(color: foreground),
-    );
-    return Text.rich(
-      TextSpan(
-        children: item.labelFirst
-            ? [label, const TextSpan(text: ' '), value]
-            : [value, const TextSpan(text: ' '), label],
+    return SizedBox(
+      height: 52,
+      child: FilledButton.tonalIcon(
+        key: key,
+        onPressed: onTap,
+        style: FilledButton.styleFrom(
+          backgroundColor: theme.colorScheme.surface,
+          foregroundColor: theme.colorScheme.onSurface,
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+            side: BorderSide(color: theme.colorScheme.outlineVariant),
+          ),
+        ),
+        icon: Icon(icon, color: theme.colorScheme.primary),
+        label: Text(label),
       ),
-      maxLines: 2,
-      overflow: TextOverflow.visible,
     );
   }
 }
@@ -1064,17 +1236,6 @@ String _formatDue(DateTime value, DateTime referenceDate) {
     return '${_formatTime(value)} 已到';
   }
   return '${value.month}月${value.day}日 ${_formatTime(value)} 已到';
-}
-
-DateTime? _nextScheduledAt(
-  List<AttentionItem> decisions,
-  List<TimelineItem> timeline,
-) {
-  final candidates = <DateTime>[
-    for (final item in decisions) item.dueAt,
-    for (final item in timeline) item.scheduledAt,
-  ]..sort();
-  return candidates.isEmpty ? null : candidates.first;
 }
 
 bool _isSameLocalDate(DateTime left, DateTime right) {

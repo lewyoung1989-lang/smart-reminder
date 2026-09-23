@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../app/theme/app_spacing.dart';
-import 'app_status_tag.dart';
 
 enum AppListRowPosition { single, first, middle, last }
 
@@ -32,16 +31,6 @@ class AppListRow extends StatelessWidget {
     final scheme = theme.colorScheme;
     final showDivider = position != AppListRowPosition.single &&
         position != AppListRowPosition.last;
-    final borderRadius = switch (position) {
-      AppListRowPosition.single => BorderRadius.circular(AppSpacing.radiusLg),
-      AppListRowPosition.first => const BorderRadius.vertical(
-          top: Radius.circular(AppSpacing.radiusLg),
-        ),
-      AppListRowPosition.middle => BorderRadius.zero,
-      AppListRowPosition.last => const BorderRadius.vertical(
-          bottom: Radius.circular(AppSpacing.radiusLg),
-        ),
-    };
     final semanticsLabel = [
       title,
       subtitle,
@@ -55,98 +44,88 @@ class AppListRow extends StatelessWidget {
       label: semanticsLabel,
       onTap: onTap,
       excludeSemantics: true,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: scheme.surface,
-          borderRadius: borderRadius,
-        ),
-        child: Material(
-          color: Colors.transparent,
-          borderRadius: borderRadius,
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            borderRadius: borderRadius,
-            onTap: onTap,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 64),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.lg,
-                  AppSpacing.md,
-                  AppSpacing.lg,
-                  0,
-                ),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final textScaler = MediaQuery.textScalerOf(context);
-                    final useCompactLayout =
-                        constraints.maxWidth < AppSpacing.breakpointMedium ||
-                            textScaler.scale(14) > 20;
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 64),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.md,
+                AppSpacing.md,
+                AppSpacing.md,
+                0,
+              ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final textScaler = MediaQuery.textScalerOf(context);
+                  final useCompactLayout =
+                      constraints.maxWidth < AppSpacing.breakpointMedium ||
+                          textScaler.scale(14) > 20;
 
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: AppSpacing.xs),
+                        child: SizedBox(
+                          width: 28,
+                          height: 32,
+                          child: Icon(
+                            icon,
+                            size: 21,
+                            color: scheme.primary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.md),
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.only(
+                            bottom: AppSpacing.md,
+                          ),
+                          decoration: BoxDecoration(
+                            border: showDivider
+                                ? Border(
+                                    bottom: BorderSide(
+                                      color: scheme.outlineVariant,
+                                      width: 0.5,
+                                    ),
+                                  )
+                                : null,
+                          ),
+                          child: _RowText(
+                            title: title,
+                            subtitle: subtitle,
+                            compactStatus: useCompactLayout ? statusText : null,
+                            statusColor: statusColor,
+                          ),
+                        ),
+                      ),
+                      if (!useCompactLayout && statusText != null) ...[
+                        const SizedBox(width: AppSpacing.md),
                         Padding(
                           padding: const EdgeInsets.only(top: AppSpacing.xs),
-                          child: SizedBox.square(
-                            dimension: 36,
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(
-                                color: scheme.primary.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(
-                                  AppSpacing.radiusMd,
-                                ),
-                              ),
-                              child: Icon(
-                                icon,
-                                size: 20,
-                                color: scheme.primary,
-                              ),
-                            ),
+                          child: _StatusLabel(
+                            text: statusText!,
+                            color: statusColor ?? scheme.onSurfaceVariant,
                           ),
                         ),
-                        const SizedBox(width: AppSpacing.md),
-                        Expanded(
-                          child: Container(
-                            padding:
-                                const EdgeInsets.only(bottom: AppSpacing.md),
-                            decoration: BoxDecoration(
-                              border: showDivider
-                                  ? Border(
-                                      bottom: BorderSide(
-                                        color: scheme.outlineVariant,
-                                        width: 0.5,
-                                      ),
-                                    )
-                                  : null,
-                            ),
-                            child: _RowText(
-                              title: title,
-                              subtitle: subtitle,
-                              compactStatus:
-                                  useCompactLayout ? statusText : null,
-                              statusColor: statusColor,
-                            ),
-                          ),
-                        ),
-                        if (!useCompactLayout && statusText != null) ...[
-                          const SizedBox(width: AppSpacing.lg),
-                          AppStatusTag(text: statusText!, color: statusColor),
-                        ],
-                        if (onTap != null) ...[
-                          const SizedBox(width: AppSpacing.sm),
-                          ExcludeSemantics(
-                            child: Icon(
-                              LucideIcons.chevronRight,
-                              size: 18,
-                              color: scheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
                       ],
-                    );
-                  },
-                ),
+                      if (onTap != null) ...[
+                        const SizedBox(width: AppSpacing.xs),
+                        ExcludeSemantics(
+                          child: Icon(
+                            LucideIcons.chevronRight,
+                            size: 18,
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ],
+                  );
+                },
               ),
             ),
           ),
@@ -181,10 +160,26 @@ class _RowText extends StatelessWidget {
         const SizedBox(height: AppSpacing.xs),
         Text(subtitle, style: theme.textTheme.bodySmall),
         if (compactStatus != null) ...[
-          const SizedBox(height: AppSpacing.sm),
-          AppStatusTag(text: compactStatus!, color: statusColor),
+          const SizedBox(height: AppSpacing.xs),
+          _StatusLabel(
+            text: compactStatus!,
+            color: statusColor ?? theme.colorScheme.onSurfaceVariant,
+          ),
         ],
       ],
     );
   }
+}
+
+class _StatusLabel extends StatelessWidget {
+  const _StatusLabel({required this.text, required this.color});
+
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Text(
+        text,
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(color: color),
+      );
 }

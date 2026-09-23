@@ -484,12 +484,21 @@ class _AppShellState extends State<AppShell> {
         key: const PageStorageKey<String>('today-tab'),
         child: TodayScreen(
           repository: widget.todayRepository,
+          bottomContentPadding: 104,
           refreshRevision: _todayRefreshRevision,
           onOpenReminderManager: widget.onOpenReminderManager,
           onOpenSettings: _openSettings,
           onOpenAttention: _handleAttentionAction,
           onOpenTimeline: (item) => _openTimelineItem(item),
-          bottomContentPadding: compact && canQuickCreate ? 72 : 0,
+          onQuickCreate: canQuickCreate ? _openQuickCreate : null,
+          onCaptureMedicine: widget.onCaptureMedicine == null
+              ? null
+              : () async {
+                  final created = await widget.onCaptureMedicine!(
+                    MedicineCabinetScope.personal,
+                  );
+                  if (created) _refreshMedicine();
+                },
         ),
       ),
       KeyedSubtree(
@@ -498,6 +507,7 @@ class _AppShellState extends State<AppShell> {
           repository: widget.planRepository,
           onOpenSettings: _openSettings,
           notificationScheduler: widget.planNotificationScheduler,
+          onQuickCreate: canQuickCreate ? () => _openQuickCreate() : null,
           refreshRevision: _planRefreshRevision,
           onEditPlan: (detail) => _openQuickCreate(
             initialText: detail.sourceText,
@@ -526,20 +536,36 @@ class _AppShellState extends State<AppShell> {
       ),
     ];
     final content = IndexedStack(index: _selectedIndex, children: tabs);
-    final showQuickCreate = _selectedIndex == 0;
-    final quickCreate = _QuickCreateBar(
-      enabled: canQuickCreate,
-      onPressed: _openQuickCreate,
-    );
-
     if (compact) {
       return Scaffold(
         body: content,
-        floatingActionButton: showQuickCreate ? quickCreate : null,
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: _selectedIndex,
-          onDestinationSelected: _selectDestination,
-          destinations: _destinations,
+        floatingActionButton: canQuickCreate
+            ? FloatingActionButton(
+                key: const ValueKey('quick-create-action'),
+                tooltip: '快速创建提醒',
+                onPressed: () => _openQuickCreate(),
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                elevation: 3,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: const Icon(LucideIcons.plus, size: 24),
+              )
+            : null,
+        floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+        bottomNavigationBar: DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border(
+              top: BorderSide(
+                  color: Theme.of(context).colorScheme.outlineVariant),
+            ),
+          ),
+          child: NavigationBar(
+            selectedIndex: _selectedIndex,
+            onDestinationSelected: _selectDestination,
+            destinations: _destinations,
+          ),
         ),
       );
     }
@@ -558,11 +584,6 @@ class _AppShellState extends State<AppShell> {
                     destinations: _railDestinations,
                   ),
                 ),
-                if (showQuickCreate)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: AppSpacing.lg),
-                    child: quickCreate,
-                  ),
               ],
             ),
           ),
@@ -570,6 +591,20 @@ class _AppShellState extends State<AppShell> {
           Expanded(child: content),
         ],
       ),
+      floatingActionButton: canQuickCreate
+          ? FloatingActionButton(
+              key: const ValueKey('quick-create-action'),
+              tooltip: '快速创建提醒',
+              onPressed: () => _openQuickCreate(),
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              foregroundColor: Theme.of(context).colorScheme.onPrimary,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: const Icon(LucideIcons.plus, size: 24),
+            )
+          : null,
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
   }
 
@@ -582,7 +617,7 @@ class _AppShellState extends State<AppShell> {
     NavigationDestination(
       icon: Icon(LucideIcons.repeat2),
       selectedIcon: _SelectedNavigationIcon(icon: LucideIcons.repeat2),
-      label: '周期',
+      label: '计划',
     ),
     NavigationDestination(
       icon: Icon(LucideIcons.pill),
@@ -600,7 +635,7 @@ class _AppShellState extends State<AppShell> {
     NavigationRailDestination(
       icon: Icon(LucideIcons.repeat2),
       selectedIcon: _SelectedNavigationIcon(icon: LucideIcons.repeat2),
-      label: Text('周期'),
+      label: Text('计划'),
     ),
     NavigationRailDestination(
       icon: Icon(LucideIcons.pill),
@@ -633,69 +668,6 @@ class _SelectedNavigationIcon extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _QuickCreateBar extends StatelessWidget {
-  const _QuickCreateBar({
-    required this.enabled,
-    required this.onPressed,
-  });
-
-  final bool enabled;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final colors = enabled
-        ? <Color>[scheme.primary, const Color(0xFF35A37C)]
-        : <Color>[
-            scheme.onSurface.withValues(alpha: 0.12),
-            scheme.onSurface.withValues(alpha: 0.12),
-          ];
-    return Semantics(
-      key: const Key('quick-create-bar'),
-      label: '创建提醒',
-      button: true,
-      enabled: enabled,
-      excludeSemantics: true,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: colors,
-          ),
-          boxShadow: enabled
-              ? [
-                  BoxShadow(
-                    color: scheme.primary.withValues(alpha: 0.24),
-                    blurRadius: 18,
-                    offset: const Offset(0, 8),
-                  ),
-                ]
-              : null,
-        ),
-        child: FloatingActionButton(
-          key: const Key('quick-create-action'),
-          tooltip: '创建提醒',
-          onPressed: enabled ? onPressed : null,
-          backgroundColor: Colors.transparent,
-          foregroundColor: enabled
-              ? scheme.onPrimary
-              : scheme.onSurface.withValues(alpha: 0.38),
-          elevation: 0,
-          focusElevation: 0,
-          hoverElevation: 0,
-          highlightElevation: 0,
-          disabledElevation: 0,
-          shape: const CircleBorder(),
-          child: const Icon(LucideIcons.plus),
-        ),
       ),
     );
   }

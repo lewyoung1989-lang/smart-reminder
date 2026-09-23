@@ -10,6 +10,8 @@ class AppSegment<T> {
   final int? count;
 }
 
+enum AppSegmentedControlStyle { capsules, tabs, compactTabs }
+
 class AppSegmentedControl<T> extends StatelessWidget {
   static const double _controlHeight = 44;
 
@@ -18,121 +20,132 @@ class AppSegmentedControl<T> extends StatelessWidget {
     required this.value,
     required List<AppSegment<T>> options,
     required this.onChanged,
+    this.style = AppSegmentedControlStyle.capsules,
   }) : options = _validatedOptions(value, options);
 
   final T value;
   final List<AppSegment<T>> options;
   final ValueChanged<T> onChanged;
+  final AppSegmentedControlStyle style;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final textScaler = MediaQuery.textScalerOf(context);
-    final labelStyle = theme.textTheme.labelMedium?.copyWith(
+    final isCapsule = style == AppSegmentedControlStyle.capsules;
+    final labelBase = switch (style) {
+      AppSegmentedControlStyle.capsules => theme.textTheme.labelMedium,
+      AppSegmentedControlStyle.tabs => theme.textTheme.titleSmall,
+      AppSegmentedControlStyle.compactTabs => theme.textTheme.labelLarge,
+    };
+    final labelStyle = labelBase?.copyWith(
       fontWeight: FontWeight.w600,
     );
-    final controlHeight = textScaler.scale(14) + 22 < _controlHeight
+    final scaledLabelHeight = textScaler.scale(labelBase?.fontSize ?? 14);
+    final controlHeight = scaledLabelHeight + 22 < _controlHeight
         ? _controlHeight
-        : textScaler.scale(14) + 22;
+        : scaledLabelHeight + 22;
     final disableAnimations = MediaQuery.disableAnimationsOf(context);
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-      ),
-      child: SizedBox(
-        height: controlHeight,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final minimumOptionWidth = constraints.hasBoundedWidth
-                ? constraints.maxWidth / options.length
-                : 112.0;
-            var minimumLabelWidth = 0.0;
-            for (final option in options) {
-              final painter = TextPainter(
-                text: TextSpan(
-                  text: option.count == null
-                      ? option.label
-                      : '${option.label} ${option.count}',
-                  style: labelStyle,
-                ),
-                textDirection: Directionality.of(context),
-                textScaler: textScaler,
-                maxLines: 1,
-              )..layout();
-              if (painter.width > minimumLabelWidth) {
-                minimumLabelWidth = painter.width;
-              }
+    return SizedBox(
+      height: isCapsule ? controlHeight : controlHeight + 2,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final minimumOptionWidth = constraints.hasBoundedWidth
+              ? constraints.maxWidth / options.length
+              : 112.0;
+          var minimumLabelWidth = 0.0;
+          for (final option in options) {
+            final painter = TextPainter(
+              text: TextSpan(
+                text: option.count == null
+                    ? option.label
+                    : '${option.label} ${option.count}',
+                style: labelStyle,
+              ),
+              textDirection: Directionality.of(context),
+              textScaler: textScaler,
+              maxLines: 1,
+            )..layout();
+            if (painter.width > minimumLabelWidth) {
+              minimumLabelWidth = painter.width;
             }
+          }
 
-            final selectedIndex =
-                options.indexWhere((option) => option.value == value);
-            final contentOptionWidth = minimumLabelWidth + 24;
-            final optionWidth = minimumOptionWidth > contentOptionWidth
-                ? minimumOptionWidth
-                : contentOptionWidth;
-            final contentWidth = optionWidth * options.length;
-            return ClipRRect(
-              borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                physics: const ClampingScrollPhysics(),
-                child: SizedBox(
-                  width: contentWidth,
-                  height: controlHeight,
-                  child: Stack(
-                    children: [
-                      AnimatedPositioned(
-                        key: const ValueKey(
-                          'app-segmented-control-indicator',
-                        ),
-                        duration: disableAnimations
-                            ? Duration.zero
-                            : const Duration(milliseconds: 180),
-                        curve: Curves.easeOutCubic,
-                        left: selectedIndex * optionWidth + 3,
-                        top: 3,
-                        width: optionWidth - 6,
-                        bottom: 3,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.surface,
-                            borderRadius: BorderRadius.circular(
-                              AppSpacing.radiusSm,
+          final selectedIndex =
+              options.indexWhere((option) => option.value == value);
+          final contentOptionWidth = minimumLabelWidth + 24;
+          final optionWidth = minimumOptionWidth > contentOptionWidth
+              ? minimumOptionWidth
+              : contentOptionWidth;
+          final contentWidth = optionWidth * options.length;
+          return SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const ClampingScrollPhysics(),
+            child: SizedBox(
+              width: contentWidth,
+              height: controlHeight,
+              child: Stack(
+                children: [
+                  AnimatedPositioned(
+                    key: const ValueKey(
+                      'app-segmented-control-indicator',
+                    ),
+                    duration: disableAnimations
+                        ? Duration.zero
+                        : const Duration(milliseconds: 180),
+                    curve: Curves.easeOutCubic,
+                    left: isCapsule
+                        ? selectedIndex * optionWidth + 3
+                        : selectedIndex * optionWidth,
+                    top: isCapsule ? 4 : null,
+                    width: isCapsule ? optionWidth - 6 : optionWidth,
+                    bottom: isCapsule ? 4 : 0,
+                    height: isCapsule ? null : 2,
+                    child: isCapsule
+                        ? DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.primary,
+                              borderRadius: BorderRadius.circular(999),
                             ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: theme.colorScheme.shadow
-                                    .withValues(alpha: 0.08),
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
+                          )
+                        : Align(
+                            alignment: Alignment.bottomCenter,
+                            child: SizedBox(
+                              width:
+                                  style == AppSegmentedControlStyle.compactTabs
+                                      ? 28
+                                      : 36,
+                              height: 2,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.primary,
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
                               ),
-                            ],
+                            ),
+                          ),
+                  ),
+                  Row(
+                    children: [
+                      for (final option in options)
+                        SizedBox(
+                          width: optionWidth,
+                          height: controlHeight,
+                          child: _SegmentOption<T>(
+                            option: option,
+                            selected: option.value == value,
+                            style: style,
+                            onChanged: onChanged,
                           ),
                         ),
-                      ),
-                      Row(
-                        children: [
-                          for (final option in options)
-                            SizedBox(
-                              width: optionWidth,
-                              height: controlHeight,
-                              child: _SegmentOption<T>(
-                                option: option,
-                                selected: option.value == value,
-                                onChanged: onChanged,
-                              ),
-                            ),
-                        ],
-                      ),
                     ],
                   ),
-                ),
+                ],
               ),
-            );
-          },
-        ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -178,18 +191,26 @@ class _SegmentOption<T> extends StatelessWidget {
   const _SegmentOption({
     required this.option,
     required this.selected,
+    required this.style,
     required this.onChanged,
   });
 
   final AppSegment<T> option;
   final bool selected;
+  final AppSegmentedControlStyle style;
   final ValueChanged<T> onChanged;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isCapsule = style == AppSegmentedControlStyle.capsules;
+    final labelStyle = switch (style) {
+      AppSegmentedControlStyle.capsules => theme.textTheme.labelMedium,
+      AppSegmentedControlStyle.tabs => theme.textTheme.titleSmall,
+      AppSegmentedControlStyle.compactTabs => theme.textTheme.labelLarge,
+    };
     final foreground = selected
-        ? theme.colorScheme.primary
+        ? (isCapsule ? theme.colorScheme.onPrimary : theme.colorScheme.primary)
         : theme.colorScheme.onSurfaceVariant;
 
     return Semantics(
@@ -198,7 +219,7 @@ class _SegmentOption<T> extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+          borderRadius: BorderRadius.circular(isCapsule ? 999 : 8),
           onTap: () => onChanged(option.value),
           child: Center(
             child: Row(
@@ -207,9 +228,11 @@ class _SegmentOption<T> extends StatelessWidget {
                 Text(
                   option.label,
                   softWrap: false,
-                  style: theme.textTheme.labelMedium?.copyWith(
+                  style: labelStyle?.copyWith(
                     color: foreground,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    fontWeight: selected
+                        ? (isCapsule ? FontWeight.w600 : FontWeight.w700)
+                        : FontWeight.w500,
                   ),
                 ),
                 if (option.count != null) ...[
@@ -217,9 +240,11 @@ class _SegmentOption<T> extends StatelessWidget {
                   Text(
                     '${option.count}',
                     softWrap: false,
-                    style: theme.textTheme.labelMedium?.copyWith(
+                    style: labelStyle?.copyWith(
                       color: foreground,
-                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                      fontWeight: selected
+                          ? (isCapsule ? FontWeight.w600 : FontWeight.w700)
+                          : FontWeight.w500,
                     ),
                   ),
                 ],

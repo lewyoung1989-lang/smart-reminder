@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../app/theme/app_spacing.dart';
 import '../domain/quick_create_draft.dart';
 import '../domain/quick_create_result.dart';
 import '../domain/voice_input_controller.dart';
@@ -187,7 +188,7 @@ class _QuickCreateSheetState extends State<QuickCreateSheet> {
         top: false,
         child: Material(
           key: const Key('quick-create-panel'),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
           clipBehavior: Clip.antiAlias,
           child: LayoutBuilder(
             builder: (context, constraints) => SingleChildScrollView(
@@ -195,7 +196,12 @@ class _QuickCreateSheetState extends State<QuickCreateSheet> {
               child: ConstrainedBox(
                 constraints: BoxConstraints(minWidth: constraints.maxWidth),
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg,
+                    AppSpacing.md,
+                    AppSpacing.lg,
+                    AppSpacing.lg,
+                  ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -205,7 +211,7 @@ class _QuickCreateSheetState extends State<QuickCreateSheet> {
                           Expanded(
                             child: Text(
                               '快速创建',
-                              style: Theme.of(context).textTheme.titleMedium,
+                              style: Theme.of(context).textTheme.titleLarge,
                             ),
                           ),
                           SizedBox(
@@ -217,23 +223,31 @@ class _QuickCreateSheetState extends State<QuickCreateSheet> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: AppSpacing.sm),
                       TextField(
                         key: const Key('quick-create-input'),
                         controller: _textController,
-                        minLines: 3,
-                        maxLines: 5,
+                        minLines: 2,
+                        maxLines: 4,
                         maxLength: 500,
                         enabled: !_isParsing,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           hintText: '例如：1分钟后提醒我喝水',
                           alignLabelWithHint: true,
-                          border: OutlineInputBorder(),
+                          filled: true,
+                          fillColor:
+                              Theme.of(context).colorScheme.surfaceContainer,
+                          contentPadding: const EdgeInsets.all(AppSpacing.md),
+                          border: OutlineInputBorder(
+                            borderRadius:
+                                BorderRadius.circular(AppSpacing.radiusMd),
+                            borderSide: BorderSide.none,
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: AppSpacing.xs),
                       ConstrainedBox(
-                        constraints: const BoxConstraints(minHeight: 64),
+                        constraints: const BoxConstraints(minHeight: 44),
                         child: _buildStatusRegion(
                           context: context,
                           voice: voice,
@@ -241,7 +255,7 @@ class _QuickCreateSheetState extends State<QuickCreateSheet> {
                           hasVoiceFailure: hasVoiceFailure,
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: AppSpacing.sm),
                       Row(
                         children: [
                           Expanded(
@@ -317,7 +331,7 @@ class _QuickCreateSheetState extends State<QuickCreateSheet> {
       child: ExcludeSemantics(
         child: SizedBox(
           key: const Key('quick-create-voice-action'),
-          height: 52,
+          height: 48,
           child: isRecording
               ? FilledButton.icon(
                   onPressed: onPressed,
@@ -374,21 +388,24 @@ class _QuickCreateSheetState extends State<QuickCreateSheet> {
   }
 
   Widget _buildVoiceFailure(BuildContext context, String? message) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
       children: [
-        Text(
-          message ?? '语音输入失败',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(color: Theme.of(context).colorScheme.error),
+        Expanded(
+          child: Text(
+            message ?? '语音输入失败',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
         ),
-        SizedBox(
-          height: 44,
-          child: TextButton(
-            onPressed: _isVoiceActionInFlight ? null : _retryVoice,
-            child: const Text('重试'),
+        ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 64),
+          child: SizedBox(
+            height: 44,
+            child: TextButton(
+              onPressed: _isVoiceActionInFlight ? null : _retryVoice,
+              child: const Text('重试'),
+            ),
           ),
         ),
       ],
@@ -420,7 +437,7 @@ class _RecordingStatus extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     return Container(
       key: const Key('quick-create-recording-status'),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: colorScheme.errorContainer.withValues(alpha: 0.45),
         borderRadius: BorderRadius.circular(8),
@@ -443,14 +460,7 @@ class _RecordingStatus extends StatelessWidget {
                   '正在录音 $elapsed',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: colorScheme.onErrorContainer,
-                        fontWeight: FontWeight.w700,
-                      ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '说完后点下方“结束并识别”',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onErrorContainer,
+                        fontWeight: FontWeight.w600,
                       ),
                 ),
               ],

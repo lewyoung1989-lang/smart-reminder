@@ -9,8 +9,8 @@ void main() {
       final theme = AppTheme.light();
       final semanticColors = theme.extension<AppSemanticColors>();
 
-      expect(theme.colorScheme.primary, const Color(0xFF087759));
-      expect(theme.scaffoldBackgroundColor, const Color(0xFFF3F7F4));
+      expect(theme.colorScheme.primary, const Color(0xFF176B52));
+      expect(theme.scaffoldBackgroundColor, const Color(0xFFF2F6F3));
       expect(theme.colorScheme.surface, const Color(0xFFFFFFFF));
       expect(semanticColors?.warning, const Color(0xFF8D6508));
       expect(theme.cardTheme.elevation, 1);

@@ -48,7 +48,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('今天'), findsWidgets);
-    expect(find.text('周期'), findsOneWidget);
+    expect(find.text('计划'), findsOneWidget);
     expect(find.text('药箱'), findsOneWidget);
     expect(find.text('提醒'), findsNothing);
 
@@ -152,7 +152,7 @@ void main() {
     expect(find.byType(NavigationBar), findsNothing);
   });
 
-  testWidgets('shows quick create only on today', (tester) async {
+  testWidgets('shows global quick create on every primary tab', (tester) async {
     final creationService = ReminderCreationService(
       confirmDraft: (_) async => 'reminder-1',
       notificationScheduler: _ThrowingNotificationScheduler(),
@@ -189,30 +189,19 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('quick-create-bar')), findsOneWidget);
+    expect(find.byKey(const ValueKey('quick-create-action')), findsOneWidget);
     expect(find.byType(FloatingActionButton), findsOneWidget);
-    expect(find.bySemanticsLabel('创建提醒'), findsOneWidget);
-    final fabDecorations = tester
-        .widgetList<DecoratedBox>(
-          find.ancestor(
-            of: find.byType(FloatingActionButton),
-            matching: find.byType(DecoratedBox),
-          ),
-        )
-        .map((box) => box.decoration)
-        .whereType<BoxDecoration>();
-    expect(fabDecorations.any((decoration) => decoration.gradient != null),
-        isTrue);
+    expect(find.text('快速创建'), findsOneWidget);
 
-    await tester.tap(find.text('周期'));
+    await tester.tap(find.text('计划'));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('quick-create-bar')), findsNothing);
+    expect(find.byKey(const ValueKey('quick-create-action')), findsOneWidget);
 
     await tester.tap(find.text('药箱'));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('quick-create-bar')), findsNothing);
+    expect(find.byKey(const ValueKey('quick-create-action')), findsOneWidget);
   });
 
   testWidgets('logout from settings returns to the shell root', (tester) async {
@@ -609,7 +598,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('周期'));
+    await tester.tap(find.text('计划'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('服用盐酸普罗帕酮片'));
     await tester.pumpAndSettle();

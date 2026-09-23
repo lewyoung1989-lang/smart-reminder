@@ -7,12 +7,14 @@ class AppPageHeader extends StatelessWidget {
     super.key,
     required this.title,
     this.eyebrow,
+    this.subtitle,
     this.largeTitle = false,
     this.actions = const [],
   });
 
   final String title;
   final String? eyebrow;
+  final String? subtitle;
   final bool largeTitle;
   final List<Widget> actions;
 
@@ -29,6 +31,16 @@ class AppPageHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (eyebrow != null) ...[
+                Text(
+                  eyebrow!,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xs),
+              ],
               Semantics(
                 header: true,
                 child: Text(
@@ -38,11 +50,11 @@ class AppPageHeader extends StatelessWidget {
                       : theme.textTheme.titleLarge,
                 ),
               ),
-              if (eyebrow != null) ...[
+              if (subtitle != null) ...[
                 const SizedBox(height: AppSpacing.xs),
                 Text(
-                  eyebrow!,
-                  style: theme.textTheme.labelMedium?.copyWith(
+                  subtitle!,
+                  style: theme.textTheme.bodyMedium?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),

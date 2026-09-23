@@ -260,6 +260,47 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
     }
   }
 
+  Future<void> _showExpiryFilter() async {
+    final collection = _collection;
+    if (collection == null) return;
+    final options = _filterOptions(collection);
+    final selected = await showModalBottomSheet<_ExpiryFilter>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            AppSpacing.lg,
+            AppSpacing.lg,
+            AppSpacing.xxl,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Text('有效期筛选', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: AppSpacing.sm),
+              for (final option in options)
+                ListTile(
+                  minTileHeight: 48,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('${option.label}（${option.count}）'),
+                  trailing: _filter == option.value
+                      ? Icon(
+                          LucideIcons.check,
+                          color: Theme.of(context).colorScheme.primary,
+                        )
+                      : null,
+                  onTap: () => Navigator.of(sheetContext).pop(option.value),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (selected != null && mounted) _setFilter(selected);
+  }
+
   void _setQuery(String query) {
     setState(() {
       _query = query;
@@ -447,12 +488,15 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
         Padding(
           padding: const EdgeInsets.fromLTRB(
             AppSpacing.lg,
-            AppSpacing.xxl,
+            AppSpacing.xl,
             AppSpacing.lg,
-            AppSpacing.lg,
+            AppSpacing.sm,
           ),
           child: AppPageHeader(
             title: '药箱',
+            subtitle: collection == null
+                ? '管理个人与家庭常用药品'
+                : '${collection.items.length} 种药品 · ${collection.items.fold<int>(0, (sum, item) => sum + item.totalQuantity)} 件库存',
             largeTitle: true,
             actions: <Widget>[
               _EntryButton(
@@ -478,6 +522,7 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
           child: AppSegmentedControl<MedicineCabinetScope>(
             key: const ValueKey('cabinet-scope-tabs'),
             value: _scope,
+            style: AppSegmentedControlStyle.tabs,
             options: const [
               AppSegment(
                 value: MedicineCabinetScope.personal,
@@ -505,16 +550,34 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
               decoration: InputDecoration(
                 hintText: '搜索药品或规格',
                 prefixIcon: const Icon(LucideIcons.search, size: 20),
-                suffixIcon: _query.isEmpty
-                    ? null
-                    : IconButton(
+                isDense: true,
+                prefixIconConstraints: const BoxConstraints(
+                  minWidth: 44,
+                  minHeight: 44,
+                ),
+                suffixIcon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    IconButton(
+                      key: const ValueKey('medicine-expiry-filter'),
+                      tooltip: '筛选有效期',
+                      onPressed: _showExpiryFilter,
+                      color: _filter == _ExpiryFilter.all
+                          ? null
+                          : Theme.of(context).colorScheme.primary,
+                      icon: const Icon(LucideIcons.listFilter, size: 20),
+                    ),
+                    if (_query.isNotEmpty)
+                      IconButton(
                         tooltip: '清除搜索',
                         onPressed: _clearQuery,
                         icon: const Icon(LucideIcons.x, size: 20),
                       ),
+                  ],
+                ),
                 filled: true,
                 fillColor: Theme.of(context).colorScheme.surfaceContainer,
-                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                contentPadding: const EdgeInsets.symmetric(vertical: 8),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
                   borderSide: BorderSide.none,
@@ -531,16 +594,6 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
                   ),
                 ),
               ),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-            child: AppSegmentedControl<_ExpiryFilter>(
-              key: const ValueKey('cabinet-filter-tabs'),
-              value: _filter,
-              options: _filterOptions(collection),
-              onChanged: _setFilter,
             ),
           ),
         ],
@@ -639,7 +692,7 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
     }
     final visible = _filtered(collection.items);
     final slivers = <Widget>[
-      const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.lg)),
+      const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.sm)),
       ...permissionRecovery,
     ];
     if (collection.isOffline) {
@@ -691,41 +744,117 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
       )));
       return slivers;
     }
+    if (_filter == _ExpiryFilter.all) {
+      final attention = visible
+          .where((item) =>
+              item.status == MedicineStatus.expiring ||
+              item.status == MedicineStatus.expired)
+          .toList(growable: false);
+      final remaining = visible
+          .where((item) =>
+              item.status != MedicineStatus.expiring &&
+              item.status != MedicineStatus.expired)
+          .toList(growable: false);
+      if (attention.isNotEmpty) {
+        slivers.add(_medicineGroup(
+          context,
+          title: '需要留意',
+          medicines: attention,
+          expanded: expanded,
+          onAction: widget.onCapture == null ||
+                  (widget.captureAvailability !=
+                          MedicineCaptureAvailability.ready &&
+                      widget.captureAvailability !=
+                          MedicineCaptureAvailability.denied)
+              ? null
+              : _capture,
+        ));
+      }
+      if (remaining.isNotEmpty) {
+        slivers.add(_medicineGroup(
+          context,
+          title: '全部药品',
+          medicines: remaining,
+          expanded: expanded,
+        ));
+      }
+    } else {
+      slivers.add(_medicineGroup(
+        context,
+        title: _filter == _ExpiryFilter.expiring ? '临期药品' : '已过期药品',
+        medicines: visible,
+        expanded: expanded,
+      ));
+    }
     slivers.add(
-      SliverPadding(
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.lg,
-          0,
-          AppSpacing.lg,
-          AppSpacing.xxl,
-        ),
-        sliver: DecoratedSliver(
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
-            boxShadow: [
-              BoxShadow(
-                color: Theme.of(context)
-                    .colorScheme
-                    .shadow
-                    .withValues(alpha: 0.05),
-                blurRadius: 18,
-                offset: const Offset(0, 6),
+      const SliverToBoxAdapter(child: SizedBox(height: 104)),
+    );
+    return slivers;
+  }
+
+  Widget _medicineGroup(
+    BuildContext context, {
+    required String title,
+    required List<MedicineSummary> medicines,
+    required bool expanded,
+    VoidCallback? onAction,
+  }) {
+    return SliverMainAxisGroup(
+      slivers: <Widget>[
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+          sliver: SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              child: Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Text(
+                      '$title · ${medicines.length}',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                  ),
+                  if (onAction != null)
+                    TextButton.icon(
+                      onPressed: onAction,
+                      icon: const Icon(LucideIcons.camera, size: 18),
+                      label: const Text('拍照录入'),
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(44, 44),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.xs,
+                        ),
+                      ),
+                    ),
+                ],
               ),
-            ],
-          ),
-          sliver: SliverList.builder(
-            itemCount: visible.length,
-            itemBuilder: (context, index) => _MedicineRow(
-              medicine: visible[index],
-              position: _listRowPosition(index, visible.length),
-              onTap: () => _openMedicine(visible[index], expanded),
             ),
           ),
         ),
-      ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            0,
+            AppSpacing.lg,
+            AppSpacing.lg,
+          ),
+          sliver: DecoratedSliver(
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+            ),
+            sliver: SliverList.builder(
+              itemCount: medicines.length,
+              itemBuilder: (context, index) => _MedicineRow(
+                medicine: medicines[index],
+                position: _listRowPosition(index, medicines.length),
+                onTap: () => _openMedicine(medicines[index], expanded),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
-    return slivers;
   }
 
   List<Widget> _stateSlivers(Widget state) => <Widget>[
@@ -1322,7 +1451,7 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
         child: Material(
           key: const Key('medicine-entry-sheet'),
           color: theme.colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
           clipBehavior: Clip.antiAlias,
           child: FractionallySizedBox(
             heightFactor: 0.92,
@@ -1340,7 +1469,7 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
                       Expanded(
                         child: Text(
                           '录入药品',
-                          style: theme.textTheme.headlineMedium,
+                          style: theme.textTheme.titleLarge,
                         ),
                       ),
                       SizedBox(
@@ -1366,7 +1495,7 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
                       AppSpacing.lg,
                       AppSpacing.lg,
                       AppSpacing.lg,
-                      AppSpacing.xxl,
+                      AppSpacing.xl,
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1391,7 +1520,7 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
                                 child: TextField(
                                   key: const Key('medicine-entry-description'),
                                   controller: _descriptionController,
-                                  minLines: 3,
+                                  minLines: 2,
                                   maxLines: 5,
                                   maxLength: 300,
                                   textInputAction: TextInputAction.done,
@@ -1432,7 +1561,7 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
                             ],
                           ),
                         ),
-                        const SizedBox(height: AppSpacing.xxl),
+                        const SizedBox(height: AppSpacing.xl),
                         _EntrySection(
                           title: '药品信息',
                           child: Column(
@@ -1481,7 +1610,7 @@ class _MedicineBatchEntrySheetState extends State<MedicineBatchEntrySheet> {
                             ],
                           ),
                         ),
-                        const SizedBox(height: AppSpacing.xxl),
+                        const SizedBox(height: AppSpacing.xl),
                         _EntrySection(
                           title: '库存与有效期',
                           child: Column(

@@ -224,8 +224,9 @@ class _ReminderDraftScreenState extends State<ReminderDraftScreen> {
                     const SizedBox(width: AppSpacing.md),
                     Expanded(
                       child: FilledButton.icon(
-                        onPressed:
-                            draft.canConfirm && !_isConfirming ? _confirm : null,
+                        onPressed: draft.canConfirm && !_isConfirming
+                            ? _confirm
+                            : null,
                         icon: _isConfirming
                             ? const SizedBox.square(
                                 dimension: 18,

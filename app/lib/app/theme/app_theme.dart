@@ -7,14 +7,14 @@ abstract final class AppTheme {
   static const fontFamily = 'PingFang SC';
 
   static ThemeData light() {
-    const background = Color(0xFFF3F7F4);
+    const background = Color(0xFFF2F6F3);
     const surface = Color(0xFFFFFFFF);
     const surfaceMuted = Color(0xFFE4ECE7);
-    const primary = Color(0xFF087759);
+    const primary = Color(0xFF176B52);
     const onPrimary = Color(0xFFFFFFFF);
-    const textPrimary = Color(0xFF14221D);
-    const textSecondary = Color(0xFF5C6C65);
-    const outline = Color(0xFFD9E5DE);
+    const textPrimary = Color(0xFF17201D);
+    const textSecondary = Color(0xFF66706B);
+    const outline = Color(0xFFDCE5E0);
     const error = Color(0xFFB42318);
     const errorSurface = Color(0xFFFFE9E7);
 
@@ -320,7 +320,7 @@ abstract final class AppTheme {
         }),
       ),
       navigationBarTheme: NavigationBarThemeData(
-        height: 72,
+        height: 68,
         backgroundColor: colorScheme.surface,
         elevation: 0,
         surfaceTintColor: Colors.transparent,

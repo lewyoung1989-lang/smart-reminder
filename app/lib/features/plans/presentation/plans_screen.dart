@@ -20,7 +20,9 @@ class PlansScreen extends StatefulWidget {
     this.onOpenSettings,
     this.onOpenPlan,
     this.notificationScheduler,
+    this.onQuickCreate,
     this.onEditPlan,
+    this.now,
     this.refreshRevision = 0,
     super.key,
   });
@@ -29,7 +31,9 @@ class PlansScreen extends StatefulWidget {
   final VoidCallback? onOpenSettings;
   final ValueChanged<PlanSummary>? onOpenPlan;
   final PlanNotificationScheduler? notificationScheduler;
+  final VoidCallback? onQuickCreate;
   final ValueChanged<PlanDetail>? onEditPlan;
+  final DateTime? now;
   final int refreshRevision;
 
   @override
@@ -40,7 +44,7 @@ class _PlansScreenState extends State<PlansScreen> {
   PlanCollection? _collection;
   PlanDetail? _selectedDetail;
   String? _selectedPlanId;
-  PlanStatus _selectedStatus = PlanStatus.active;
+  PlanStatus? _selectedStatus;
   PlanKind? _selectedKind;
   Object? _error;
   Object? _detailError;
@@ -139,12 +143,13 @@ class _PlansScreenState extends State<PlansScreen> {
 
   List<PlanSummary> _filtered(List<PlanSummary> plans) {
     return plans
-        .where((plan) => plan.status == _selectedStatus)
+        .where(
+            (plan) => _selectedStatus == null || plan.status == _selectedStatus)
         .where((plan) => _selectedKind == null || plan.kind == _selectedKind)
         .toList();
   }
 
-  void _setStatus(PlanStatus status) {
+  void _setStatus(PlanStatus? status) {
     setState(() {
       _selectedStatus = status;
       final visible = _filtered(_collection?.items ?? const []);
@@ -390,7 +395,9 @@ class _PlansScreenState extends State<PlansScreen> {
               children: <Widget>[
                 Text('计划类型', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: AppSpacing.xs),
-                Text('当前状态：${_statusLabel(_selectedStatus)}'),
+                Text(
+                  '当前状态：${_selectedStatus == null ? '全部' : _statusLabel(_selectedStatus!)}',
+                ),
                 const SizedBox(height: AppSpacing.sm),
                 RadioGroup<_KindFilter>(
                   groupValue: _kindFilterFor(_selectedKind),
@@ -463,12 +470,13 @@ class _PlansScreenState extends State<PlansScreen> {
           key: const ValueKey('plans-fixed-header'),
           padding: const EdgeInsets.fromLTRB(
             AppSpacing.lg,
-            AppSpacing.xxl,
+            AppSpacing.xl,
             AppSpacing.lg,
-            AppSpacing.lg,
+            AppSpacing.sm,
           ),
           child: AppPageHeader(
-            title: '周期计划',
+            title: '计划',
+            subtitle: '正在持续的生活节奏',
             largeTitle: true,
             actions: <Widget>[
               IconButton(
@@ -487,9 +495,10 @@ class _PlansScreenState extends State<PlansScreen> {
         if (collection != null)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-            child: AppSegmentedControl<PlanStatus>(
+            child: AppSegmentedControl<PlanStatus?>(
               key: const ValueKey('plans-status-tabs'),
               value: _selectedStatus,
+              style: AppSegmentedControlStyle.compactTabs,
               options: _statusOptions(collection),
               onChanged: _setStatus,
             ),
@@ -507,15 +516,20 @@ class _PlansScreenState extends State<PlansScreen> {
     );
   }
 
-  List<AppSegment<PlanStatus>> _statusOptions(PlanCollection collection) {
+  List<AppSegment<PlanStatus?>> _statusOptions(PlanCollection collection) {
     final counts = <PlanStatus, int>{
       for (final status in PlanStatus.values)
         status: collection.items.where((plan) => plan.status == status).length,
     };
-    return <AppSegment<PlanStatus>>[
+    return <AppSegment<PlanStatus?>>[
+      AppSegment(
+        value: null,
+        label: '全部',
+        count: collection.items.length,
+      ),
       AppSegment(
         value: PlanStatus.active,
-        label: '运行中',
+        label: '进行中',
         count: counts[PlanStatus.active],
       ),
       AppSegment(
@@ -554,7 +568,7 @@ class _PlansScreenState extends State<PlansScreen> {
     }
     final visible = _filtered(collection.items);
     final slivers = <Widget>[
-      const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.lg)),
+      const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.sm)),
     ];
     if (collection.isOffline) {
       slivers.add(
@@ -583,19 +597,118 @@ class _PlansScreenState extends State<PlansScreen> {
             AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.xxl),
         sliver: SliverToBoxAdapter(
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              for (var index = 0; index < visible.length; index += 1)
-                _dismissiblePlanRow(
-                  visible[index],
-                  position: _positionFor(index, visible.length),
-                  expanded: expanded,
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Text(
+                      '周期计划 · ${visible.length}',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                  ),
+                  if (widget.onQuickCreate != null)
+                    TextButton(
+                      onPressed: widget.onQuickCreate,
+                      child: const Text('新建'),
+                    ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+                child: ColoredBox(
+                  color: Theme.of(context).colorScheme.surface,
+                  child: Column(
+                    children: <Widget>[
+                      for (var index = 0; index < visible.length; index += 1)
+                        _dismissiblePlanRow(
+                          visible[index],
+                          position: _positionFor(index, visible.length),
+                          expanded: expanded,
+                        ),
+                    ],
+                  ),
                 ),
+              ),
             ],
           ),
         ),
       ),
     );
+    final detail = _selectedDetail;
+    if (detail != null) {
+      slivers.add(_weeklyExecutionSliver(context, detail));
+    }
+    slivers.add(
+      const SliverToBoxAdapter(child: SizedBox(height: 104)),
+    );
     return slivers;
+  }
+
+  Widget _weeklyExecutionSliver(BuildContext context, PlanDetail detail) {
+    final now = widget.now ?? DateTime.now();
+    final weekStart = DateTime(now.year, now.month, now.day)
+        .subtract(Duration(days: now.weekday - 1));
+    final weekEnd = weekStart.add(const Duration(days: 7));
+    final executions = detail.executions
+        .where((execution) =>
+            !execution.startedAt.isBefore(weekStart) &&
+            execution.startedAt.isBefore(weekEnd))
+        .toList()
+      ..sort((left, right) => right.startedAt.compareTo(left.startedAt));
+    final completed = executions
+        .where((execution) => execution.status == PlanExecutionStatus.completed)
+        .length;
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        0,
+        AppSpacing.lg,
+        AppSpacing.xxl,
+      ),
+      sliver: SliverToBoxAdapter(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    '本周执行',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ),
+                Text('$completed / ${executions.length} 次'),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            if (executions.isEmpty)
+              const AppContentState.empty(
+                title: '本周暂无执行记录',
+                message: '计划开始执行后会显示在这里',
+              )
+            else
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+                ),
+                child: Column(
+                  children: <Widget>[
+                    for (final execution in executions)
+                      _ExecutionRow(
+                        planTitle: detail.summary.title,
+                        execution: execution,
+                        referenceDate: now,
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _dismissiblePlanRow(
@@ -710,6 +823,90 @@ class _PlanRow extends StatelessWidget {
     );
   }
 }
+
+class _ExecutionRow extends StatelessWidget {
+  const _ExecutionRow({
+    required this.planTitle,
+    required this.execution,
+    required this.referenceDate,
+  });
+
+  final String planTitle;
+  final PlanExecution execution;
+  final DateTime referenceDate;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final completed = execution.status == PlanExecutionStatus.completed;
+    final date = execution.startedAt;
+    final dateLabel = _isSameDate(date, referenceDate)
+        ? '今天'
+        : _isSameDate(date, referenceDate.subtract(const Duration(days: 1)))
+            ? '昨天'
+            : _weekdayLabel(date.weekday);
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 64),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+        child: Row(
+          children: <Widget>[
+            SizedBox(
+              width: 28,
+              child: Icon(
+                completed ? LucideIcons.circleCheck : LucideIcons.circle,
+                size: 18,
+                color: completed ? scheme.primary : scheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    '$dateLabel · ${_formatTime(date)}',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  Text(
+                    '$planTitle · ${_executionStatusLabel(execution.status)}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+bool _isSameDate(DateTime left, DateTime right) =>
+    left.year == right.year &&
+    left.month == right.month &&
+    left.day == right.day;
+
+String _weekdayLabel(int weekday) => switch (weekday) {
+      DateTime.monday => '周一',
+      DateTime.tuesday => '周二',
+      DateTime.wednesday => '周三',
+      DateTime.thursday => '周四',
+      DateTime.friday => '周五',
+      DateTime.saturday => '周六',
+      DateTime.sunday => '周日',
+      _ => '',
+    };
+
+String _executionStatusLabel(PlanExecutionStatus status) => switch (status) {
+      PlanExecutionStatus.pending => '待执行',
+      PlanExecutionStatus.running => '执行中',
+      PlanExecutionStatus.completed => '已完成',
+      PlanExecutionStatus.degraded => '已降级',
+      PlanExecutionStatus.failed => '执行失败',
+      PlanExecutionStatus.cancelled => '已取消',
+    };
 
 AppListRowPosition _positionFor(int index, int length) {
   if (length == 1) return AppListRowPosition.single;

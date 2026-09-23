@@ -181,7 +181,7 @@ void main() {
               find.byKey(const ValueKey('app-segmented-control-indicator')),
             )
             .height,
-        initialSize.height - 6,
+        initialSize.height - 8,
       );
 
       setState(() => count = 999);
@@ -340,7 +340,7 @@ void main() {
 
       final selected = tester.widget<Text>(find.text('进行中'));
       final pending = tester.widget<Text>(find.text('待处理'));
-      expect(selected.style?.fontWeight, FontWeight.w700);
+      expect(selected.style?.fontWeight, FontWeight.w600);
       expect(pending.style?.fontWeight, FontWeight.w500);
       expect(find.byIcon(LucideIcons.check), findsNothing);
       expect(find.byKey(const ValueKey('app-segmented-control-indicator')),
@@ -355,7 +355,77 @@ void main() {
       );
       final decoration = indicator.decoration as BoxDecoration;
       expect(decoration.borderRadius, isNotNull);
-      expect(decoration.boxShadow, isNotEmpty);
+      expect(decoration.color, const Color(0xFF176B52));
+      expect(decoration.boxShadow, isNull);
+    });
+
+    testWidgets('tab style uses a short underline and a text hierarchy', (
+      tester,
+    ) async {
+      await tester.pumpApp(
+        SizedBox(
+          width: 360,
+          child: AppSegmentedControl<SampleStatus>(
+            value: SampleStatus.active,
+            style: AppSegmentedControlStyle.tabs,
+            options: const <AppSegment<SampleStatus>>[
+              AppSegment(value: SampleStatus.active, label: '个人药箱'),
+              AppSegment(value: SampleStatus.pending, label: '家庭药箱'),
+            ],
+            onChanged: (_) {},
+          ),
+        ),
+      );
+
+      final selected = tester.widget<Text>(find.text('个人药箱'));
+      final other = tester.widget<Text>(find.text('家庭药箱'));
+      final indicator = find.byKey(
+        const ValueKey('app-segmented-control-indicator'),
+      );
+      expect(selected.style?.fontSize, 16);
+      expect(selected.style?.color, const Color(0xFF176B52));
+      expect(other.style?.color, const Color(0xFF66706B));
+      expect(tester.getSize(indicator).height, 2);
+      expect(
+        tester.getSize(find.byType(AppSegmentedControl<SampleStatus>)).height,
+        greaterThanOrEqualTo(44),
+      );
+      expect(
+        tester.getSemantics(find.text('个人药箱')).flagsCollection.isSelected,
+        Tristate.isTrue,
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('compact tabs keep counted statuses visible at narrow width', (
+      tester,
+    ) async {
+      await tester.pumpApp(
+        SizedBox(
+          width: 320,
+          child: AppSegmentedControl<SampleStatus>(
+            value: SampleStatus.active,
+            style: AppSegmentedControlStyle.compactTabs,
+            options: const <AppSegment<SampleStatus>>[
+              AppSegment(value: SampleStatus.active, label: '全部', count: 2),
+              AppSegment(value: SampleStatus.pending, label: '临期', count: 1),
+            ],
+            onChanged: (_) {},
+          ),
+        ),
+      );
+
+      expect(find.text('全部'), findsOneWidget);
+      expect(find.text('临期'), findsOneWidget);
+      expect(
+        tester
+            .getSize(
+              find.byKey(const ValueKey('app-segmented-control-indicator')),
+            )
+            .height,
+        2,
+      );
+      expect(tester.takeException(), isNull);
     });
   });
 
@@ -473,7 +543,8 @@ void main() {
     });
   });
 
-  testWidgets('AppListRow is bordered, wrapping, and accessible when tapped', (
+  testWidgets('AppListRow is continuous, wrapping, and accessible when tapped',
+      (
     tester,
   ) async {
     var taps = 0;
@@ -508,7 +579,7 @@ void main() {
     expect(taps, 1);
   });
 
-  testWidgets('AppListRow positions form a rounded continuous divided list', (
+  testWidgets('AppListRow only draws dividers between grouped rows', (
     tester,
   ) async {
     await tester.pumpApp(
@@ -536,28 +607,26 @@ void main() {
       ),
     );
 
-    BoxDecoration decorationFor(String title) {
+    Border? dividerFor(String title) {
       final row = find.ancestor(
         of: find.text(title),
         matching: find.byType(AppListRow),
       );
-      final decoratedBox = find.descendant(
-        of: row,
-        matching: find.byType(DecoratedBox),
+      final containers = tester.widgetList<Container>(
+        find.descendant(of: row, matching: find.byType(Container)),
       );
-      return tester.widget<DecoratedBox>(decoratedBox.first).decoration
-          as BoxDecoration;
+      final borders = containers
+          .map((container) => container.decoration)
+          .whereType<BoxDecoration>()
+          .map((decoration) => decoration.border)
+          .whereType<Border>()
+          .toList(growable: false);
+      return borders.isEmpty ? null : borders.first;
     }
 
-    final first = decorationFor('第一行');
-    final middle = decorationFor('中间行');
-    final last = decorationFor('最后一行');
-    expect(first.border, isNull);
-    expect(first.borderRadius, isNotNull);
-    expect(middle.border, isNull);
-    expect(middle.borderRadius, BorderRadius.zero);
-    expect(last.border, isNull);
-    expect(last.borderRadius, isNotNull);
+    expect(dividerFor('第一行')?.bottom, isNotNull);
+    expect(dividerFor('中间行')?.bottom, isNotNull);
+    expect(dividerFor('最后一行'), isNull);
     final firstRow = find.ancestor(
       of: find.text('第一行'),
       matching: find.byType(AppListRow),

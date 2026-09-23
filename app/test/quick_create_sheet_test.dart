@@ -225,7 +225,7 @@ void main() {
     await tester.pump();
     expect(voice.phase, VoiceInputPhase.recording);
     expect(find.textContaining('正在录音'), findsOneWidget);
-    expect(find.text('说完后点下方“结束并识别”'), findsOneWidget);
+    expect(find.text('正在录音 00:03'), findsOneWidget);
     expect(find.text('结束并识别 00:03'), findsOneWidget);
 
     voice.setPhase(VoiceInputPhase.transcribing);

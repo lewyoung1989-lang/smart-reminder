@@ -8,6 +8,8 @@ class AppSemanticColors extends ThemeExtension<AppSemanticColors> {
     required this.warningSurface,
     required this.info,
     required this.infoSurface,
+    required this.heroBackground,
+    required this.heroForeground,
   });
 
   final Color success;
@@ -15,6 +17,8 @@ class AppSemanticColors extends ThemeExtension<AppSemanticColors> {
   final Color warningSurface;
   final Color info;
   final Color infoSurface;
+  final Color heroBackground;
+  final Color heroForeground;
 
   static const light = AppSemanticColors(
     success: Color(0xFF2F8B69),
@@ -22,6 +26,8 @@ class AppSemanticColors extends ThemeExtension<AppSemanticColors> {
     warningSurface: Color(0xFFFFF1CC),
     info: Color(0xFF236B90),
     infoSurface: Color(0xFFE4F2F8),
+    heroBackground: Color(0xFF173D2E),
+    heroForeground: Color(0xFFF4FAF6),
   );
 
   static const dark = AppSemanticColors(
@@ -30,6 +36,8 @@ class AppSemanticColors extends ThemeExtension<AppSemanticColors> {
     warningSurface: Color(0xFF3B2E10),
     info: Color(0xFF93C9F2),
     infoSurface: Color(0xFF173247),
+    heroBackground: Color(0xFF173D2E),
+    heroForeground: Color(0xFFF4FAF6),
   );
 
   @override
@@ -39,6 +47,8 @@ class AppSemanticColors extends ThemeExtension<AppSemanticColors> {
     Color? warningSurface,
     Color? info,
     Color? infoSurface,
+    Color? heroBackground,
+    Color? heroForeground,
   }) {
     return AppSemanticColors(
       success: success ?? this.success,
@@ -46,6 +56,8 @@ class AppSemanticColors extends ThemeExtension<AppSemanticColors> {
       warningSurface: warningSurface ?? this.warningSurface,
       info: info ?? this.info,
       infoSurface: infoSurface ?? this.infoSurface,
+      heroBackground: heroBackground ?? this.heroBackground,
+      heroForeground: heroForeground ?? this.heroForeground,
     );
   }
 
@@ -61,6 +73,8 @@ class AppSemanticColors extends ThemeExtension<AppSemanticColors> {
       warningSurface: Color.lerp(warningSurface, other.warningSurface, t)!,
       info: Color.lerp(info, other.info, t)!,
       infoSurface: Color.lerp(infoSurface, other.infoSurface, t)!,
+      heroBackground: Color.lerp(heroBackground, other.heroBackground, t)!,
+      heroForeground: Color.lerp(heroForeground, other.heroForeground, t)!,
     );
   }
 }
