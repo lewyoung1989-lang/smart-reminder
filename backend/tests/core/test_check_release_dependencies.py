@@ -50,6 +50,25 @@ def test_release_dependency_check_probes_db_redis_and_funasr(mocker, capsys):
     assert cache.values == {}
 
 
+def test_release_dependency_check_skips_funasr_when_disabled(mocker, settings):
+    settings.ASR_ENABLED = False
+    connection = mocker.patch(
+        "apps.core.management.commands.check_release_dependencies.connection"
+    )
+    connection.cursor.return_value = nullcontext(FakeCursor())
+    mocker.patch(
+        "apps.core.management.commands.check_release_dependencies.cache",
+        FakeCache(),
+    )
+    urlopen = mocker.patch(
+        "apps.core.management.commands.check_release_dependencies.urllib.request.urlopen"
+    )
+
+    call_command("check_release_dependencies")
+
+    urlopen.assert_not_called()
+
+
 def test_release_dependency_check_hides_dependency_errors(mocker):
     connection = mocker.patch(
         "apps.core.management.commands.check_release_dependencies.connection"

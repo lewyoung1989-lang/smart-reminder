@@ -19,6 +19,7 @@ def test_production_security_settings_are_loaded_from_environment():
             "DJANGO_SECURE_HSTS_SECONDS": "3600",
             "LOG_LEVEL": "WARNING",
             "AUTH_CACHE_URL": "redis://redis:6379/4",
+            "ASR_LEASE_PROVIDER": "redis",
             "JWT_SIGNING_KEY": "test-jwt-signing-secret-at-least-32-bytes",
         }
     )

@@ -74,6 +74,7 @@ def test_example_lists_required_production_variables_without_secrets():
     assert values["OCR_DEBUG_TEXT_LOGGING"] == "false"
     assert values["AUTH_CACHE_URL"] == "redis://redis:6379/4"
     assert values["OCR_ENABLED"] == "false"
+    assert values["ASR_ENABLED"] == "true"
     assert values["SITE_NAME"] == "智能提醒"
     for public_value in (
         "SITE_OWNER_NAME",
@@ -221,6 +222,7 @@ def test_validator_rejects_invalid_ocr_semantic_timeout(tmp_path):
 def test_example_has_complete_non_secret_asr_contract():
     values = parse_example_values()
     assert {key: values[key] for key in (
+        "ASR_ENABLED",
         "ASR_PROVIDER",
         "ASR_BASE_URL",
         "ASR_LEASE_PROVIDER",
@@ -239,6 +241,7 @@ def test_example_has_complete_non_secret_asr_contract():
         "ASR_THROTTLE_REDIS_URL",
         "ASR_TRUSTED_PROXY_IPS",
     )} == {
+        "ASR_ENABLED": "true",
         "ASR_PROVIDER": "funasr",
         "ASR_BASE_URL": "http://funasr:8000",
         "ASR_LEASE_PROVIDER": "redis",
@@ -286,6 +289,7 @@ def test_example_has_complete_non_secret_asr_contract():
             "ASR_TRUSTED_PROXY_IPS",
         ),
         ("OCR_ENABLED", "yes", "OCR_ENABLED"),
+        ("ASR_ENABLED", "yes", "ASR_ENABLED"),
     ),
 )
 def test_validator_rejects_invalid_asr_and_ocr_boundaries(

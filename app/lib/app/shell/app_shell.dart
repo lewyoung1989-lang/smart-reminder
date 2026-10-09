@@ -95,7 +95,7 @@ class AppShell extends StatefulWidget {
   State<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends State<AppShell> {
+class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   var _selectedIndex = 0;
   var _familyMembershipRevision = 0;
   var _todayRefreshRevision = 0;
@@ -103,7 +103,25 @@ class _AppShellState extends State<AppShell> {
   var _medicineRefreshRevision = 0;
   bool? _hasFamilyMembership;
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refreshToday();
+  }
+
   void _selectDestination(int index) {
+    if (index == 0) _refreshToday();
     if (_selectedIndex != index) setState(() => _selectedIndex = index);
   }
 

@@ -124,7 +124,7 @@ def test_ocr_services_are_private_initialized_and_profile_gated():
     assert services["minio"]["profiles"] == ["ocr"]
     assert services["minio-init"]["profiles"] == ["ocr"]
     assert services["ocr-worker"]["profiles"] == ["ocr"]
-    assert services["beat"]["profiles"] == ["ocr"]
+    assert "profiles" not in services["beat"]
     assert (
         services["minio-init"]["depends_on"]["minio"]["condition"]
         == "service_healthy"
@@ -342,6 +342,7 @@ def test_api_receives_complete_asr_production_environment():
     environment = load_production_compose()["services"]["api"]["environment"]
     expected = {
         "OCR_ENABLED": "${OCR_ENABLED:-false}",
+        "ASR_ENABLED": "${ASR_ENABLED:-true}",
         "ASR_PROVIDER": "${ASR_PROVIDER:-funasr}",
         "ASR_BASE_URL": "${ASR_BASE_URL:-http://funasr:8000}",
         "ASR_LEASE_PROVIDER": "${ASR_LEASE_PROVIDER:-redis}",

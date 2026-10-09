@@ -23,6 +23,52 @@ import 'package:smart_reminder_app/features/today/domain/today_models.dart';
 import 'package:smart_reminder_app/platform/notifications/reminder_notification_scheduler.dart';
 
 void main() {
+  testWidgets('refreshes today after the app resumes', (tester) async {
+    final now = DateTime.now();
+    final repository = _SequenceTodayRepository([
+      TodaySnapshot(decisions: const [], timeline: const []),
+      TodaySnapshot(
+        decisions: const [],
+        timeline: [
+          TimelineItem(
+            id: 'new-reminder',
+            title: '刚同步的提醒',
+            subtitle: '稍后处理',
+            scheduledAt: DateTime(now.year, now.month, now.day, 23, 59),
+            status: TimelineStatus.upcoming,
+          ),
+        ],
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppShell(
+          todayRepository: repository,
+          planRepository: const UnavailablePlanRepository(),
+          medicineRepository: _UnavailableMedicineRepository(),
+          user: const AuthUser(
+            id: 'user-1',
+            phoneMasked: '138****8000',
+            phoneVerified: true,
+          ),
+          themeMode: ThemeMode.system,
+          onThemeModeChanged: (_) {},
+          onChangePassword: (_, __, ___) async {},
+          onLogout: () async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(repository.calls, 1);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+
+    expect(repository.calls, 2);
+    expect(find.text('刚同步的提醒'), findsOneWidget);
+  });
+
   testWidgets('uses redesigned destinations and opens account settings',
       (tester) async {
     await tester.pumpWidget(

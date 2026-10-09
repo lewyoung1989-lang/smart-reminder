@@ -77,6 +77,11 @@ class VoiceTranscriptionView(APIView):
         return super().handle_exception(exc)
 
     def post(self, request):
+        if not settings.ASR_ENABLED:
+            return error_response(
+                "asr_unavailable",
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         audio = None
         try:
             raw_content_length = request.META.get("CONTENT_LENGTH")

@@ -33,6 +33,8 @@ export APP_VERSION
 APP_VERSION=$(git rev-parse --short=12 HEAD)
 OCR_ENABLED=$(python3 deploy/tencent/scripts/check_env.py "$ENV_FILE" \
   --get OCR_ENABLED)
+ASR_ENABLED=$(python3 deploy/tencent/scripts/check_env.py "$ENV_FILE" \
+  --get ASR_ENABLED)
 COMPOSE=(
   docker compose
   --project-directory "$ROOT_DIR"
@@ -137,58 +139,81 @@ handle_deploy_failure() {
 
 trap 'handle_deploy_failure $?' ERR
 
-"${COMPOSE[@]}" build api funasr
+if [[ "$ASR_ENABLED" == "true" ]]; then
+  "${COMPOSE[@]}" build api funasr
+else
+  "${COMPOSE[@]}" build api
+fi
 if [[ "$OCR_ENABLED" == "true" ]]; then
   "${COMPOSE[@]}" --profile ocr build ocr-worker
 fi
 
 "${COMPOSE[@]}" up -d postgres redis
 if [[ "$OCR_ENABLED" == "false" ]]; then
-  "${COMPOSE[@]}" --profile ocr stop ocr-worker minio beat
+  "${COMPOSE[@]}" --profile ocr stop ocr-worker minio
 fi
 
-if "${COMPOSE[@]}" run --rm --no-deps funasr-model-init \
-  python -m app.download_models --check; then
-  echo "FunASR model cache is ready"
-else
-  FUNASR_DISRUPTED=true
-  "${COMPOSE[@]}" stop funasr
-  "${COMPOSE[@]}" run --rm --no-deps funasr-model-init
-fi
-FUNASR_DISRUPTED=true
-"${COMPOSE[@]}" up -d --no-deps funasr
-
-funasr_ready=false
-for _attempt in $(seq 1 60); do
-  if "${COMPOSE[@]}" exec -T funasr python -c \
-    "import urllib.request; assert urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).status == 200"; then
-    funasr_ready=true
-    break
+if [[ "$ASR_ENABLED" == "true" ]]; then
+  if "${COMPOSE[@]}" run --rm --no-deps funasr-model-init \
+    python -m app.download_models --check; then
+    echo "FunASR model cache is ready"
+  else
+    FUNASR_DISRUPTED=true
+    "${COMPOSE[@]}" stop funasr
+    "${COMPOSE[@]}" run --rm --no-deps funasr-model-init
   fi
-  sleep 5
-done
-if [[ "$funasr_ready" != "true" ]]; then
-  echo "FunASR health check failed" >&2
-  false
-fi
+  FUNASR_DISRUPTED=true
+  "${COMPOSE[@]}" up -d --no-deps funasr
 
-"${COMPOSE[@]}" exec -T funasr \
-  python /srv/funasr/smoke/smoke_transcription.py \
-  http://funasr:8000 \
-  /srv/funasr/smoke/fixtures/mandarin_reminder.wav
+  funasr_ready=false
+  for _attempt in $(seq 1 60); do
+    if "${COMPOSE[@]}" exec -T funasr python -c \
+      "import urllib.request; assert urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).status == 200"; then
+      funasr_ready=true
+      break
+    fi
+    sleep 5
+  done
+  if [[ "$funasr_ready" != "true" ]]; then
+    echo "FunASR health check failed" >&2
+    false
+  fi
+
+  "${COMPOSE[@]}" exec -T funasr \
+    python /srv/funasr/smoke/smoke_transcription.py \
+    http://funasr:8000 \
+    /srv/funasr/smoke/fixtures/mandarin_reminder.wav
+else
+  "${COMPOSE[@]}" stop funasr
+fi
 
 "${COMPOSE[@]}" run --rm --no-deps api \
   python manage.py check_release_dependencies
 "${COMPOSE[@]}" run --rm --no-deps api python manage.py migrate --noinput
 API_REPLACED=true
-"${COMPOSE[@]}" up -d --no-deps api worker
+"${COMPOSE[@]}" up -d --no-deps api worker beat
+
+beat_running=false
+for _attempt in $(seq 1 12); do
+  BEAT_CONTAINER_ID=$("${COMPOSE[@]}" ps -q beat)
+  if [[ -n "$BEAT_CONTAINER_ID" ]] && \
+    [[ "$(docker inspect --format '{{.State.Running}}' "$BEAT_CONTAINER_ID")" == "true" ]]; then
+    beat_running=true
+    break
+  fi
+  sleep 2
+done
+if [[ "$beat_running" != "true" ]]; then
+  echo "Celery Beat failed to start" >&2
+  false
+fi
 
 if [[ "$OCR_ENABLED" == "true" ]]; then
   "${COMPOSE[@]}" --profile ocr up -d minio
   "${COMPOSE[@]}" --profile ocr run --rm minio-init
   "${COMPOSE[@]}" --profile ocr run --rm --no-deps ocr-worker \
     python manage.py check_ocr tests/ocr/fixtures/medicine_front.jpg
-  "${COMPOSE[@]}" --profile ocr up -d --no-deps ocr-worker beat
+  "${COMPOSE[@]}" --profile ocr up -d --no-deps ocr-worker
 fi
 
 "${COMPOSE[@]}" --profile production run --rm --no-deps nginx-check nginx -t

@@ -48,6 +48,7 @@ ensure_value() {
 
 ensure_value FILES_DOMAIN files.aipupu.cloud
 ensure_value OCR_ENABLED false
+ensure_value ASR_ENABLED true
 ensure_value ASR_PROVIDER funasr
 ensure_value ASR_BASE_URL http://funasr:8000
 ensure_value ASR_LEASE_PROVIDER redis

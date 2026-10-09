@@ -15,8 +15,9 @@
 - 部署前如果服务器 `main` 与 `origin/main` 不一致，先读 `git status --short --branch`、`git branch -vv` 和相关提交 diff；保留必要修复。若需要对齐远程，先创建 `backup/production-<short-sha>-<timestamp>` 备份分支，再切到目标 SHA。
 - 部署命令使用仓库脚本并传入精确完整 SHA：
   `./deploy/tencent/scripts/deploy.sh <FULL_SHA> /opt/smart-reminder/shared/.env.production`
-- 部署脚本会构建、迁移、检查 FunASR、检查 Nginx 和健康状态；不要跳过脚本中的回滚保护。
-- 部署完成后至少确认三件事：公网 `https://aipupu.cloud/api/v1/health` 返回 OK，服务器 `git rev-parse HEAD` 等于目标 SHA，`api` 和 `funasr` 容器 healthy。
+- 部署脚本会构建、迁移、检查 Nginx 和健康状态，并按 `ASR_ENABLED` 决定是否构建、检查和启动 FunASR；不要跳过脚本中的回滚保护。
+- Celery Beat 是核心后台服务，不属于 OCR profile。OCR 关闭时只能停止 OCR Worker 和 MinIO，不能停止 Beat。
+- 部署完成后至少确认：公网 `https://aipupu.cloud/api/v1/health` 返回 OK，服务器 `git rev-parse HEAD` 等于目标 SHA，`api`、`worker`、`beat` healthy/running；仅当 `ASR_ENABLED=true` 时要求 `funasr` healthy。
 
 # iPhone 真机打包与安装约定
 

@@ -31,6 +31,7 @@ x-backend-environment: &production_backend_environment
   DEEPSEEK_TIMEOUT_SECONDS: ${DEEPSEEK_TIMEOUT_SECONDS:-8}
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
   OCR_ENABLED: ${OCR_ENABLED:-false}
+  ASR_ENABLED: ${ASR_ENABLED:-true}
   ASR_PROVIDER: ${ASR_PROVIDER:-funasr}
   ASR_BASE_URL: ${ASR_BASE_URL:-http://funasr:8000}
   ASR_LEASE_PROVIDER: ${ASR_LEASE_PROVIDER:-redis}
@@ -238,7 +239,6 @@ services:
   beat:
     image: smart-reminder-api:${APP_VERSION:?APP_VERSION is required}
     environment: *production_backend_environment
-    profiles: [ocr]
     restart: unless-stopped
     logging:
       <<: *production_logging

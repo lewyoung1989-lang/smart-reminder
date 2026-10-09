@@ -224,6 +224,7 @@ DEEPSEEK_BASE_URL = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.co
 DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
 DEEPSEEK_TIMEOUT_SECONDS = float(os.environ.get("DEEPSEEK_TIMEOUT_SECONDS", "8"))
 
+ASR_ENABLED = os.environ.get("ASR_ENABLED", "true").strip().lower() == "true"
 ASR_PROVIDER = os.environ.get("ASR_PROVIDER", "funasr")
 ASR_LEASE_PROVIDER = os.environ.get("ASR_LEASE_PROVIDER", "redis")
 if ASR_LEASE_PROVIDER not in {"redis", "memory"}:

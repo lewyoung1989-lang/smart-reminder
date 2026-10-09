@@ -2,6 +2,7 @@ import io
 from uuid import UUID
 import wave
 
+from django.test import override_settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 import pytest
 from redis.exceptions import RedisError
@@ -78,6 +79,21 @@ def test_requires_audio_file(api_client, user):
 
     assert response.status_code == 400
     assert response.json()["code"] == "microphone_audio_invalid"
+
+
+@override_settings(ASR_ENABLED=False)
+def test_returns_unavailable_without_calling_disabled_asr(
+    api_client, user, monkeypatch
+):
+    api_client.force_authenticate(user)
+    service = FakeTranscriptionService()
+    install_service(monkeypatch, service)
+
+    response = api_client.post(URL, {"audio": wav_upload()}, format="multipart")
+
+    assert response.status_code == 503
+    assert response.json()["code"] == "asr_unavailable"
+    assert service.calls == []
 
 
 def test_returns_transcript_and_server_computed_metadata(

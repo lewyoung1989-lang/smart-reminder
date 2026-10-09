@@ -1,6 +1,6 @@
 # 腾讯云单机部署手册
 
-本手册用于把智能生活提醒后端部署到腾讯云 Ubuntu 服务器。`https://aipupu.cloud` 提供 API，`https://files.aipupu.cloud` 提供药盒图片的短期签名上传。当前 4 核 4 GB 亲友内测配置运行 Django API、单进程 Celery Worker、单进程 FunASR、PostgreSQL、Redis 和 Nginx。RapidOCR、Celery Beat 与私有 MinIO 的代码、Compose 服务和数据卷继续保留，但生产默认 `OCR_ENABLED=false`，`ocr` profile 不自动启动这些服务。关闭 OCR 时，已认证用户访问所有 `/api/v1/ocr/*` 入口统一收到 `503 {"code":"ocr_disabled"}`，未认证请求仍先由 DRF 返回 `401`。
+本手册用于把智能生活提醒后端部署到腾讯云 Ubuntu 服务器。`https://aipupu.cloud` 提供 API，`https://files.aipupu.cloud` 提供药盒图片的短期签名上传。生产运行 Django API、单进程 Celery Worker、PostgreSQL、Redis、Celery Beat 和 Nginx。RapidOCR Worker 与私有 MinIO 的代码、Compose 服务和数据卷继续保留，但生产默认 `OCR_ENABLED=false`，`ocr` profile 不自动启动这些 OCR 服务。Celery Beat 是核心后台服务，不依赖 OCR，始终运行以补充周期用药执行记录和调度工作流。FunASR 由 `ASR_ENABLED` 独立控制；4 核 4 GB 主机可设为 `false`，语音 API 会返回 `503 asr_unavailable`，部署不会启动 FunASR。关闭 OCR 时，已认证用户访问所有 `/api/v1/ocr/*` 入口统一收到 `503 {"code":"ocr_disabled"}`，未认证请求仍先由 DRF 返回 `401`。
 
 生产环境中禁止提交或打印服务器密码、SSH 私钥、Bearer Token、Django Secret、数据库密码和 DeepSeek Key。
 

@@ -9,6 +9,7 @@ from django.conf import settings
 
 
 def test_asr_defaults_are_safe_for_v1():
+    assert settings.ASR_ENABLED is True
     assert settings.ASR_PROVIDER == "funasr"
     asr_url = urlparse(settings.ASR_BASE_URL)
     assert asr_url.scheme == "http"

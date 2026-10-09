@@ -336,15 +336,17 @@ def test_deploy_default_path_preserves_ocr_data_and_starts_funasr_first():
     script = (SCRIPTS / "deploy.sh").read_text()
     build = script.index('build api funasr')
     data = script.index('up -d postgres redis')
-    stop_ocr = script.index('stop ocr-worker minio beat')
+    stop_ocr = script.index('stop ocr-worker minio')
     model_init = script.index('run --rm --no-deps funasr-model-init')
     start_funasr = script.index('up -d --no-deps funasr', model_init)
     health = script.index("http://127.0.0.1:8000/health", start_funasr)
     asr_smoke = script.index("smoke_transcription.py")
     migrate = script.index('run --rm --no-deps api python manage.py migrate --noinput')
-    start_api = script.index('up -d --no-deps api worker', migrate)
+    start_api = script.index('up -d --no-deps api worker beat', migrate)
 
     assert "OCR_ENABLED" in script
+    assert 'if [[ "$ASR_ENABLED" == "true" ]]' in script
+    assert '"${COMPOSE[@]}" stop funasr' in script
     assert "docker compose rm" not in script
     assert "docker volume rm" not in script
     assert (
@@ -368,7 +370,7 @@ def test_deploy_ocr_enabled_path_builds_initializes_and_smoke_checks_ocr():
     assert "--profile ocr up -d minio" in script
     assert "--profile ocr run --rm minio-init" in script
     assert "manage.py check_ocr" in script
-    assert "--profile ocr up -d --no-deps ocr-worker beat" in script
+    assert "--profile ocr up -d --no-deps ocr-worker" in script
 
 
 def test_deploy_validates_and_reloads_nginx_after_api_replacement():
@@ -391,6 +393,18 @@ def test_deploy_keeps_old_api_and_nginx_during_build_and_asr_smoke():
     )
 
     assert build < smoke < start_api < recreate_nginx
+
+
+def test_deploy_starts_core_beat_even_when_ocr_is_disabled():
+    script = (SCRIPTS / "deploy.sh").read_text()
+    start_core = script.index('up -d --no-deps api worker beat')
+    ocr_conditional = script.index('if [[ "$OCR_ENABLED" == "true" ]]', start_core)
+
+    assert start_core < ocr_conditional
+    assert 'stop ocr-worker minio' in script
+    assert 'stop ocr-worker minio beat' not in script
+    assert "Celery Beat failed to start" in script
+    assert "docker inspect --format '{{.State.Running}}'" in script
 
 
 def test_deploy_preflights_candidate_and_restores_old_api_on_health_failure():
@@ -422,7 +436,7 @@ def test_deploy_traps_every_failure_after_api_replacement():
     funasr_smoke = script.index("smoke_transcription.py")
 
     assert handler < trap < replace_flag < replace < ocr < nginx < success_clear
-    assert script.index("\n  false", funasr_health_failure) < funasr_smoke
+    assert script.index("false", funasr_health_failure) < funasr_smoke
     assert "DEPLOY_ROLLBACK_ACTIVE" in script
     assert "failure_status" in script
     assert 'exit "$failure_status"' in script

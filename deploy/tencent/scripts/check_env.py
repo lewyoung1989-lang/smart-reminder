@@ -23,6 +23,7 @@ REQUIRED = {
     "CELERY_RESULT_BACKEND",
     "AUTH_CACHE_URL",
     "DEEPSEEK_API_KEY",
+    "ASR_ENABLED",
     "ASR_PROVIDER",
     "ASR_BASE_URL",
     "ASR_LEASE_PROVIDER",
@@ -85,6 +86,9 @@ def validate(values: dict[str, str]) -> list[str]:
     ocr_enabled = values.get("OCR_ENABLED")
     if ocr_enabled not in {None, "", "true", "false"}:
         errors.append("OCR_ENABLED must be true or false")
+    asr_enabled = values.get("ASR_ENABLED")
+    if asr_enabled not in {None, "", "true", "false"}:
+        errors.append("ASR_ENABLED must be true or false")
     if ocr_enabled == "true":
         errors.extend(
             f"{key} is required"

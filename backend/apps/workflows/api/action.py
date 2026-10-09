@@ -8,7 +8,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.medication.models import MedicationOccurrence
+from apps.medication.models import MedicationOccurrence, MedicationPlan
+from apps.medication.services.occurrences import materialize_occurrences
 from apps.medicines.models import ExpiryAlertState, LowStockAlertState
 from apps.reminders.models import ReminderRule
 from apps.workflows.models import NotificationOutbox
@@ -59,6 +60,17 @@ class TodayActionCenterView(APIView):
         local_now = now.astimezone(LOCAL_TIMEZONE)
         today_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
         tomorrow_start = today_start + timedelta(days=1)
+
+        # The daily Beat task normally keeps this 30-day window ahead. Repair
+        # it on read as well so a missed/stopped Beat does not hide today's
+        # medication actions. get_or_create inside materialize_occurrences
+        # makes concurrent requests safe and idempotent.
+        for plan in MedicationPlan.objects.filter(
+            owner=request.user,
+            enabled=True,
+        ).iterator(chunk_size=100):
+            materialize_occurrences(plan, now=now)
+
         medication_history_start = now - timedelta(days=2)
         failed_outbox = NotificationOutbox.objects.filter(
             workflow_run__workflow__owner=request.user,

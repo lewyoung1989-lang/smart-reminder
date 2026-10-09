@@ -238,6 +238,44 @@ def test_today_returns_empty_paginated_queues(api_client, user):
 
 
 @pytest.mark.django_db
+def test_today_repairs_missing_medication_occurrences_for_owner(
+    api_client, user, django_user_model, mocker
+):
+    other = django_user_model.objects.create_user(username="action-center-medication-other")
+    own_plan = MedicationPlan.objects.create(
+        owner=user,
+        medicine_name="测试药品",
+        dosage_text="每次1片",
+        timezone="Asia/Shanghai",
+        schedule_json={"times": ["09:30"]},
+    )
+    other_plan = MedicationPlan.objects.create(
+        owner=other,
+        medicine_name="其他药品",
+        dosage_text="每次1片",
+        timezone="Asia/Shanghai",
+        schedule_json={"times": ["09:30"]},
+    )
+    mocker.patch("apps.workflows.api.action.timezone.now", return_value=NOW)
+    api_client.force_authenticate(user)
+
+    response = api_client.get("/api/v1/action-center/today")
+
+    assert response.status_code == 200
+    assert any(
+        item["title"] == "服用测试药品（每次1片）"
+        for item in response.json()["upcoming"]["results"]
+    )
+    assert own_plan.occurrences.count() == 30
+    assert other_plan.occurrences.count() == 0
+
+    second_response = api_client.get("/api/v1/action-center/today")
+
+    assert second_response.status_code == 200
+    assert own_plan.occurrences.count() == 30
+
+
+@pytest.mark.django_db
 def test_today_includes_active_expiry_alerts_only_for_the_owner(api_client, user, django_user_model):
     medicine = MedicineItem.objects.create(owner=user, name="滴眼液")
     batch = InventoryBatch.objects.create(
@@ -642,6 +680,7 @@ def test_today_places_active_medication_history_after_current_decisions(
         idempotency_key="current-medication-decision",
     )
     mocker.patch("apps.workflows.api.action.timezone.now", return_value=NOW)
+    mocker.patch("apps.workflows.api.action.materialize_occurrences")
     api_client.force_authenticate(user)
 
     response = api_client.get("/api/v1/action-center/today")

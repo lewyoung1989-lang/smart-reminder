@@ -15,7 +15,8 @@ class Command(BaseCommand):
         try:
             self._check_database()
             self._check_redis_cache()
-            self._check_funasr()
+            if settings.ASR_ENABLED:
+                self._check_funasr()
         except Exception:
             raise CommandError(
                 "Release dependency preflight failed"
