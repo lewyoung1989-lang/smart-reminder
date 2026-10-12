@@ -11,6 +11,13 @@ abstract interface class PlanActions {
   Future<PlanDetail> updateFromDraft(String id,
       {required String workflowDraftId});
 
+  Future<PlanDetail> updateMedicationConfig(
+    String id, {
+    required String medicineName,
+    required String doseText,
+    required List<String> times,
+  });
+
   Future<PlanDetail> pause(String id);
 
   Future<PlanDetail> resume(String id);

@@ -314,3 +314,66 @@ def test_plan_mutations_are_owner_scoped(api_client, user, django_user_model):
     assert api_client.post(f"/api/v1/plans/{plan.id}/pause").status_code == 404
     assert api_client.post(f"/api/v1/plans/{plan.id}/resume").status_code == 404
     assert api_client.delete(f"/api/v1/plans/{plan.id}").status_code == 404
+
+
+@pytest.mark.django_db
+def test_plan_detail_dose_label_and_execution_ordering(api_client, user):
+    draft = create_workflow_draft(user, medicine_name="盐酸普罗帕酮片", dose_text="每次150mg")
+    plan = create_plan(user, workflow_draft=draft)
+    early_run = WorkflowRun.objects.create(
+        workflow=plan,
+        idempotency_key="run-early",
+        status=WorkflowRun.Status.PENDING,
+        scheduled_for=datetime(2026, 9, 22, 22, 0, tzinfo=datetime_timezone.utc),
+    )
+    late_run = WorkflowRun.objects.create(
+        workflow=plan,
+        idempotency_key="run-late",
+        status=WorkflowRun.Status.PENDING,
+        scheduled_for=datetime(2026, 9, 30, 15, 0, tzinfo=datetime_timezone.utc),
+    )
+    api_client.force_authenticate(user)
+
+    response = api_client.get(f"/api/v1/plans/{plan.id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["dose_label"] == "每次150mg"
+    # 较晚的 run（9月30日）应排在较早的 run（9月22日）之前
+    assert [e["started_at"] for e in data["executions"]] == [
+        late_run.scheduled_for.isoformat(),
+        early_run.scheduled_for.isoformat(),
+    ]
+
+
+@pytest.mark.django_db
+def test_plan_patch_medication_directly(api_client, user):
+    draft = create_workflow_draft(user, medicine_name="盐酸普罗帕酮片", dose_text="每次150mg")
+    plan = create_plan(user, workflow_draft=draft)
+    api_client.force_authenticate(user)
+
+    # 直接 PATCH 修改药品、剂量、时间列表
+    patch_payload = {
+        "medicine_name": "阿莫西林胶囊",
+        "dose_text": "每次2粒",
+        "times": ["08:00", "20:00"],
+    }
+    response = api_client.patch(f"/api/v1/plans/{plan.id}", patch_payload, format="json")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["summary"]["title"] == "阿莫西林胶囊服药提醒"
+    assert data["dose_label"] == "每次2粒"
+    assert data["medication_config"] == {
+        "medicine_name": "阿莫西林胶囊",
+        "dose_text": "每次2粒",
+        "times": ["08:00", "20:00"],
+    }
+    assert "每天 08:00、20:00 通知提醒" in data["reminder_label"]
+
+    plan.refresh_from_db()
+    assert plan.title == "阿莫西林胶囊服药提醒"
+    med_plan = MedicationPlan.objects.get(source_workflow_draft=plan.workflow_draft)
+    assert med_plan.medicine_name == "阿莫西林胶囊"
+    assert med_plan.dosage_text == "每次2粒"
+    assert med_plan.schedule_json == {"times": ["08:00", "20:00"]}
+
+

@@ -63,11 +63,25 @@ class PlanExecution {
   final String message;
 }
 
+class MedicationConfig {
+  MedicationConfig({
+    required this.medicineName,
+    required this.doseText,
+    required List<String> times,
+  }) : times = List.unmodifiable(times);
+
+  final String medicineName;
+  final String doseText;
+  final List<String> times;
+}
+
 class PlanDetail {
   PlanDetail({
     required this.summary,
     this.arrivalLabel,
     this.destination,
+    this.doseLabel,
+    this.medicationConfig,
     required List<String> queriedSources,
     required this.reminderLabel,
     required List<PlanExecution> executions,
@@ -81,6 +95,8 @@ class PlanDetail {
   final PlanSummary summary;
   final String? arrivalLabel;
   final String? destination;
+  final String? doseLabel;
+  final MedicationConfig? medicationConfig;
   final List<String> queriedSources;
   final String reminderLabel;
   final List<PlanExecution> executions;

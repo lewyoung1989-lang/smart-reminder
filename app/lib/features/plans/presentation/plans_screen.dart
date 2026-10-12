@@ -218,10 +218,52 @@ class _PlansScreenState extends State<PlansScreen> {
       onDelete: actions == null
           ? null
           : () => _deletePlan(actions, detail, compact: compact),
+      onUpdateMedication: actions == null
+          ? null
+          : ({
+              required String medicineName,
+              required String doseText,
+              required List<String> times,
+            }) =>
+                _updateMedicationPlan(
+                  actions,
+                  detail,
+                  medicineName: medicineName,
+                  doseText: doseText,
+                  times: times,
+                  compact: compact,
+                ),
       onEdit: widget.onEditPlan == null || detail.sourceText.trim().isEmpty
           ? null
           : () => _editPlan(detail, compact: compact),
     );
+  }
+
+  Future<PlanDetail> _updateMedicationPlan(
+    PlanActions actions,
+    PlanDetail detail, {
+    required String medicineName,
+    required String doseText,
+    required List<String> times,
+    required bool compact,
+  }) async {
+    final updated = await actions.updateMedicationConfig(
+      detail.summary.id,
+      medicineName: medicineName,
+      doseText: doseText,
+      times: times,
+    );
+    await _schedulePlanNotification(updated);
+    if (!compact && mounted) {
+      setState(() => _selectedDetail = updated);
+    }
+    await _load();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('用药计划已更新')),
+      );
+    }
+    return updated;
   }
 
   Future<void> _pausePlan(

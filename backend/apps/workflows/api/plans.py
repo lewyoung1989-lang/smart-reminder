@@ -1,5 +1,6 @@
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 from pydantic import ValidationError as PydanticValidationError
 from rest_framework import status
@@ -51,13 +52,19 @@ def _summary(rule: ReminderRule) -> dict:
 def _detail(rule: ReminderRule) -> dict:
     executions = [
         _execution(run)
-        for run in rule.workflow_runs.order_by("-started_at", "-id")[:20]
+        for run in rule.workflow_runs.annotate(
+            effective_time=Coalesce(
+                "started_at", "scheduled_for", "workflow__created_at"
+            )
+        ).order_by("-effective_time", "-id")[:20]
     ]
     latest_result = executions[0] if executions else None
     return {
         "summary": _summary(rule),
         "arrival_label": _arrival_label(rule),
         "destination": _slots(rule).get("destination_text"),
+        "dose_label": _dose_label(rule),
+        "medication_config": _medication_config(rule),
         "queried_sources": _queried_sources(rule),
         "reminder_label": _reminder_label(rule),
         "executions": executions,
@@ -72,6 +79,31 @@ def _detail(rule: ReminderRule) -> dict:
         "notification_schedule": _notification_schedule(rule),
         "source_text": getattr(rule.workflow_draft, "source_text", ""),
     }
+
+
+def _medication_config(rule: ReminderRule) -> dict | None:
+    if rule.template_key != "medication_cycle":
+        return None
+    slots = _slots(rule)
+    try:
+        times = medication_times_from_config(slots)
+    except ValueError:
+        times = []
+    medicine_name = slots.get("medicine_name") or rule.title.replace("服药提醒", "")
+    dose_text = slots.get("dose_text") or ""
+    return {
+        "medicine_name": medicine_name,
+        "dose_text": dose_text,
+        "times": times,
+    }
+
+
+def _dose_label(rule: ReminderRule) -> str | None:
+    slots = _slots(rule)
+    dose = slots.get("dose_text")
+    if isinstance(dose, str) and dose.strip():
+        return dose.strip()
+    return None
 
 
 def _execution(run: WorkflowRun) -> dict:
@@ -422,6 +454,114 @@ class PlanDetailView(APIView):
             ).update(status=WorkflowRun.Status.CANCELLED)
 
         return Response(_detail(rule), status=status.HTTP_200_OK)
+
+    def patch(self, request, plan_id):
+        with transaction.atomic():
+            try:
+                rule = (
+                    _workflow_rules(request.user)
+                    .select_for_update()
+                    .get(id=plan_id)
+                )
+            except ReminderRule.DoesNotExist:
+                return Response(
+                    {"detail": "未找到该周期计划"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            if rule.template_key != "medication_cycle":
+                return Response(
+                    {"detail": "当前仅支持直接编辑用药计划"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            data = request.data
+            medicine_name = data.get("medicine_name")
+            dose_text = data.get("dose_text")
+            times = data.get("times")
+
+            if not isinstance(medicine_name, str) or not medicine_name.strip():
+                return Response(
+                    {"detail": "药品名称不能为空"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if not isinstance(dose_text, str) or not dose_text.strip():
+                return Response(
+                    {"detail": "单次剂量不能为空"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if not isinstance(times, list) or not times or not all(isinstance(t, str) for t in times):
+                return Response(
+                    {"detail": "提醒时间不能为空且必须是有效的列表"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            medicine_name = medicine_name.strip()
+            dose_text = dose_text.strip()
+            valid_times = []
+            for t in times:
+                try:
+                    parsed_time = timezone.datetime.strptime(t.strip(), "%H:%M").time()
+                    normalized = f"{parsed_time.hour:02d}:{parsed_time.minute:02d}"
+                    if normalized not in valid_times:
+                        valid_times.append(normalized)
+                except ValueError:
+                    return Response(
+                        {"detail": f"无效的时间格式: {t}，应为 HH:MM"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+            valid_times.sort()
+            if not valid_times:
+                return Response(
+                    {"detail": "至少需要一个有效的提醒时间"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            now = timezone.now()
+            draft = rule.workflow_draft
+            task_dict = draft.task_spec_json if isinstance(draft.task_spec_json, dict) else {}
+            slots = task_dict.get("slots", {})
+            slots["medicine_name"] = medicine_name
+            slots["dose_text"] = dose_text
+            slots["times"] = valid_times
+            slots["time_of_day"] = valid_times[0]
+            slots["frequency"] = "daily"
+            task_dict["slots"] = slots
+            task_dict["title"] = f"{medicine_name}服药提醒"
+            task_dict["template_hint"] = "medication_cycle"
+            task_dict["requested_capabilities"] = ["medicine.schedule", "notification.important"]
+            task_dict["ambiguities"] = []
+
+            task = TaskSpec.model_validate(task_dict)
+            workflow = WorkflowCompiler().compile(task)
+            next_run_at = _initial_next_run_at(workflow, now)
+
+            draft.task_spec_json = task.model_dump(mode="json")
+            draft.workflow_spec_json = workflow.model_dump(mode="json")
+            draft.status = WorkflowDraft.Status.CONFIRMED
+            draft.confirmed_at = now
+            draft.save(update_fields=["task_spec_json", "workflow_spec_json", "status", "confirmed_at"])
+
+            rule.title = task.title
+            rule.workflow_spec_json = workflow.model_dump(mode="json")
+            rule.next_run_at = next_run_at
+            rule.revision = (rule.revision or 0) + 1
+            rule.save(update_fields=["title", "workflow_spec_json", "next_run_at", "revision"])
+
+            update_medication_plan_for_workflow(
+                previous_draft=draft,
+                draft=draft,
+                task=task,
+                now=now,
+                enabled=rule.enabled,
+            )
+            WorkflowRun.objects.filter(
+                workflow=rule,
+                status__in=[WorkflowRun.Status.PENDING, WorkflowRun.Status.RUNNING],
+            ).update(status=WorkflowRun.Status.CANCELLED)
+
+        return Response(_detail(rule), status=status.HTTP_200_OK)
+
 
 
 class PlanPauseView(APIView):

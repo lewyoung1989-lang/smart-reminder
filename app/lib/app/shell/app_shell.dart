@@ -343,10 +343,44 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       onPause: actions == null ? null : () => _pausePlan(actions, detail),
       onResume: actions == null ? null : () => _resumePlan(actions, detail),
       onDelete: actions == null ? null : () => _deletePlan(actions, detail),
+      onUpdateMedication: actions == null
+          ? null
+          : ({
+              required String medicineName,
+              required String doseText,
+              required List<String> times,
+            }) =>
+                _updateMedicationPlan(
+                  actions,
+                  detail,
+                  medicineName: medicineName,
+                  doseText: doseText,
+                  times: times,
+                ),
       onEdit: detail.sourceText.trim().isEmpty
           ? null
           : () => _editPlanFromDetail(detail),
     );
+  }
+
+  Future<PlanDetail> _updateMedicationPlan(
+    PlanActions actions,
+    PlanDetail detail, {
+    required String medicineName,
+    required String doseText,
+    required List<String> times,
+  }) async {
+    final updated = await actions.updateMedicationConfig(
+      detail.summary.id,
+      medicineName: medicineName,
+      doseText: doseText,
+      times: times,
+    );
+    await _schedulePlanNotification(updated.summary.id);
+    _refreshToday();
+    setState(() => _planRefreshRevision += 1);
+    _showSnackBar('用药计划已更新');
+    return updated;
   }
 
   Future<void> _pausePlan(PlanActions actions, PlanDetail detail) async {

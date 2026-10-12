@@ -461,6 +461,15 @@ class _DeletablePlanRepository implements PlanRepository, PlanActions {
       departureDetail;
 
   @override
+  Future<PlanDetail> updateMedicationConfig(
+    String id, {
+    required String medicineName,
+    required String doseText,
+    required List<String> times,
+  }) async =>
+      departureDetail;
+
+  @override
   Future<PlanDetail> pause(String id) async => departureDetail;
 
   @override

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:smart_reminder_app/app/theme/app_theme.dart';
 import 'package:smart_reminder_app/features/plans/domain/plan_models.dart';
+import 'package:smart_reminder_app/features/plans/presentation/edit_medication_plan_sheet.dart';
 import 'package:smart_reminder_app/features/plans/presentation/plan_detail_screen.dart';
 import 'package:smart_reminder_app/ui/components/app_status_banner.dart';
 
@@ -23,8 +24,18 @@ void main() {
         (tester) async {
       await pumpPlanDetail(tester, _detailWithSourceText());
 
-      expect(find.text('创建时说的话'), findsOneWidget);
+      expect(find.text('原始备注'), findsOneWidget);
       expect(find.text('每天晚上六点半提醒我饭后吃拜新同一片'), findsOneWidget);
+    });
+
+    testWidgets('shows dose label when present', (tester) async {
+      await pumpPlanDetail(tester, _detailWithDose());
+
+      expect(find.text('单次剂量'), findsOneWidget);
+      expect(find.text('每次150mg'), findsOneWidget);
+      // 空查询来源不展示
+      expect(find.text('查询来源'), findsNothing);
+      expect(find.text('无额外数据来源'), findsNothing);
     });
 
     testWidgets('active detail invokes a supplied pause callback',
@@ -66,6 +77,83 @@ void main() {
       await tester.tap(find.text('编辑计划'));
       await tester.pumpAndSettle();
       expect(edits, 1);
+    });
+
+    testWidgets('editing medication plan opens structured sheet and updates directly',
+        (tester) async {
+      String? savedMedicine;
+      String? savedDose;
+      List<String>? savedTimes;
+
+      final updatedDetail = PlanDetail(
+        summary: PlanSummary(
+          id: 'med-plan-1',
+          title: '阿莫西林胶囊服药提醒',
+          subtitle: '阿莫西林胶囊 · 每次2粒',
+          nextRunAt: fixedNow,
+          status: PlanStatus.active,
+          kind: PlanKind.medication,
+        ),
+        doseLabel: '每次2粒',
+        medicationConfig: MedicationConfig(
+          medicineName: '阿莫西林胶囊',
+          doseText: '每次2粒',
+          times: const ['08:00', '20:00'],
+        ),
+        queriedSources: const [],
+        reminderLabel: '每天 08:00、20:00 通知提醒',
+        executions: const [],
+      );
+
+      await pumpPlanDetail(
+        tester,
+        _detailWithDose(),
+        onUpdateMedication: ({
+          required String medicineName,
+          required String doseText,
+          required List<String> times,
+        }) async {
+          savedMedicine = medicineName;
+          savedDose = doseText;
+          savedTimes = times;
+          return updatedDetail;
+        },
+      );
+
+      // 打开编辑浮层
+      await tester.tap(find.byTooltip('更多操作'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑计划'));
+      await tester.pumpAndSettle();
+
+      // 验证浮层元素
+      expect(find.text('编辑用药计划'), findsOneWidget);
+      expect(find.byType(EditMedicationPlanSheet), findsOneWidget);
+      expect(find.widgetWithText(TextFormField, '药品名称'), findsOneWidget);
+      expect(find.widgetWithText(TextFormField, '单次剂量'), findsOneWidget);
+      expect(find.text('07:30'), findsOneWidget);
+      expect(find.text('15:00'), findsOneWidget);
+      expect(find.text('22:00'), findsOneWidget);
+      expect(find.text('保存修改'), findsOneWidget);
+
+      // 修改药品名称和剂量
+      await tester.enterText(
+          find.widgetWithText(TextFormField, '盐酸普罗帕酮片'), '阿莫西林胶囊');
+      await tester.enterText(
+          find.widgetWithText(TextFormField, '每次150mg'), '每次2粒');
+
+      // 点击保存修改
+      await tester.tap(find.text('保存修改'));
+      await tester.pumpAndSettle();
+
+      // 验证回调参数
+      expect(savedMedicine, '阿莫西林胶囊');
+      expect(savedDose, '每次2粒');
+      expect(savedTimes, containsAll(['07:30', '15:00', '22:00']));
+
+      // 验证详情页原地刷新
+      expect(find.text('阿莫西林胶囊服药提醒'), findsOneWidget);
+      expect(find.text('每次2粒'), findsOneWidget);
     });
 
     testWidgets(
@@ -140,6 +228,11 @@ Future<void> pumpPlanDetail(
   Future<void> Function()? onResume,
   VoidCallback? onEdit,
   Future<void> Function()? onDelete,
+  Future<PlanDetail> Function({
+    required String medicineName,
+    required String doseText,
+    required List<String> times,
+  })? onUpdateMedication,
   Size surfaceSize = const Size(800, 900),
   TextScaler textScaler = TextScaler.noScaling,
   ThemeData? theme,
@@ -159,6 +252,7 @@ Future<void> pumpPlanDetail(
           onResume: onResume,
           onEdit: onEdit,
           onDelete: onDelete,
+          onUpdateMedication: onUpdateMedication,
         ),
       ),
     ),
@@ -199,3 +293,27 @@ PlanDetail _detailWithSourceText() {
     sourceText: '每天晚上六点半提醒我饭后吃拜新同一片',
   );
 }
+
+PlanDetail _detailWithDose() {
+  final summary = PlanSummary(
+    id: 'medication-dose',
+    title: '服药提醒',
+    subtitle: '盐酸普罗帕酮片 · 每次150mg',
+    nextRunAt: fixedNow,
+    status: PlanStatus.active,
+    kind: PlanKind.medication,
+  );
+  return PlanDetail(
+    summary: summary,
+    doseLabel: '每次150mg',
+    medicationConfig: MedicationConfig(
+      medicineName: '盐酸普罗帕酮片',
+      doseText: '每次150mg',
+      times: const ['07:30', '15:00', '22:00'],
+    ),
+    queriedSources: const [],
+    reminderLabel: '每天 07:30、15:00、22:00 通知提醒',
+    executions: const [],
+  );
+}
+

@@ -8,13 +8,16 @@ import '../../../ui/components/app_property_row.dart';
 import '../../../ui/components/app_status_banner.dart';
 import '../domain/plan_models.dart';
 
-class PlanDetailScreen extends StatelessWidget {
+import 'edit_medication_plan_sheet.dart';
+
+class PlanDetailScreen extends StatefulWidget {
   const PlanDetailScreen({
     required this.detail,
     this.onPause,
     this.onResume,
     this.onEdit,
     this.onDelete,
+    this.onUpdateMedication,
     super.key,
   });
 
@@ -23,13 +26,36 @@ class PlanDetailScreen extends StatelessWidget {
   final Future<void> Function()? onResume;
   final VoidCallback? onEdit;
   final Future<void> Function()? onDelete;
+  final Future<PlanDetail> Function({
+    required String medicineName,
+    required String doseText,
+    required List<String> times,
+  })? onUpdateMedication;
+
+  @override
+  State<PlanDetailScreen> createState() => _PlanDetailScreenState();
+}
+
+class _PlanDetailScreenState extends State<PlanDetailScreen> {
+  late PlanDetail _detail = widget.detail;
+
+  @override
+  void didUpdateWidget(covariant PlanDetailScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.detail != widget.detail) {
+      _detail = widget.detail;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final summary = detail.summary;
-    final action = summary.status == PlanStatus.paused ? onResume : onPause;
+    final summary = _detail.summary;
+    final action = summary.status == PlanStatus.paused ? widget.onResume : widget.onPause;
     final actionLabel = summary.status == PlanStatus.paused ? '恢复计划' : '暂停计划';
-    final sourceText = detail.sourceText.trim();
+    final sourceText = _detail.sourceText.trim();
+    final canEdit = (widget.onUpdateMedication != null &&
+            _detail.summary.kind == PlanKind.medication) ||
+        widget.onEdit != null;
 
     return Scaffold(
       body: SafeArea(
@@ -44,15 +70,16 @@ class PlanDetailScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               AppPageHeader(
+                leading: Navigator.canPop(context)
+                    ? IconButton(
+                        tooltip: '返回计划',
+                        onPressed: () => Navigator.of(context).maybePop(),
+                        icon: const Icon(LucideIcons.arrowLeft),
+                      )
+                    : null,
                 eyebrow: _kindLabel(summary.kind),
                 title: summary.title,
                 actions: <Widget>[
-                  if (Navigator.canPop(context))
-                    IconButton(
-                      tooltip: '返回计划',
-                      onPressed: () => Navigator.of(context).maybePop(),
-                      icon: const Icon(LucideIcons.arrowLeft),
-                    ),
                   PopupMenuButton<_MoreAction>(
                     tooltip: '更多操作',
                     icon: const Icon(LucideIcons.ellipsis),
@@ -61,12 +88,12 @@ class PlanDetailScreen extends StatelessWidget {
                       _menuItem(
                         value: _MoreAction.edit,
                         label: '编辑计划',
-                        enabled: onEdit != null,
+                        enabled: canEdit,
                       ),
                       _menuItem(
                         value: _MoreAction.delete,
                         label: '删除计划',
-                        enabled: onDelete != null,
+                        enabled: widget.onDelete != null,
                       ),
                     ],
                   ),
@@ -74,12 +101,12 @@ class PlanDetailScreen extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.xl),
               _StatusSummary(summary: summary),
-              if (detail.isDegraded) ...[
+              if (_detail.isDegraded) ...[
                 const SizedBox(height: AppSpacing.lg),
                 AppStatusBanner(
                   severity: AppStatusSeverity.warning,
                   title: '计划已降级执行',
-                  message: detail.degradationMessage ?? '已使用可用信息继续提醒',
+                  message: _detail.degradationMessage ?? '已使用可用信息继续提醒',
                 ),
               ],
               const SizedBox(height: AppSpacing.xl),
@@ -91,24 +118,26 @@ class PlanDetailScreen extends StatelessWidget {
                     value: Text(_formatDateTime(summary.nextRunAt)),
                   ),
                   AppPropertyRow(
-                      label: '提醒方式', value: Text(detail.reminderLabel)),
-                  if (detail.arrivalLabel != null)
+                      label: '提醒方式', value: Text(_detail.reminderLabel)),
+                  if (_detail.doseLabel != null && _detail.doseLabel!.isNotEmpty)
                     AppPropertyRow(
-                        label: '到达时间', value: Text(detail.arrivalLabel!)),
-                  if (detail.destination != null)
-                    AppPropertyRow(
-                        label: '目的地', value: Text(detail.destination!)),
-                  AppPropertyRow(
-                    label: '查询来源',
-                    value: Text(
-                      detail.queriedSources.isEmpty
-                          ? '无额外数据来源'
-                          : detail.queriedSources.join('、'),
+                      label: '单次剂量',
+                      value: Text(_detail.doseLabel!),
                     ),
-                  ),
+                  if (_detail.arrivalLabel != null)
+                    AppPropertyRow(
+                        label: '到达时间', value: Text(_detail.arrivalLabel!)),
+                  if (_detail.destination != null)
+                    AppPropertyRow(
+                        label: '目的地', value: Text(_detail.destination!)),
+                  if (_detail.queriedSources.isNotEmpty)
+                    AppPropertyRow(
+                      label: '查询来源',
+                      value: Text(_detail.queriedSources.join('、')),
+                    ),
                   if (sourceText.isNotEmpty)
                     AppPropertyRow(
-                      label: '创建时说的话',
+                      label: '原始备注',
                       value: SelectableText(sourceText),
                     ),
                 ],
@@ -116,10 +145,10 @@ class PlanDetailScreen extends StatelessWidget {
               const SizedBox(height: AppSpacing.xl),
               _DetailSection(
                 title: '执行记录',
-                children: detail.executions.isEmpty
+                children: _detail.executions.isEmpty
                     ? <Widget>[const Text('暂无执行记录')]
                     : <Widget>[
-                        for (final execution in detail.executions)
+                        for (final execution in _detail.executions)
                           _ExecutionRow(execution: execution),
                       ],
               ),
@@ -155,7 +184,29 @@ class PlanDetailScreen extends StatelessWidget {
       BuildContext context, _MoreAction action) async {
     switch (action) {
       case _MoreAction.edit:
-        onEdit?.call();
+        if (_detail.summary.kind == PlanKind.medication &&
+            widget.onUpdateMedication != null) {
+          await EditMedicationPlanSheet.show(
+            context,
+            detail: _detail,
+            onSave: ({
+              required String medicineName,
+              required String doseText,
+              required List<String> times,
+            }) async {
+              final newDetail = await widget.onUpdateMedication!(
+                medicineName: medicineName,
+                doseText: doseText,
+                times: times,
+              );
+              if (mounted) {
+                setState(() => _detail = newDetail);
+              }
+            },
+          );
+        } else {
+          widget.onEdit?.call();
+        }
       case _MoreAction.delete:
         final confirmed = await showDialog<bool>(
           context: context,
@@ -177,9 +228,9 @@ class PlanDetailScreen extends StatelessWidget {
             ],
           ),
         );
-        if (confirmed == true && onDelete != null) {
+        if (confirmed == true && widget.onDelete != null) {
           if (!context.mounted) return;
-          await _runAction(context, onDelete!);
+          await _runAction(context, widget.onDelete!);
         }
     }
   }
@@ -285,17 +336,26 @@ class _ExecutionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final statusText = _executionLabel(execution);
+    final redundant = execution.message.trim().isEmpty ||
+        execution.message.trim() == '等待执行' ||
+        execution.message.trim() == statusText;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(
-            '${_executionLabel(execution.status)} · ${_formatDateTime(execution.startedAt)}',
-            style: Theme.of(context).textTheme.labelMedium,
+            '$statusText · ${_formatDateTime(execution.startedAt)}',
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
           ),
-          const SizedBox(height: AppSpacing.xs),
-          Text(execution.message),
+          if (!redundant) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Text(execution.message),
+          ],
         ],
       ),
     );
@@ -314,14 +374,22 @@ String _kindLabel(PlanKind kind) => switch (kind) {
       PlanKind.reminder => '提醒计划',
     };
 
-String _executionLabel(PlanExecutionStatus status) => switch (status) {
-      PlanExecutionStatus.pending => '待执行',
-      PlanExecutionStatus.running => '执行中',
-      PlanExecutionStatus.completed => '已完成',
-      PlanExecutionStatus.degraded => '已降级',
-      PlanExecutionStatus.failed => '失败',
-      PlanExecutionStatus.cancelled => '已取消',
-    };
+String _executionLabel(PlanExecution execution) {
+  if (execution.status == PlanExecutionStatus.pending) {
+    if (execution.startedAt.isBefore(DateTime.now())) {
+      return '未触发';
+    }
+    return '待执行';
+  }
+  return switch (execution.status) {
+    PlanExecutionStatus.pending => '待执行',
+    PlanExecutionStatus.running => '执行中',
+    PlanExecutionStatus.completed => '已完成',
+    PlanExecutionStatus.degraded => '已降级',
+    PlanExecutionStatus.failed => '失败',
+    PlanExecutionStatus.cancelled => '已取消',
+  };
+}
 
 String _formatDateTime(DateTime value) {
   return '${value.month}月${value.day}日 ${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';

@@ -70,6 +70,31 @@ class ApiPlanRepository implements PlanRepository, PlanActions {
     return _detail(jsonDecode(response.body) as Map<String, dynamic>);
   }
 
+  @override
+  Future<PlanDetail> updateMedicationConfig(
+    String id, {
+    required String medicineName,
+    required String doseText,
+    required List<String> times,
+  }) async {
+    final response = await _client.patch(
+      _baseUri.resolve('/api/v1/plans/$id'),
+      headers: {
+        ..._headers,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'medicine_name': medicineName,
+        'dose_text': doseText,
+        'times': times,
+      }),
+    );
+    if (response.statusCode != 200) {
+      throw PlanApiException(response.statusCode, response.body);
+    }
+    return _detail(jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>);
+  }
+
   Future<PlanDetail> _postAction(String id, String action) async {
     final response = await _client.post(
       _baseUri.resolve('/api/v1/plans/$id/$action'),
@@ -94,10 +119,21 @@ class ApiPlanRepository implements PlanRepository, PlanActions {
 
   PlanDetail _detail(Map<String, dynamic> payload) {
     final notification = payload['notification_schedule'];
+    final medicationConfigJson = payload['medication_config'];
     return PlanDetail(
       summary: _summary(payload['summary'] as Map<String, dynamic>),
       arrivalLabel: payload['arrival_label'] as String?,
       destination: payload['destination'] as String?,
+      doseLabel: payload['dose_label'] as String?,
+      medicationConfig: medicationConfigJson is Map<String, dynamic>
+          ? MedicationConfig(
+              medicineName: medicationConfigJson['medicine_name'] as String? ?? '',
+              doseText: medicationConfigJson['dose_text'] as String? ?? '',
+              times: List<String>.from(
+                medicationConfigJson['times'] as List? ?? const [],
+              ),
+            )
+          : null,
       queriedSources: List<String>.from(
         payload['queried_sources'] as List? ?? const [],
       ),

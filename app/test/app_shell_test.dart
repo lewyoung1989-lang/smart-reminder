@@ -652,23 +652,22 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('编辑计划'));
     await tester.pumpAndSettle();
+
+    expect(find.text('编辑用药计划'), findsOneWidget);
     await tester.enterText(
-      find.byKey(const Key('quick-create-input')),
-      '每天14点吃盐酸普罗帕酮片每次三片',
+      find.widgetWithText(TextFormField, '药品名称'),
+      '盐酸普罗帕酮片',
     );
-    await tester.pump();
-    await tester.tap(find.widgetWithText(FilledButton, '继续'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, '确认'));
+    await tester.enterText(
+      find.widgetWithText(TextFormField, '单次剂量'),
+      '每次三片',
+    );
+    await tester.tap(find.text('保存修改'));
     await tester.pumpAndSettle();
 
-    expect(parsedTexts, ['每天14点吃盐酸普罗帕酮片每次三片']);
-    expect(createdDraftIds, isEmpty);
     expect(planRepository.updatedPlanIds, ['plan-original']);
-    expect(planRepository.updatedWorkflowDraftIds, ['workflow-draft-updated']);
     expect(planRepository.loadCalls, greaterThanOrEqualTo(2));
-    expect(todayRepository.calls, 2);
-    expect(find.text('计划已更新，但手机通知未安排'), findsOneWidget);
+    expect(find.text('用药计划已更新'), findsOneWidget);
   });
 
   testWidgets('editing a workflow draft re-parses the expression in place',
@@ -1040,7 +1039,7 @@ void main() {
     await tester.tap(find.text('晚间用药'));
     await tester.pumpAndSettle();
 
-    expect(find.text('创建时说的话'), findsOneWidget);
+    expect(find.text('原始备注'), findsOneWidget);
     expect(find.text('每天晚上六点半提醒我饭后吃拜新同一片'), findsOneWidget);
   });
 
@@ -1102,7 +1101,7 @@ void main() {
     await tester.tap(find.widgetWithText(TextButton, '查看'));
     await tester.pumpAndSettle();
 
-    expect(find.text('创建时说的话'), findsOneWidget);
+    expect(find.text('原始备注'), findsOneWidget);
     expect(find.text('每天晚上九点提醒我吃拜新同一片'), findsOneWidget);
   });
 }
@@ -1206,6 +1205,17 @@ class _EditablePlanRepository implements PlanRepository, PlanActions {
   }) async {
     updatedPlanIds.add(id);
     updatedWorkflowDraftIds.add(workflowDraftId);
+    return _detail;
+  }
+
+  @override
+  Future<PlanDetail> updateMedicationConfig(
+    String id, {
+    required String medicineName,
+    required String doseText,
+    required List<String> times,
+  }) async {
+    updatedPlanIds.add(id);
     return _detail;
   }
 

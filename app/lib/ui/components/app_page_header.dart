@@ -9,6 +9,7 @@ class AppPageHeader extends StatelessWidget {
     this.eyebrow,
     this.subtitle,
     this.largeTitle = false,
+    this.leading,
     this.actions = const [],
   });
 
@@ -16,6 +17,7 @@ class AppPageHeader extends StatelessWidget {
   final String? eyebrow;
   final String? subtitle;
   final bool largeTitle;
+  final Widget? leading;
   final List<Widget> actions;
 
   @override
@@ -26,6 +28,19 @@ class AppPageHeader extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (leading != null) ...[
+          ConstrainedBox(
+            constraints: const BoxConstraints(
+              minWidth: 44,
+              minHeight: 44,
+            ),
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: leading!,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+        ],
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
