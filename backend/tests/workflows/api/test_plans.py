@@ -1,4 +1,4 @@
-from datetime import datetime, timezone as datetime_timezone
+from datetime import datetime, timedelta, timezone as datetime_timezone
 
 import pytest
 
@@ -375,5 +375,57 @@ def test_plan_patch_medication_directly(api_client, user):
     assert med_plan.medicine_name == "阿莫西林胶囊"
     assert med_plan.dosage_text == "每次2粒"
     assert med_plan.schedule_json == {"times": ["08:00", "20:00"]}
+
+
+@pytest.mark.django_db
+def test_plan_detail_uses_medication_occurrences(api_client, user, mocker):
+    mocker.patch("apps.workflows.api.plans.timezone.now", return_value=NOW)
+    draft = create_workflow_draft(user, medicine_name="盐酸普罗帕酮片", dose_text="每次150mg")
+    plan = create_plan(user, workflow_draft=draft)
+    med_plan = MedicationPlan.objects.create(
+        owner=user,
+        medicine_name="盐酸普罗帕酮片",
+        source_workflow_draft=draft,
+        dosage_text="每次150mg",
+        timezone="Asia/Shanghai",
+        schedule_json={"times": ["08:00", "20:00"]},
+    )
+    # 创建三个 occurrence：一个过去已服，一个过去未打卡，一个未来未打卡
+    past_taken = MedicationOccurrence.objects.create(
+        plan=med_plan,
+        index=1,
+        scheduled_at=NOW - timedelta(hours=2),
+        status=MedicationOccurrence.Status.TAKEN,
+        acted_at=NOW - timedelta(hours=2),
+        idempotency_key="occ-1",
+    )
+    past_pending = MedicationOccurrence.objects.create(
+        plan=med_plan,
+        index=2,
+        scheduled_at=NOW - timedelta(hours=1),
+        status=MedicationOccurrence.Status.PENDING,
+        idempotency_key="occ-2",
+    )
+    MedicationOccurrence.objects.create(
+        plan=med_plan,
+        index=3,
+        scheduled_at=NOW + timedelta(hours=5),
+        status=MedicationOccurrence.Status.PENDING,
+        idempotency_key="occ-3",
+    )
+
+    api_client.force_authenticate(user)
+    response = api_client.get(f"/api/v1/plans/{plan.id}")
+    assert response.status_code == 200
+    data = response.json()
+    executions = data["executions"]
+    # 仅包含过去的两条（未来尚未发生的 pending 不列入），且按 scheduled_at 倒序
+    assert len(executions) == 2
+    assert executions[0]["started_at"] == past_pending.scheduled_at.isoformat()
+    assert executions[0]["status"] == "pending"
+    assert executions[1]["started_at"] == past_taken.scheduled_at.isoformat()
+    assert executions[1]["status"] == "completed"
+    assert executions[1]["message"] == "已按时服药"
+
 
 

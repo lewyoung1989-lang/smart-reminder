@@ -1,5 +1,6 @@
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
+from django.db.models import Q
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from pydantic import ValidationError as PydanticValidationError
@@ -8,7 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.medication.models import MedicationPlan
+from apps.medication.models import MedicationOccurrence, MedicationPlan
 from apps.medication.services.occurrences import materialize_occurrences
 from apps.medication.services.workflow_plans import update_medication_plan_for_workflow
 from apps.reminders.api.serializers import UpdatePlanFromWorkflowDraftSerializer
@@ -49,15 +50,73 @@ def _summary(rule: ReminderRule) -> dict:
     }
 
 
-def _detail(rule: ReminderRule) -> dict:
-    executions = [
-        _execution(run)
-        for run in rule.workflow_runs.annotate(
-            effective_time=Coalesce(
-                "started_at", "scheduled_for", "workflow__created_at"
+def _medication_executions(rule: ReminderRule) -> list[dict]:
+    medication_plan = MedicationPlan.objects.filter(
+        source_workflow_draft=rule.workflow_draft
+    ).first()
+    if medication_plan is None and rule.owner:
+        slots = _slots(rule)
+        medicine_name = slots.get("medicine_name")
+        if medicine_name:
+            medication_plan = (
+                MedicationPlan.objects.filter(
+                    owner=rule.owner,
+                    medicine_name=medicine_name,
+                )
+                .order_by("-created_at")
+                .first()
             )
-        ).order_by("-effective_time", "-id")[:20]
-    ]
+
+    if medication_plan is None:
+        return []
+
+    now = timezone.now()
+    occurrences = (
+        medication_plan.occurrences.filter(
+            Q(scheduled_at__lte=now) | ~Q(status=MedicationOccurrence.Status.PENDING)
+        )
+        .order_by("-scheduled_at")[:20]
+    )
+
+    items = []
+    for occ in occurrences:
+        if occ.status == MedicationOccurrence.Status.TAKEN:
+            status_value = "completed"
+            message = "已按时服药"
+        elif occ.status == MedicationOccurrence.Status.SKIPPED:
+            status_value = "cancelled"
+            message = "已跳过服药"
+        elif occ.status == MedicationOccurrence.Status.MISSED:
+            status_value = "failed"
+            message = "未按时服药"
+        else:
+            status_value = "pending"
+            message = "等待执行"
+
+        items.append(
+            {
+                "started_at": occ.scheduled_at.isoformat(),
+                "status": status_value,
+                "message": message,
+            }
+        )
+    return items
+
+
+def _detail(rule: ReminderRule) -> dict:
+    executions = []
+    if rule.template_key == "medication_cycle":
+        executions = _medication_executions(rule)
+
+    if not executions:
+        executions = [
+            _execution(run)
+            for run in rule.workflow_runs.annotate(
+                effective_time=Coalesce(
+                    "started_at", "scheduled_for", "workflow__created_at"
+                )
+            ).order_by("-effective_time", "-id")[:20]
+        ]
     latest_result = executions[0] if executions else None
     return {
         "summary": _summary(rule),
