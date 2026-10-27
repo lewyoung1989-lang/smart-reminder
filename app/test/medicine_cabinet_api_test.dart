@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:smart_reminder_app/features/medicine_cabinet/data/medicine_cabinet_api.dart';
 import 'package:smart_reminder_app/features/medicine_cabinet/domain/inventory_batch.dart';
+import 'package:smart_reminder_app/features/medicine_cabinet/domain/medicine_models.dart';
 
 class RecordingClient extends http.BaseClient {
   RecordingClient(this.responses);
@@ -34,6 +35,51 @@ http.Response jsonResponse(int status, Object body) => http.Response(
     );
 
 void main() {
+  test('patches the existing batch with version instead of creating stock',
+      () async {
+    final client = RecordingClient([
+      jsonResponse(200, {
+        'id': 'batch-1',
+        'medicine_id': 'medicine-1',
+        'medicine_name': '测试药品',
+        'specification': '10mg',
+        'quantity': 0,
+        'loose_units': '3.5',
+        'package_unit': '盒',
+        'units_per_package': '20',
+        'unit_name': '片',
+        'version': 8,
+      })
+    ]);
+    final api =
+        MedicineCabinetApi(baseUrl: 'https://api.invalid', client: client);
+    final updated = await api.updateBatch('batch-1',
+        version: 7,
+        changes: const MedicineBatchEdit(
+          medicineName: '测试药品',
+          specification: '10mg',
+          manufacturer: '',
+          quantity: 0,
+          expiryDate: null,
+          productionDate: null,
+          packageUnit: '盒',
+          unitsPerPackage: 20,
+          unitName: '片',
+          looseUnits: 3.5,
+        ));
+    expect(client.requests.single.method, 'PATCH');
+    expect(
+        client.requests.single.url.path, '/api/v1/inventory-batches/batch-1');
+    final payload =
+        jsonDecode(client.requestBodies.single) as Map<String, dynamic>;
+    expect(payload['version'], 7);
+    expect(payload['quantity'], 0);
+    expect(payload['loose_units'], 3.5);
+    expect(payload.containsKey('photo_object_key'), isFalse);
+    expect(payload.containsKey('scope'), isFalse);
+    expect(updated.version, 8);
+  });
+
   test('parses a medicine description through the model draft endpoint',
       () async {
     final client = RecordingClient([

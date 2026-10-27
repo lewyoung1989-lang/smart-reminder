@@ -1,5 +1,36 @@
 enum MedicineStatus { active, expiring, expired, unknown }
 
+class MedicineBatchEdit {
+  const MedicineBatchEdit({
+    required this.medicineName,
+    required this.specification,
+    required this.manufacturer,
+    required this.quantity,
+    required this.expiryDate,
+    required this.productionDate,
+    required this.packageUnit,
+    required this.unitsPerPackage,
+    required this.unitName,
+    required this.looseUnits,
+  });
+
+  final String medicineName;
+  final String specification;
+  final String manufacturer;
+  final int quantity;
+  final DateTime? expiryDate;
+  final DateTime? productionDate;
+  final String packageUnit;
+  final double? unitsPerPackage;
+  final String unitName;
+  final double looseUnits;
+}
+
+typedef MedicineBatchUpdater = Future<void> Function(
+  MedicineBatch batch,
+  MedicineBatchEdit changes,
+);
+
 enum MedicineCaptureAvailability {
   ready,
   denied,

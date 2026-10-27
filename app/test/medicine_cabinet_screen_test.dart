@@ -13,6 +13,37 @@ import 'package:smart_reminder_app/features/quick_create/domain/voice_input_cont
 import 'package:smart_reminder_app/ui/components/app_segmented_control.dart';
 
 void main() {
+  testWidgets('opens medicine editor and refreshes inventory after saving',
+      (tester) async {
+    final repository = _Repository();
+    MedicineBatchEdit? saved;
+    await tester.pumpWidget(MaterialApp(
+        home: MedicineCabinetScreen(
+      repository: repository,
+      onUpdateBatch: (batch, changes) async {
+        expect(batch.id, 'batch-a');
+        saved = changes;
+      },
+    )));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('布洛芬胶囊'));
+    await tester.pumpAndSettle();
+    final edit = find.byKey(const Key('medicine-edit-batch-a'));
+    await tester.ensureVisible(edit);
+    await tester.tap(edit);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+        find.byKey(const Key('medicine-edit-quantity')), '4');
+    await tester.tap(find.text('收起键盘'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存修改'));
+    await tester.pumpAndSettle();
+    expect(saved!.quantity, 4);
+    expect(repository.loadCalls, 2);
+    expect(find.text('药品信息已更新'), findsOneWidget);
+    expect(find.text('编辑药品'), findsNothing);
+  });
+
   testWidgets('switches between personal and family inventory scopes',
       (tester) async {
     final repository = _Repository();

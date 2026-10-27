@@ -522,6 +522,13 @@ class _SmartReminderAppState extends State<SmartReminderApp>
             reminderCreationService: _reminderCreationService,
             voiceInputController: _voiceInputController,
             onDeleteBatch: (batch) => _medicineCabinetApi.deleteBatch(batch.id),
+            onUpdateBatch: (batch, changes) async {
+              await _medicineCabinetApi.updateBatch(
+                batch.id,
+                version: batch.version,
+                changes: changes,
+              );
+            },
             onCorrectBatchExpiry: (batch, expiryDate) async {
               await _medicineCabinetApi.correctExpiryDate(
                 batch.id,

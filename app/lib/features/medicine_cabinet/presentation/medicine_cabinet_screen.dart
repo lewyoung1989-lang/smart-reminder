@@ -27,6 +27,7 @@ class MedicineCabinetScreen extends StatefulWidget {
     this.listBatches,
     this.deleteBatch,
     this.onDeleteBatch,
+    this.onUpdateBatch,
     this.onCapture,
     this.onCapturePhoto,
     this.captureAvailability = MedicineCaptureAvailability.unavailable,
@@ -50,6 +51,7 @@ class MedicineCabinetScreen extends StatefulWidget {
   final InventoryBatchLoader? listBatches;
   final Future<void> Function(String batchId)? deleteBatch;
   final Future<void> Function(MedicineBatch batch)? onDeleteBatch;
+  final MedicineBatchUpdater? onUpdateBatch;
   final Future<bool> Function(MedicineCabinetScope scope)? onCapture;
   final Future<List<int>?> Function()? onCapturePhoto;
   final MedicineCaptureAvailability captureAvailability;
@@ -167,7 +169,7 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
       if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _collection = collection;
-        _selectedMedicineId ??= _filtered(collection.items).firstOrNull?.id;
+        _reconcileSelection();
       });
       if (MediaQuery.sizeOf(context).width >= AppSpacing.breakpointExpanded) {
         await _loadSelectedDetail(collectionGeneration: generation);
@@ -346,12 +348,16 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
             repository: _repository,
             medicineId: medicine.id,
             onDeleteBatch: _deleteCallback,
+            onUpdateBatch: _updateCallback,
             onCorrectBatchExpiry: _correctExpiryCallback,
           ),
         ),
       );
     } finally {
-      if (mounted) setState(() => _isOpeningCompactDetail = false);
+      if (mounted) {
+        setState(() => _isOpeningCompactDetail = false);
+        if (widget.onUpdateBatch != null) await _load();
+      }
     }
   }
 
@@ -364,6 +370,17 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
     }
     if (mounted) await _load(clearCollection: true);
   }
+
+  MedicineBatchUpdater? get _updateCallback => widget.onUpdateBatch == null
+      ? null
+      : (batch, changes) async {
+          await widget.onUpdateBatch!(batch, changes);
+          if (mounted &&
+              MediaQuery.sizeOf(context).width >=
+                  AppSpacing.breakpointExpanded) {
+            await _load();
+          }
+        };
 
   Future<void> Function(MedicineBatch batch)? get _deleteCallback =>
       widget.onDeleteBatch == null && widget.deleteBatch == null
@@ -895,6 +912,7 @@ class _MedicineCabinetScreenState extends State<MedicineCabinetScreen> {
       return MedicineDetailScreen(
         detail: detail,
         onDeleteBatch: _deleteCallback,
+        onUpdateBatch: _updateCallback,
         onCorrectBatchExpiry: _correctExpiryCallback,
       );
     }

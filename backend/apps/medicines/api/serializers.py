@@ -191,6 +191,37 @@ class InventoryBatchCreateSerializer(serializers.Serializer):
         return batch
 
 
+class InventoryBatchUpdateSerializer(InventoryBatchCreateSerializer):
+    version = serializers.IntegerField(min_value=1)
+    quantity = serializers.IntegerField(required=False, min_value=0, max_value=9999)
+    loose_units = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=3,
+        required=False,
+        min_value=Decimal("0"),
+    )
+
+    def get_fields(self):
+        fields = super().get_fields()
+        for name in ("scope", "photo_object_key"):
+            fields.pop(name)
+        fields["medicine_name"].required = False
+        return fields
+
+    def validate(self, attrs):
+        if not any(name != "version" for name in attrs):
+            raise serializers.ValidationError({"detail": "至少需要提交一个修改字段。"})
+        merged = {
+            name: getattr(self.instance, name)
+            for name in (
+                "production_date", "expiry_date", "package_unit",
+                "units_per_package", "unit_name", "loose_units",
+            )
+        }
+        super().validate({**merged, **attrs})
+        return attrs
+
+
 class MedicineDescriptionParseSerializer(serializers.Serializer):
     text = serializers.CharField(
         max_length=500,

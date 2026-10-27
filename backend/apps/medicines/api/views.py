@@ -1,10 +1,13 @@
 import logging
 from datetime import date
+from decimal import Decimal
 
 from django.conf import settings
+from django.core.exceptions import ValidationError as ModelValidationError
 from django.db import transaction
-from django.db.models import DateField, Q, Value
+from django.db.models import DateField, F, Q, Value
 from django.db.models.functions import Coalesce
+from django.http import Http404
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
@@ -17,6 +20,7 @@ from apps.medicines.models import (
     ExpiryAlertState,
     ExpiryBatchAction,
     InventoryBatch,
+    MedicineItem,
     LowStockAlertState,
 )
 from apps.medicines.providers import (
@@ -44,6 +48,7 @@ from .serializers import (
     ExpiryDateCorrectionSerializer,
     InventoryBatchCreateSerializer,
     InventoryBatchSerializer,
+    InventoryBatchUpdateSerializer,
     LowStockAlertActionSerializer,
     MedicineDescriptionParseSerializer,
     MedicinePhotoUploadSerializer,
@@ -173,6 +178,95 @@ class MedicinePhotoUploadView(APIView):
 
 class InventoryBatchDestroyView(DestroyAPIView):
     permission_classes = [IsAuthenticated]
+
+    def patch(self, request, pk):
+        with transaction.atomic():
+            accessible = self.get_object()
+            batches = list(
+                _locked_accessible_batch_queryset(request.user)
+                .filter(medicine_id=accessible.medicine_id)
+                .order_by("id")
+            )
+            batch = next((item for item in batches if item.id == pk), None)
+            if batch is None:
+                raise Http404
+            require_batch_access(batch, request.user)
+            medicine = MedicineItem.objects.select_for_update().get(
+                id=batch.medicine_id
+            )
+            serializer = InventoryBatchUpdateSerializer(batch, data=request.data)
+            serializer.is_valid(raise_exception=True)
+            changes = dict(serializer.validated_data)
+            if changes.pop("version") != batch.version:
+                return Response(
+                    {"code": "inventory_version_conflict", "version": batch.version},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            audit_changes = {}
+            medicine_fields = []
+            for field, api_field in (
+                ("name", "medicine_name"),
+                ("specification", "specification"),
+                ("manufacturer", "manufacturer"),
+            ):
+                if api_field not in changes:
+                    continue
+                value = changes.pop(api_field)
+                if value != getattr(medicine, field):
+                    audit_changes[api_field] = {
+                        "old": getattr(medicine, field), "new": value,
+                    }
+                    setattr(medicine, field, value)
+                    medicine_fields.append(field)
+            batch_fields = []
+            for field, value in changes.items():
+                if value != getattr(batch, field):
+                    audit_changes[field] = {
+                        "old": _json_value(getattr(batch, field)),
+                        "new": _json_value(value),
+                    }
+                    setattr(batch, field, value)
+                    batch_fields.append(field)
+
+            try:
+                medicine.full_clean()
+                batch.full_clean()
+            except ModelValidationError as error:
+                raise ValidationError(error.message_dict) from error
+
+            if audit_changes:
+                if medicine_fields:
+                    medicine.save(update_fields=medicine_fields)
+                    InventoryBatch.objects.filter(medicine=medicine).exclude(
+                        id=batch.id
+                    ).update(version=F("version") + 1)
+                batch.version += 1
+                batch.updated_by = request.user
+                batch.save(update_fields=[
+                    *batch_fields, "version", "updated_by", "updated_at",
+                ])
+                batch.medicine = medicine
+                ExpiryBatchAction.objects.create(
+                    batch=batch,
+                    user=request.user,
+                    action=ExpiryBatchAction.Action.CORRECTED,
+                    change_json=audit_changes,
+                )
+                refresh_expiry_alerts(batch=batch, today=timezone.localdate())
+                refresh_low_stock_alerts_for_medicine(
+                    medicine=medicine, today=timezone.localdate(),
+                )
+                if medicine.family_id:
+                    record_event(
+                        family=medicine.family,
+                        actor=request.user,
+                        event_type="inventory_corrected",
+                        payload={"batch_id": str(batch.id), "version": batch.version},
+                    )
+            return Response(
+                InventoryBatchSerializer(batch, context={"request": request}).data
+            )
 
     def get_queryset(self):
         return InventoryBatch.objects.filter(
@@ -346,4 +440,6 @@ class InventoryBatchExpiryDateCorrectionView(APIView):
 
 
 def _json_value(value):
+    if isinstance(value, Decimal):
+        return str(value)
     return value.isoformat() if hasattr(value, "isoformat") else value

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'medicine_edit_screen.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
@@ -14,12 +15,14 @@ class MedicineDetailScreen extends StatelessWidget {
   const MedicineDetailScreen({
     required this.detail,
     this.onDeleteBatch,
+    this.onUpdateBatch,
     this.onCorrectBatchExpiry,
     super.key,
   });
 
   final MedicineDetail detail;
   final Future<void> Function(MedicineBatch batch)? onDeleteBatch;
+  final MedicineBatchUpdater? onUpdateBatch;
   final Future<void> Function(MedicineBatch batch, DateTime expiryDate)?
       onCorrectBatchExpiry;
 
@@ -102,6 +105,8 @@ class MedicineDetailScreen extends StatelessWidget {
                   index += 1) ...[
                 _BatchRow(
                   batch: detail.batches[index],
+                  summary: summary,
+                  onUpdate: onUpdateBatch,
                   onDelete: onDeleteBatch,
                   onCorrectExpiry: onCorrectBatchExpiry,
                 ),
@@ -120,6 +125,7 @@ class MedicineDetailLoaderScreen extends StatefulWidget {
     required this.repository,
     required this.medicineId,
     this.onDeleteBatch,
+    this.onUpdateBatch,
     this.onCorrectBatchExpiry,
     super.key,
   });
@@ -127,6 +133,7 @@ class MedicineDetailLoaderScreen extends StatefulWidget {
   final MedicineRepository repository;
   final String medicineId;
   final Future<void> Function(MedicineBatch batch)? onDeleteBatch;
+  final MedicineBatchUpdater? onUpdateBatch;
   final Future<void> Function(MedicineBatch batch, DateTime expiryDate)?
       onCorrectBatchExpiry;
 
@@ -175,6 +182,7 @@ class _MedicineDetailLoaderScreenState
       return MedicineDetailScreen(
         detail: detail,
         onDeleteBatch: widget.onDeleteBatch,
+        onUpdateBatch: widget.onUpdateBatch,
         onCorrectBatchExpiry: widget.onCorrectBatchExpiry,
       );
     }
@@ -494,11 +502,15 @@ class _DetailSection extends StatelessWidget {
 class _BatchRow extends StatelessWidget {
   const _BatchRow({
     required this.batch,
+    required this.summary,
+    this.onUpdate,
     this.onDelete,
     this.onCorrectExpiry,
   });
 
   final MedicineBatch batch;
+  final MedicineSummary summary;
+  final MedicineBatchUpdater? onUpdate;
   final Future<void> Function(MedicineBatch batch)? onDelete;
   final Future<void> Function(MedicineBatch batch, DateTime expiryDate)?
       onCorrectExpiry;
@@ -527,6 +539,33 @@ class _BatchRow extends StatelessWidget {
             spacing: AppSpacing.sm,
             runSpacing: AppSpacing.sm,
             children: <Widget>[
+              if (onUpdate != null)
+                OutlinedButton.icon(
+                  key: Key('medicine-edit-${batch.id}'),
+                  onPressed: () async {
+                    final saved = await Navigator.of(context).push<bool>(
+                      MaterialPageRoute(
+                        builder: (_) => MedicineEditScreen(
+                          summary: summary,
+                          batch: batch,
+                          onSave: onUpdate!,
+                        ),
+                      ),
+                    );
+                    if (saved != null && context.mounted) {
+                      if (saved) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('药品信息已更新')),
+                        );
+                      }
+                      if (Navigator.canPop(context)) {
+                        Navigator.of(context).pop();
+                      }
+                    }
+                  },
+                  icon: const Icon(LucideIcons.pencil),
+                  label: const Text('编辑药品与数量'),
+                ),
               _CorrectExpiryAction(batch: batch, onCorrect: onCorrectExpiry),
               if (batch.canDelete)
                 _DeleteBatchAction(batch: batch, onDelete: onDelete),

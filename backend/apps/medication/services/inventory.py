@@ -73,6 +73,7 @@ def deduct_inventory_for_intake(event: IntakeEvent):
         InventoryBatch.objects.select_for_update()
         .filter(medicine_id=plan.medicine_id, units_per_package__isnull=False)
         .exclude(unit_name="")
+        .order_by("id")
     )
     if not batches:
         return _record_attempt(

@@ -46,6 +46,7 @@ class AppShell extends StatefulWidget {
     this.reminderCreationService,
     this.voiceInputController,
     this.onDeleteBatch,
+    this.onUpdateBatch,
     this.onCaptureMedicine,
     this.onCaptureMedicinePhoto,
     this.captureAvailability = MedicineCaptureAvailability.unavailable,
@@ -79,6 +80,7 @@ class AppShell extends StatefulWidget {
   final ReminderCreationService? reminderCreationService;
   final VoiceInputController? voiceInputController;
   final Future<void> Function(MedicineBatch batch)? onDeleteBatch;
+  final MedicineBatchUpdater? onUpdateBatch;
   final Future<bool> Function(MedicineCabinetScope scope)? onCaptureMedicine;
   final Future<List<int>?> Function()? onCaptureMedicinePhoto;
   final MedicineCaptureAvailability captureAvailability;
@@ -572,6 +574,12 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         child: MedicineCabinetScreen(
           repository: widget.medicineRepository,
           onDeleteBatch: widget.onDeleteBatch,
+          onUpdateBatch: widget.onUpdateBatch == null
+              ? null
+              : (batch, changes) async {
+                  await widget.onUpdateBatch!(batch, changes);
+                  _refreshToday();
+                },
           captureAvailability: widget.captureAvailability,
           onCapture: widget.onCaptureMedicine,
           onCapturePhoto: widget.onCaptureMedicinePhoto,

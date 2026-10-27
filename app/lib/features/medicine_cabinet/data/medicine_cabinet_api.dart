@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 
 import '../domain/inventory_batch.dart';
 import '../domain/medicine_description_draft.dart';
+import '../domain/medicine_models.dart';
 
 typedef InventoryBatchLoader = Future<InventoryBatchPage> Function({
   String query,
@@ -187,6 +188,41 @@ class MedicineCabinetApi implements MedicineCabinetDataSource {
       throw MedicineCabinetApiException(response.statusCode, response.body);
     }
     return grant['object_key'] as String;
+  }
+
+  Future<InventoryBatch> updateBatch(
+    String batchId, {
+    required int version,
+    required MedicineBatchEdit changes,
+  }) async {
+    final response = await _client.patch(
+      _baseUri
+          .resolve('/api/v1/inventory-batches/${Uri.encodeComponent(batchId)}'),
+      headers: {..._headers, 'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'version': version,
+        'medicine_name': changes.medicineName,
+        'specification': changes.specification,
+        'manufacturer': changes.manufacturer,
+        'quantity': changes.quantity,
+        'production_date': changes.productionDate == null
+            ? null
+            : _formatDate(changes.productionDate!),
+        'expiry_date': changes.expiryDate == null
+            ? null
+            : _formatDate(changes.expiryDate!),
+        'package_unit': changes.packageUnit,
+        'units_per_package': changes.unitsPerPackage,
+        'unit_name': changes.unitName,
+        'loose_units': changes.looseUnits,
+      }),
+    );
+    if (response.statusCode != 200) {
+      throw MedicineCabinetApiException(response.statusCode, response.body);
+    }
+    return InventoryBatch.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
   }
 
   @override
