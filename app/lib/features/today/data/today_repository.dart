@@ -231,10 +231,12 @@ ActionTarget? _actionTarget(Object? value) {
   if (resource is! String || id is! String) return null;
   final action = value['action'];
   final snoozeMinutes = value['snooze_minutes'];
+  final workflowId = value['workflow_id'];
   return ActionTarget(
     resource: resource,
     id: id,
     action: action is String ? action : null,
     snoozeMinutes: snoozeMinutes is int ? snoozeMinutes : null,
+    workflowId: workflowId is String ? workflowId : null,
   );
 }

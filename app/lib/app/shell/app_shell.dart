@@ -315,11 +315,29 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
 
   Future<void> _openTimelineItem(TimelineItem item) async {
     final target = item.actionTarget;
-    if (target?.resource != 'workflow') {
-      _showSnackBar('这个提醒暂时没有详情页');
+    final planId = target?.resource == 'workflow'
+        ? target!.id
+        : target?.workflowId;
+
+    if (planId != null && planId.isNotEmpty) {
+      await _openPlanDetail(planId);
       return;
     }
-    await _openPlanDetail(target!.id);
+
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => _TimelineItemDetailSheet(
+        item: item,
+        onAction: target != null
+            ? () async {
+                Navigator.of(sheetContext).pop();
+                await _executeTargetAction(target);
+              }
+            : null,
+      ),
+    );
   }
 
   Future<void> _openPlanDetail(String planId) async {
@@ -478,7 +496,10 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       _showSnackBar('这个动作暂时只能查看，稍后会接入处理入口');
       return;
     }
+    await _executeTargetAction(target);
+  }
 
+  Future<void> _executeTargetAction(ActionTarget target) async {
     if (target.resource == 'workflow') {
       await _openPlanDetail(target.id);
       return;
@@ -746,6 +767,152 @@ class _SelectedNavigationIcon extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _TimelineItemDetailSheet extends StatelessWidget {
+  const _TimelineItemDetailSheet({
+    required this.item,
+    this.onAction,
+  });
+
+  final TimelineItem item;
+  final Future<void> Function()? onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isCompleted = item.status == TimelineStatus.completed;
+    final timeStr =
+        '${item.scheduledAt.hour.toString().padLeft(2, '0')}:${item.scheduledAt.minute.toString().padLeft(2, '0')}';
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          0,
+          AppSpacing.lg,
+          AppSpacing.xl,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text('提醒详情', style: theme.textTheme.titleLarge),
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              children: <Widget>[
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFECFDF5),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    LucideIcons.bell,
+                    color: Color(0xFF059669),
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        item.title,
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF0F172A),
+                        ),
+                      ),
+                      if (item.subtitle.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          item.subtitle,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF64748B),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Row(
+                children: <Widget>[
+                  const Icon(LucideIcons.clock, size: 16, color: Color(0xFF64748B)),
+                  const SizedBox(width: 8),
+                  Text(
+                    '提醒时间：$timeStr',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF334155),
+                    ),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: isCompleted
+                          ? const Color(0xFFDCFCE7)
+                          : const Color(0xFFE0F2FE),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      isCompleted ? '已完成' : '待处理',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: isCompleted
+                            ? const Color(0xFF166534)
+                            : const Color(0xFF0369A1),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (!isCompleted && onAction != null) ...[
+              const SizedBox(height: AppSpacing.lg),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: onAction,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF059669),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  icon: const Icon(LucideIcons.check, size: 18),
+                  label: const Text(
+                    '标记完成',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

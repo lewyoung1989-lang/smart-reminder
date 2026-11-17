@@ -48,18 +48,21 @@ class ActionTarget {
     required this.id,
     this.action,
     this.snoozeMinutes,
+    this.workflowId,
   });
 
   final String resource;
   final String id;
   final String? action;
   final int? snoozeMinutes;
+  final String? workflowId;
 
   ActionTarget withSnoozeMinutes(int minutes) => ActionTarget(
         resource: resource,
         id: id,
         action: action,
         snoozeMinutes: minutes,
+        workflowId: workflowId,
       );
 }
 

@@ -558,6 +558,7 @@ def test_today_includes_due_and_upcoming_medication_occurrences(api_client, user
         "action_target": {
             "resource": "medication_occurrence",
             "id": str(due.id),
+            "workflow_id": str(plan.id),
         },
     } in response.json()["need_decision"]["results"]
     assert {
@@ -569,6 +570,7 @@ def test_today_includes_due_and_upcoming_medication_occurrences(api_client, user
         "action_target": {
             "resource": "medication_occurrence",
             "id": str(upcoming.id),
+            "workflow_id": str(plan.id),
             "action": "taken",
         },
     } in response.json()["upcoming"]["results"]

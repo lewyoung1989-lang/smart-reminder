@@ -173,6 +173,7 @@ class TodayActionCenterView(APIView):
                 "action_target": {
                     "resource": "medication_occurrence",
                     "id": str(occurrence.id),
+                    "workflow_id": str(occurrence.plan_id),
                 },
             }
             for occurrence in due_medication.order_by("scheduled_at", "id")[:window]
@@ -325,6 +326,7 @@ class TodayActionCenterView(APIView):
                     "action_target": {
                         "resource": "medication_occurrence",
                         "id": str(occurrence.id),
+                        "workflow_id": str(occurrence.plan_id),
                         "action": "taken",
                     },
                 },
