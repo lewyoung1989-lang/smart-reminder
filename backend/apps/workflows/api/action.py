@@ -322,6 +322,11 @@ class TodayActionCenterView(APIView):
                     "kind": "medication",
                     "status": "scheduled",
                     "occurred_at": _as_local_iso(occurrence.scheduled_at),
+                    "action_target": {
+                        "resource": "medication_occurrence",
+                        "id": str(occurrence.id),
+                        "action": "taken",
+                    },
                 },
             )
             for occurrence in upcoming_medication.order_by("scheduled_at", "id")[:window]

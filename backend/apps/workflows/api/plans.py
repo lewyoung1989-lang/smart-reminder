@@ -1,3 +1,5 @@
+from zoneinfo import ZoneInfo
+
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.db.models import Q
@@ -50,6 +52,41 @@ def _summary(rule: ReminderRule) -> dict:
     }
 
 
+def _next_medication_occurrence(rule: ReminderRule) -> dict | None:
+    if rule.template_key != "medication_cycle":
+        return None
+    medication_plan = MedicationPlan.objects.filter(
+        source_workflow_draft=rule.workflow_draft
+    ).first()
+    if medication_plan is None and rule.owner:
+        slots = _slots(rule)
+        medicine_name = slots.get("medicine_name")
+        if medicine_name:
+            medication_plan = (
+                MedicationPlan.objects.filter(
+                    owner=rule.owner,
+                    medicine_name=medicine_name,
+                )
+                .order_by("-created_at")
+                .first()
+            )
+    if medication_plan is None:
+        return None
+    next_occ = (
+        medication_plan.occurrences.filter(status=MedicationOccurrence.Status.PENDING)
+        .order_by("scheduled_at")
+        .first()
+    )
+    if next_occ is None:
+        return None
+    return {
+        "id": str(next_occ.id),
+        "scheduled_at": next_occ.scheduled_at.isoformat(),
+        "medicine_name": medication_plan.medicine_name or rule.title,
+        "dosage_text": medication_plan.dosage_text,
+    }
+
+
 def _medication_executions(rule: ReminderRule) -> list[dict]:
     medication_plan = MedicationPlan.objects.filter(
         source_workflow_draft=rule.workflow_draft
@@ -79,13 +116,33 @@ def _medication_executions(rule: ReminderRule) -> list[dict]:
     )
 
     items = []
+    shanghai_tz = ZoneInfo("Asia/Shanghai")
     for occ in occurrences:
+        actual_taken_at = occ.acted_at.isoformat() if occ.acted_at else None
         if occ.status == MedicationOccurrence.Status.TAKEN:
             status_value = "completed"
-            message = "已按时服药"
+            if occ.acted_at:
+                local_acted = occ.acted_at.astimezone(shanghai_tz)
+                time_str = f"{local_acted.hour:02d}:{local_acted.minute:02d}"
+                diff_seconds = (occ.acted_at - occ.scheduled_at).total_seconds()
+                if diff_seconds < -120:
+                    minutes = max(1, int(abs(diff_seconds) // 60))
+                    message = f"实际服药：{time_str} (提前 {minutes} 分钟)"
+                elif diff_seconds > 120:
+                    minutes = max(1, int(diff_seconds // 60))
+                    message = f"实际服药：{time_str} (推迟 {minutes} 分钟)"
+                else:
+                    message = f"实际服药：{time_str} (准时)"
+            else:
+                message = "已按时服药"
         elif occ.status == MedicationOccurrence.Status.SKIPPED:
             status_value = "cancelled"
-            message = "已跳过服药"
+            if occ.acted_at:
+                local_acted = occ.acted_at.astimezone(shanghai_tz)
+                time_str = f"{local_acted.hour:02d}:{local_acted.minute:02d}"
+                message = f"已跳过服药 ({time_str})"
+            else:
+                message = "已跳过服药"
         elif occ.status == MedicationOccurrence.Status.MISSED:
             status_value = "failed"
             message = "未按时服药"
@@ -96,6 +153,7 @@ def _medication_executions(rule: ReminderRule) -> list[dict]:
         items.append(
             {
                 "started_at": occ.scheduled_at.isoformat(),
+                "actual_taken_at": actual_taken_at,
                 "status": status_value,
                 "message": message,
             }
@@ -124,6 +182,7 @@ def _detail(rule: ReminderRule) -> dict:
         "destination": _slots(rule).get("destination_text"),
         "dose_label": _dose_label(rule),
         "medication_config": _medication_config(rule),
+        "next_occurrence": _next_medication_occurrence(rule),
         "queried_sources": _queried_sources(rule),
         "reminder_label": _reminder_label(rule),
         "executions": executions,

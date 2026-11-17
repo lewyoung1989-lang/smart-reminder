@@ -425,7 +425,9 @@ def test_plan_detail_uses_medication_occurrences(api_client, user, mocker):
     assert executions[0]["status"] == "pending"
     assert executions[1]["started_at"] == past_taken.scheduled_at.isoformat()
     assert executions[1]["status"] == "completed"
-    assert executions[1]["message"] == "已按时服药"
+    assert executions[1]["actual_taken_at"] == past_taken.acted_at.isoformat()
+    assert "实际服药" in executions[1]["message"]
+    assert "准时" in executions[1]["message"]
 
 
 

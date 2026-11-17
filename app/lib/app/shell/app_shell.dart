@@ -345,6 +345,15 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       onPause: actions == null ? null : () => _pausePlan(actions, detail),
       onResume: actions == null ? null : () => _resumePlan(actions, detail),
       onDelete: actions == null ? null : () => _deletePlan(actions, detail),
+      onTakeMedication: widget.actionCenterActions == null
+          ? null
+          : (occurrenceId) async {
+              await widget.actionCenterActions!.markMedicationTaken(occurrenceId);
+              _refreshMedicine();
+              _refreshToday();
+              setState(() => _planRefreshRevision += 1);
+              return await widget.planRepository.getById(detail.summary.id);
+            },
       onUpdateMedication: actions == null
           ? null
           : ({
@@ -563,6 +572,15 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
           notificationScheduler: widget.planNotificationScheduler,
           onQuickCreate: canQuickCreate ? () => _openQuickCreate() : null,
           refreshRevision: _planRefreshRevision,
+          onTakeMedication: widget.actionCenterActions == null
+              ? null
+              : (planId, occurrenceId) async {
+                  await widget.actionCenterActions!.markMedicationTaken(occurrenceId);
+                  _refreshMedicine();
+                  _refreshToday();
+                  setState(() => _planRefreshRevision += 1);
+                  return await widget.planRepository.getById(planId);
+                },
           onEditPlan: (detail) => _openQuickCreate(
             initialText: detail.sourceText,
             editingPlanId: detail.summary.id,

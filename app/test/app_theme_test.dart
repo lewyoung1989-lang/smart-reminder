@@ -9,10 +9,10 @@ void main() {
       final theme = AppTheme.light();
       final semanticColors = theme.extension<AppSemanticColors>();
 
-      expect(theme.colorScheme.primary, const Color(0xFF176B52));
-      expect(theme.scaffoldBackgroundColor, const Color(0xFFF2F6F3));
+      expect(theme.colorScheme.primary, const Color(0xFF059669));
+      expect(theme.scaffoldBackgroundColor, const Color(0xFFF8FAFC));
       expect(theme.colorScheme.surface, const Color(0xFFFFFFFF));
-      expect(semanticColors?.warning, const Color(0xFF8D6508));
+      expect(semanticColors?.warning, const Color(0xFFD97706));
       expect(theme.cardTheme.elevation, 1);
       expect(theme.materialTapTargetSize, MaterialTapTargetSize.padded);
       expect(theme.textTheme.bodyMedium?.letterSpacing, 0);
@@ -156,7 +156,7 @@ void main() {
       expect(border, isA<OutlineInputBorder>());
       expect((border! as OutlineInputBorder).borderSide, BorderSide.none);
       expect(AppTheme.light().inputDecorationTheme.fillColor,
-          const Color(0xFFE4ECE7));
+          const Color(0xFFF1F5F9));
     });
 
     test('dark theme uses a native filled input without a resting border', () {

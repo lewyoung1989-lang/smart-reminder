@@ -24,6 +24,7 @@ class PlansScreen extends StatefulWidget {
     this.onEditPlan,
     this.now,
     this.refreshRevision = 0,
+    this.onTakeMedication,
     super.key,
   });
 
@@ -35,6 +36,7 @@ class PlansScreen extends StatefulWidget {
   final ValueChanged<PlanDetail>? onEditPlan;
   final DateTime? now;
   final int refreshRevision;
+  final Future<PlanDetail?> Function(String planId, String occurrenceId)? onTakeMedication;
 
   @override
   State<PlansScreen> createState() => _PlansScreenState();
@@ -218,6 +220,15 @@ class _PlansScreenState extends State<PlansScreen> {
       onDelete: actions == null
           ? null
           : () => _deletePlan(actions, detail, compact: compact),
+      onTakeMedication: widget.onTakeMedication == null
+          ? null
+          : (occurrenceId) async {
+              final fresh = await widget.onTakeMedication!(detail.summary.id, occurrenceId);
+              if (mounted && fresh != null) {
+                setState(() => _selectedDetail = fresh);
+              }
+              return fresh;
+            },
       onUpdateMedication: actions == null
           ? null
           : ({
@@ -915,6 +926,17 @@ class _ExecutionRow extends StatelessWidget {
                     '$planTitle · ${_executionStatusLabel(execution.status)}',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
+                  if (execution.message.contains('实际服药')) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      execution.message,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF059669),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

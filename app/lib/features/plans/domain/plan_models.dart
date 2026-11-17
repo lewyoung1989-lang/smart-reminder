@@ -51,16 +51,32 @@ class PlanSummary {
   final PlanKind kind;
 }
 
+class NextMedicationOccurrence {
+  const NextMedicationOccurrence({
+    required this.id,
+    required this.scheduledAt,
+    this.medicineName,
+    this.dosageText,
+  });
+
+  final String id;
+  final DateTime scheduledAt;
+  final String? medicineName;
+  final String? dosageText;
+}
+
 class PlanExecution {
   const PlanExecution({
     required this.startedAt,
     required this.status,
     required this.message,
+    this.actualTakenAt,
   });
 
   final DateTime startedAt;
   final PlanExecutionStatus status;
   final String message;
+  final DateTime? actualTakenAt;
 }
 
 class MedicationConfig {
@@ -89,6 +105,7 @@ class PlanDetail {
     this.degradationMessage,
     this.sourceText = '',
     this.notificationSchedule,
+    this.nextOccurrence,
   })  : queriedSources = List.unmodifiable(queriedSources),
         executions = List.unmodifiable(executions);
 
@@ -104,6 +121,7 @@ class PlanDetail {
   final String? degradationMessage;
   final String sourceText;
   final PlanNotificationSchedule? notificationSchedule;
+  final NextMedicationOccurrence? nextOccurrence;
 }
 
 class PlanCollection {

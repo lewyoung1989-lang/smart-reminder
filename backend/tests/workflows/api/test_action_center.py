@@ -566,6 +566,11 @@ def test_today_includes_due_and_upcoming_medication_occurrences(api_client, user
         "kind": "medication",
         "status": "scheduled",
         "occurred_at": "2026-08-08T10:00:00+08:00",
+        "action_target": {
+            "resource": "medication_occurrence",
+            "id": str(upcoming.id),
+            "action": "taken",
+        },
     } in response.json()["upcoming"]["results"]
     assert all(
         item["id"] != str(parent_rule.id)

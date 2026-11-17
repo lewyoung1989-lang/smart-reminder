@@ -120,6 +120,7 @@ class ApiPlanRepository implements PlanRepository, PlanActions {
   PlanDetail _detail(Map<String, dynamic> payload) {
     final notification = payload['notification_schedule'];
     final medicationConfigJson = payload['medication_config'];
+    final nextOccJson = payload['next_occurrence'];
     return PlanDetail(
       summary: _summary(payload['summary'] as Map<String, dynamic>),
       arrivalLabel: payload['arrival_label'] as String?,
@@ -156,6 +157,14 @@ class ApiPlanRepository implements PlanRepository, PlanActions {
                   : PlanRepeat.none,
               title: notification['title'] as String,
               timezone: notification['timezone'] as String,
+            )
+          : null,
+      nextOccurrence: nextOccJson is Map<String, dynamic>
+          ? NextMedicationOccurrence(
+              id: nextOccJson['id'] as String,
+              scheduledAt: DateTime.parse(nextOccJson['scheduled_at'] as String).toLocal(),
+              medicineName: nextOccJson['medicine_name'] as String?,
+              dosageText: nextOccJson['dosage_text'] as String?,
             )
           : null,
     );
@@ -200,6 +209,9 @@ PlanExecution _execution(Map<String, dynamic> json) => PlanExecution(
           throw FormatException('Unsupported plan execution status: $value'),
       },
       message: json['message'] as String? ?? '',
+      actualTakenAt: json['actual_taken_at'] != null
+          ? DateTime.tryParse(json['actual_taken_at'] as String)?.toLocal()
+          : null,
     );
 
 class PlanApiException implements Exception {

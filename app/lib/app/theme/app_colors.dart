@@ -21,13 +21,13 @@ class AppSemanticColors extends ThemeExtension<AppSemanticColors> {
   final Color heroForeground;
 
   static const light = AppSemanticColors(
-    success: Color(0xFF2F8B69),
-    warning: Color(0xFF8D6508),
-    warningSurface: Color(0xFFFFF1CC),
-    info: Color(0xFF236B90),
-    infoSurface: Color(0xFFE4F2F8),
-    heroBackground: Color(0xFF173D2E),
-    heroForeground: Color(0xFFF4FAF6),
+    success: Color(0xFF059669),
+    warning: Color(0xFFD97706),
+    warningSurface: Color(0xFFFEF3C7),
+    info: Color(0xFF0284C7),
+    infoSurface: Color(0xFFE0F2FE),
+    heroBackground: Color(0xFF064E3B),
+    heroForeground: Color(0xFFECFDF5),
   );
 
   static const dark = AppSemanticColors(

@@ -7,16 +7,16 @@ abstract final class AppTheme {
   static const fontFamily = 'PingFang SC';
 
   static ThemeData light() {
-    const background = Color(0xFFF2F6F3);
+    const background = Color(0xFFF8FAFC);
     const surface = Color(0xFFFFFFFF);
-    const surfaceMuted = Color(0xFFE4ECE7);
-    const primary = Color(0xFF176B52);
+    const surfaceMuted = Color(0xFFF1F5F9);
+    const primary = Color(0xFF059669);
     const onPrimary = Color(0xFFFFFFFF);
-    const textPrimary = Color(0xFF17201D);
-    const textSecondary = Color(0xFF66706B);
-    const outline = Color(0xFFDCE5E0);
-    const error = Color(0xFFB42318);
-    const errorSurface = Color(0xFFFFE9E7);
+    const textPrimary = Color(0xFF0F172A);
+    const textSecondary = Color(0xFF475569);
+    const outline = Color(0xFFE2E8F0);
+    const error = Color(0xFFDC2626);
+    const errorSurface = Color(0xFFFEE2E2);
 
     const colorScheme = ColorScheme(
       brightness: Brightness.light,
@@ -43,7 +43,7 @@ abstract final class AppTheme {
       tertiaryFixed: surfaceMuted,
       tertiaryFixedDim: outline,
       onTertiaryFixed: primary,
-      onTertiaryFixedVariant: Color(0xFF2F8B69),
+      onTertiaryFixedVariant: Color(0xFF059669),
       error: error,
       onError: onPrimary,
       errorContainer: errorSurface,
@@ -64,7 +64,7 @@ abstract final class AppTheme {
       scrim: Color(0xFF000000),
       inverseSurface: textPrimary,
       onInverseSurface: background,
-      inversePrimary: Color(0xFF86D8B8),
+      inversePrimary: Color(0xFF6EE7B7),
       surfaceTint: Colors.transparent,
     );
 

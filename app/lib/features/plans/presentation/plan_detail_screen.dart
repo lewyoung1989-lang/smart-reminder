@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../ui/components/app_page_header.dart';
-import '../../../ui/components/app_property_row.dart';
 import '../../../ui/components/app_status_banner.dart';
 import '../domain/plan_models.dart';
-
 import 'edit_medication_plan_sheet.dart';
 
 class PlanDetailScreen extends StatefulWidget {
@@ -18,6 +15,7 @@ class PlanDetailScreen extends StatefulWidget {
     this.onEdit,
     this.onDelete,
     this.onUpdateMedication,
+    this.onTakeMedication,
     super.key,
   });
 
@@ -31,6 +29,7 @@ class PlanDetailScreen extends StatefulWidget {
     required String doseText,
     required List<String> times,
   })? onUpdateMedication;
+  final Future<PlanDetail?> Function(String occurrenceId)? onTakeMedication;
 
   @override
   State<PlanDetailScreen> createState() => _PlanDetailScreenState();
@@ -38,6 +37,8 @@ class PlanDetailScreen extends StatefulWidget {
 
 class _PlanDetailScreenState extends State<PlanDetailScreen> {
   late PlanDetail _detail = widget.detail;
+  bool _isTakingMedication = false;
+  bool _isTogglingStatus = false;
 
   @override
   void didUpdateWidget(covariant PlanDetailScreen oldWidget) {
@@ -47,22 +48,118 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
     }
   }
 
+  Future<void> _handleTakeAdvance() async {
+    final nextOcc = _detail.nextOccurrence;
+    if (nextOcc == null || widget.onTakeMedication == null || _isTakingMedication) {
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: <Widget>[
+            Icon(LucideIcons.pill, color: Color(0xFF059669), size: 22),
+            SizedBox(width: 8),
+            Text('提前服用打卡'),
+          ],
+        ),
+        content: Text(
+          '确认现在提前服用 ${nextOcc.medicineName ?? _detail.summary.title}（${nextOcc.dosageText ?? _detail.doseLabel ?? "按时剂量"}）？\n\n系统将精确留痕当前实际服药时间，并自动扣减库存。',
+          style: const TextStyle(height: 1.5),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('稍后再说'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF059669),
+              foregroundColor: Colors.white,
+            ),
+            icon: const Icon(LucideIcons.check, size: 18),
+            label: const Text('确认提前服用'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isTakingMedication = true);
+    try {
+      final updated = await widget.onTakeMedication!(nextOcc.id);
+      if (mounted) {
+        if (updated != null) {
+          setState(() => _detail = updated);
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('已成功记录提前服药，库存已更新留痕'),
+            backgroundColor: Color(0xFF059669),
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('打卡失败，请稍后重试')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isTakingMedication = false);
+      }
+    }
+  }
+
+  Future<void> _togglePlanStatus() async {
+    if (_isTogglingStatus) return;
+    final isPaused = _detail.summary.status == PlanStatus.paused;
+    final action = isPaused ? widget.onResume : widget.onPause;
+    if (action == null) return;
+
+    setState(() => _isTogglingStatus = true);
+    try {
+      await action();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(isPaused ? '计划已恢复执行' : '计划已暂停提醒')),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('操作失败，请稍后重试')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isTogglingStatus = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final summary = _detail.summary;
-    final action = summary.status == PlanStatus.paused ? widget.onResume : widget.onPause;
-    final actionLabel = summary.status == PlanStatus.paused ? '恢复计划' : '暂停计划';
+    final isPaused = summary.status == PlanStatus.paused;
     final sourceText = _detail.sourceText.trim();
     final canEdit = (widget.onUpdateMedication != null &&
             _detail.summary.kind == PlanKind.medication) ||
         widget.onEdit != null;
 
+    final hasNextOccurrence = _detail.nextOccurrence != null;
+
     return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(
             AppSpacing.lg,
-            AppSpacing.xxl,
+            AppSpacing.lg,
             AppSpacing.lg,
             AppSpacing.xxl,
           ),
@@ -86,6 +183,11 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
                     onSelected: (value) => _handleMoreAction(context, value),
                     itemBuilder: (context) => <PopupMenuEntry<_MoreAction>>[
                       _menuItem(
+                        value: _MoreAction.togglePause,
+                        label: isPaused ? '恢复计划' : '暂停计划',
+                        enabled: (isPaused ? widget.onResume : widget.onPause) != null,
+                      ),
+                      _menuItem(
                         value: _MoreAction.edit,
                         label: '编辑计划',
                         enabled: canEdit,
@@ -99,69 +201,535 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: AppSpacing.xl),
-              _StatusSummary(summary: summary),
+              const SizedBox(height: AppSpacing.lg),
+
+              // 核心卡片：状态、下一次时间与快速双操作区
+              _buildMainControlCard(context, summary, isPaused, hasNextOccurrence),
+
               if (_detail.isDegraded) ...[
-                const SizedBox(height: AppSpacing.lg),
+                const SizedBox(height: AppSpacing.md),
                 AppStatusBanner(
                   severity: AppStatusSeverity.warning,
                   title: '计划已降级执行',
                   message: _detail.degradationMessage ?? '已使用可用信息继续提醒',
                 ),
               ],
-              const SizedBox(height: AppSpacing.xl),
-              _DetailSection(
-                title: '计划信息',
-                children: <Widget>[
-                  AppPropertyRow(
-                    label: '下次执行',
-                    value: Text(_formatDateTime(summary.nextRunAt)),
-                  ),
-                  AppPropertyRow(
-                      label: '提醒方式', value: Text(_detail.reminderLabel)),
-                  if (_detail.doseLabel != null && _detail.doseLabel!.isNotEmpty)
-                    AppPropertyRow(
-                      label: '单次剂量',
-                      value: Text(_detail.doseLabel!),
-                    ),
-                  if (_detail.arrivalLabel != null)
-                    AppPropertyRow(
-                        label: '到达时间', value: Text(_detail.arrivalLabel!)),
-                  if (_detail.destination != null)
-                    AppPropertyRow(
-                        label: '目的地', value: Text(_detail.destination!)),
-                  if (_detail.queriedSources.isNotEmpty)
-                    AppPropertyRow(
-                      label: '查询来源',
-                      value: Text(_detail.queriedSources.join('、')),
-                    ),
-                  if (sourceText.isNotEmpty)
-                    AppPropertyRow(
-                      label: '原始备注',
-                      value: SelectableText(sourceText),
-                    ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.xl),
-              _DetailSection(
-                title: '执行记录',
-                children: _detail.executions.isEmpty
-                    ? <Widget>[const Text('暂无执行记录')]
-                    : <Widget>[
-                        for (final execution in _detail.executions)
-                          _ExecutionRow(execution: execution),
-                      ],
-              ),
-              const SizedBox(height: AppSpacing.xxl),
-              _ActionButton(
-                label: actionLabel,
-                onPressed:
-                    action == null ? null : () => _runAction(context, action),
-              ),
+              const SizedBox(height: AppSpacing.lg),
+
+              // 执行记录 · 留痕卡片
+              _buildExecutionSection(context),
+
+              const SizedBox(height: AppSpacing.lg),
+
+              // 计划规则信息卡片
+              _buildPlanInfoCard(context, summary, sourceText),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildMainControlCard(
+    BuildContext context,
+    PlanSummary summary,
+    bool isPaused,
+    bool hasNextOccurrence,
+  ) {
+    final nextOcc = _detail.nextOccurrence;
+    final scheduledText = nextOcc != null
+        ? _formatDateTime(nextOcc.scheduledAt)
+        : _formatDateTime(summary.nextRunAt);
+    final doseText = nextOcc?.dosageText ?? _detail.doseLabel ?? '';
+    final toggleAction = isPaused ? widget.onResume : widget.onPause;
+    final toggleActionLabel = isPaused ? '恢复计划' : '暂停计划';
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x06000000),
+            blurRadius: 16,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  _kindLabel(summary.kind),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF64748B),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isPaused ? const Color(0xFFFEF3C7) : const Color(0xFFECFDF5),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: isPaused ? const Color(0xFFFDE68A) : const Color(0xFFA7F3D0),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Icon(
+                      isPaused ? LucideIcons.pause : LucideIcons.circleCheck,
+                      size: 13,
+                      color: isPaused ? const Color(0xFFB45309) : const Color(0xFF059669),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      _statusLabel(summary.status),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: isPaused ? const Color(0xFFB45309) : const Color(0xFF059669),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          if (_detail.medicationConfig?.medicineName.isNotEmpty == true &&
+              _detail.medicationConfig?.medicineName != summary.title) ...[
+            Text(
+              _detail.medicationConfig!.medicineName,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF0F172A),
+                letterSpacing: -0.3,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+          ],
+
+          // 下次计划提醒横幅
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: isPaused ? const Color(0xFFF8FAFC) : const Color(0xFFF0FDF4),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isPaused ? const Color(0xFFE2E8F0) : const Color(0xFFBBF7D0),
+              ),
+            ),
+            child: Row(
+              children: <Widget>[
+                Icon(
+                  isPaused ? LucideIcons.bellOff : LucideIcons.clock,
+                  size: 18,
+                  color: isPaused ? const Color(0xFF94A3B8) : const Color(0xFF059669),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        isPaused ? '计划已暂停' : '下次计划服药',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: isPaused ? const Color(0xFF64748B) : const Color(0xFF059669),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        isPaused
+                            ? '已暂停日常推送提醒，点击下方可随时恢复'
+                            : '$scheduledText${doseText.isNotEmpty ? " · $doseText" : ""}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: isPaused ? const Color(0xFF475569) : const Color(0xFF065F46),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+
+          // 核心操作双按钮：提前服用打卡 & 暂停/恢复计划
+          Row(
+            children: <Widget>[
+              if (!isPaused && hasNextOccurrence) ...[
+                Expanded(
+                  flex: 3,
+                  child: FilledButton.icon(
+                    onPressed: _isTakingMedication ? null : _handleTakeAdvance,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF059669),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    icon: _isTakingMedication
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Icon(LucideIcons.pill, size: 18),
+                    label: Text(
+                      _isTakingMedication ? '正在打卡...' : '提前服用打卡',
+                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.md),
+              ],
+              Expanded(
+                flex: 2,
+                child: toggleAction != null
+                    ? OutlinedButton.icon(
+                        onPressed: _isTogglingStatus ? null : _togglePlanStatus,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: isPaused ? const Color(0xFF059669) : const Color(0xFF475569),
+                          backgroundColor: isPaused ? const Color(0xFFECFDF5) : const Color(0xFFF8FAFC),
+                          side: BorderSide(
+                            color: isPaused ? const Color(0xFFA7F3D0) : const Color(0xFFCBD5E1),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        icon: Icon(
+                          isPaused ? LucideIcons.play : LucideIcons.pause,
+                          size: 16,
+                        ),
+                        label: Text(
+                          toggleActionLabel,
+                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                        ),
+                      )
+                    : Semantics(
+                        button: true,
+                        enabled: false,
+                        label: '$toggleActionLabel，服务尚未接入',
+                        child: ExcludeSemantics(
+                          child: OutlinedButton.icon(
+                            onPressed: null,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF94A3B8),
+                              backgroundColor: const Color(0xFFF8FAFC),
+                              side: const BorderSide(color: Color(0xFFCBD5E1)),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            icon: Icon(
+                              isPaused ? LucideIcons.play : LucideIcons.pause,
+                              size: 16,
+                            ),
+                            label: Text(
+                              toggleActionLabel,
+                              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                            ),
+                          ),
+                        ),
+                      ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExecutionSection(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x06000000),
+            blurRadius: 16,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              const Icon(LucideIcons.history, size: 18, color: Color(0xFF059669)),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  '执行记录 · 留痕',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF0F172A),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '共 ${_detail.executions.length} 条',
+                style: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            '精确记录每次实际点击服药的时间戳与提前/推迟偏差',
+            style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          if (_detail.executions.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(
+                child: Text(
+                  '暂无执行记录',
+                  style: TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
+                ),
+              ),
+            )
+          else
+            Column(
+              children: <Widget>[
+                for (var i = 0; i < _detail.executions.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 10),
+                  _buildExecutionCard(_detail.executions[i]),
+                ],
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExecutionCard(PlanExecution execution) {
+    final statusText = _executionLabel(execution);
+    final isCompleted = execution.status == PlanExecutionStatus.completed;
+    final hasActualRecord = execution.message.contains('实际服药') || execution.actualTakenAt != null;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isCompleted ? const Color(0xFFDCFCE7) : const Color(0xFFE2E8F0),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: <Widget>[
+              Expanded(
+                child: Row(
+                  children: <Widget>[
+                    Icon(
+                      isCompleted ? LucideIcons.circleCheck : LucideIcons.clock,
+                      size: 15,
+                      color: isCompleted ? const Color(0xFF059669) : const Color(0xFF94A3B8),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        '${_formatDateTime(execution.startedAt)} 计划',
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF1E293B),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isCompleted ? const Color(0xFFDCFCE7) : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  statusText,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: isCompleted ? const Color(0xFF166534) : const Color(0xFF64748B),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (hasActualRecord) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFECFDF5),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFA7F3D0)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  const Icon(LucideIcons.checkCircle2, size: 14, color: Color(0xFF059669)),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      execution.message.isNotEmpty
+                          ? execution.message
+                          : (execution.actualTakenAt != null
+                              ? '实际服药：${_formatDateTime(execution.actualTakenAt!)}'
+                              : '已按时服药'),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF065F46),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else if (execution.message.isNotEmpty && execution.message != statusText) ...[
+            const SizedBox(height: 6),
+            Text(
+              execution.message,
+              style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlanInfoCard(
+    BuildContext context,
+    PlanSummary summary,
+    String sourceText,
+  ) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x06000000),
+            blurRadius: 16,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Row(
+            children: <Widget>[
+              Icon(LucideIcons.info, size: 18, color: Color(0xFF059669)),
+              SizedBox(width: 8),
+              Text(
+                '计划规则',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          _infoRow('提醒方式', _detail.reminderLabel),
+          if (_detail.medicationConfig?.times.isNotEmpty == true) ...[
+            const Divider(height: 20, color: Color(0xFFF1F5F9)),
+            _infoRow('每日服药时间', _detail.medicationConfig!.times.join('、')),
+          ],
+          if (_detail.doseLabel?.isNotEmpty == true) ...[
+            const Divider(height: 20, color: Color(0xFFF1F5F9)),
+            _infoRow('单次剂量', _detail.doseLabel!),
+          ],
+          if (_detail.arrivalLabel != null) ...[
+            const Divider(height: 20, color: Color(0xFFF1F5F9)),
+            _infoRow('到达时间', _detail.arrivalLabel!),
+          ],
+          if (_detail.destination != null) ...[
+            const Divider(height: 20, color: Color(0xFFF1F5F9)),
+            _infoRow('目的地', _detail.destination!),
+          ],
+          if (_detail.queriedSources.isNotEmpty) ...[
+            const Divider(height: 20, color: Color(0xFFF1F5F9)),
+            _infoRow('查询来源', _detail.queriedSources.join('、')),
+          ],
+          if (sourceText.isNotEmpty) ...[
+            const Divider(height: 20, color: Color(0xFFF1F5F9)),
+            _infoRow('原始备注', sourceText),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _infoRow(String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 70, maxWidth: 110),
+          child: Text(
+            label,
+            style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF1E293B),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -180,9 +748,10 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
     );
   }
 
-  Future<void> _handleMoreAction(
-      BuildContext context, _MoreAction action) async {
+  Future<void> _handleMoreAction(BuildContext context, _MoreAction action) async {
     switch (action) {
+      case _MoreAction.togglePause:
+        await _togglePlanStatus();
       case _MoreAction.edit:
         if (_detail.summary.kind == PlanKind.medication &&
             widget.onUpdateMedication != null) {
@@ -230,137 +799,20 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
         );
         if (confirmed == true && widget.onDelete != null) {
           if (!context.mounted) return;
-          await _runAction(context, widget.onDelete!);
+          try {
+            await widget.onDelete!();
+          } catch (_) {
+            if (!context.mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('操作失败，请稍后重试')),
+            );
+          }
         }
     }
   }
-
-  static Future<void> _runAction(
-    BuildContext context,
-    Future<void> Function() action,
-  ) async {
-    try {
-      await action();
-    } catch (_) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('操作失败，请稍后重试')),
-      );
-    }
-  }
 }
 
-enum _MoreAction { edit, delete }
-
-class _ActionButton extends StatelessWidget {
-  const _ActionButton({required this.label, this.onPressed});
-
-  final String label;
-  final Future<void> Function()? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final button = OutlinedButton(
-      onPressed: onPressed == null ? null : () => onPressed!(),
-      child: Text(label),
-    );
-    if (onPressed != null) return button;
-    return Semantics(
-      button: true,
-      enabled: false,
-      label: '$label，服务尚未接入',
-      child: ExcludeSemantics(child: button),
-    );
-  }
-}
-
-class _StatusSummary extends StatelessWidget {
-  const _StatusSummary({required this.summary});
-
-  final PlanSummary summary;
-
-  @override
-  Widget build(BuildContext context) {
-    final semantic = Theme.of(context).extension<AppSemanticColors>() ??
-        (Theme.of(context).brightness == Brightness.dark
-            ? AppSemanticColors.dark
-            : AppSemanticColors.light);
-    final color = switch (summary.status) {
-      PlanStatus.active => semantic.success,
-      PlanStatus.pending => semantic.warning,
-      PlanStatus.paused => Theme.of(context).colorScheme.onSurfaceVariant,
-    };
-    return Semantics(
-      label: '状态：${_statusLabel(summary.status)}',
-      child: Row(
-        children: <Widget>[
-          Icon(LucideIcons.circleCheck, color: color, size: 20),
-          const SizedBox(width: AppSpacing.sm),
-          Text('状态：${_statusLabel(summary.status)}'),
-        ],
-      ),
-    );
-  }
-}
-
-class _DetailSection extends StatelessWidget {
-  const _DetailSection({required this.title, required this.children});
-
-  final String title;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text(title, style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: AppSpacing.md),
-        for (var index = 0; index < children.length; index += 1) ...[
-          children[index],
-          if (index < children.length - 1) ...[
-            const SizedBox(height: AppSpacing.md),
-            const Divider(),
-            const SizedBox(height: AppSpacing.md),
-          ],
-        ],
-      ],
-    );
-  }
-}
-
-class _ExecutionRow extends StatelessWidget {
-  const _ExecutionRow({required this.execution});
-
-  final PlanExecution execution;
-
-  @override
-  Widget build(BuildContext context) {
-    final statusText = _executionLabel(execution);
-    final redundant = execution.message.trim().isEmpty ||
-        execution.message.trim() == '等待执行' ||
-        execution.message.trim() == statusText;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.md),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            '$statusText · ${_formatDateTime(execution.startedAt)}',
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-          ),
-          if (!redundant) ...[
-            const SizedBox(height: AppSpacing.xs),
-            Text(execution.message),
-          ],
-        ],
-      ),
-    );
-  }
-}
+enum _MoreAction { togglePause, edit, delete }
 
 String _statusLabel(PlanStatus status) => switch (status) {
       PlanStatus.active => '运行中',
