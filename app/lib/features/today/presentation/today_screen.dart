@@ -24,6 +24,7 @@ class TodayScreen extends StatefulWidget {
     this.onOpenAttention,
     this.onInspectAttention,
     this.onOpenTimeline,
+    this.onTakeMedication,
     this.onQuickCreate,
     this.onCaptureMedicine,
     this.bottomContentPadding = 0,
@@ -38,6 +39,7 @@ class TodayScreen extends StatefulWidget {
   final AttentionActionCallback? onOpenAttention;
   final AttentionInspectCallback? onInspectAttention;
   final ValueChanged<TimelineItem>? onOpenTimeline;
+  final Future<void> Function(String occurrenceId, String title)? onTakeMedication;
   final VoidCallback? onQuickCreate;
   final Future<void> Function()? onCaptureMedicine;
   final double bottomContentPadding;
@@ -118,6 +120,65 @@ class _TodayScreenState extends State<TodayScreen> {
         referenceDate: widget.now ?? DateTime.now(),
       ),
     );
+  }
+
+  Future<void> _handleTakeMedicationAdvance(
+    String occurrenceId,
+    String medicineTitle,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: <Widget>[
+            Icon(LucideIcons.pill, color: Color(0xFF059669), size: 22),
+            SizedBox(width: 8),
+            Text('提前服用打卡'),
+          ],
+        ),
+        content: Text(
+          '确认现在提前记录服用 $medicineTitle？\n\n系统将精确留痕当前实际服药时间，并自动扣减库存。',
+          style: const TextStyle(height: 1.5),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('稍后再说'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF059669),
+              foregroundColor: Colors.white,
+            ),
+            icon: const Icon(LucideIcons.check, size: 18),
+            label: const Text('确认服药'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    if (widget.onTakeMedication != null) {
+      await widget.onTakeMedication!(occurrenceId, medicineTitle);
+    } else {
+      final item = AttentionItem(
+        id: occurrenceId,
+        title: medicineTitle,
+        reason: '提前服药',
+        dueAt: DateTime.now(),
+        kind: AttentionKind.confirmation,
+        actionLabel: '服药',
+        actionTarget: ActionTarget(
+          resource: 'medication_occurrence',
+          id: occurrenceId,
+          action: 'taken',
+        ),
+      );
+      await widget.onOpenAttention?.call(item);
+    }
+    await _load();
   }
 
   @override
@@ -276,6 +337,7 @@ class _TodayScreenState extends State<TodayScreen> {
             referenceDate: now,
             onInspect: _inspectAttention,
             onOpenTimeline: widget.onOpenTimeline,
+            onTakeAdvance: _handleTakeMedicationAdvance,
           ),
         ),
       ),
@@ -318,6 +380,7 @@ class _TodayScreenState extends State<TodayScreen> {
                   item: activeTimeline[index],
                   position: _listRowPosition(index, activeTimeline.length),
                   onOpen: widget.onOpenTimeline,
+                  onTakeAdvance: _handleTakeMedicationAdvance,
                 ),
             ],
           ),
@@ -856,6 +919,7 @@ class _NextThingCard extends StatelessWidget {
     required this.referenceDate,
     this.onInspect,
     this.onOpenTimeline,
+    this.onTakeAdvance,
   });
 
   final AttentionItem? decision;
@@ -863,6 +927,7 @@ class _NextThingCard extends StatelessWidget {
   final DateTime referenceDate;
   final AttentionInspectCallback? onInspect;
   final ValueChanged<TimelineItem>? onOpenTimeline;
+  final void Function(String occurrenceId, String title)? onTakeAdvance;
 
   @override
   Widget build(BuildContext context) {
@@ -875,6 +940,12 @@ class _NextThingCard extends StatelessWidget {
         : timeline?.actionTarget == null || onOpenTimeline == null
             ? null
             : () => onOpenTimeline!(timeline!);
+
+    final medicationTarget = timeline?.actionTarget?.resource == 'medication_occurrence'
+        ? timeline!.actionTarget
+        : (decision?.actionTarget?.resource == 'medication_occurrence'
+            ? decision!.actionTarget
+            : null);
 
     return Semantics(
       key: const ValueKey('today-overview'),
@@ -969,6 +1040,35 @@ class _NextThingCard extends StatelessWidget {
                                   ),
                         ),
                       ),
+                      if (medicationTarget != null && onTakeAdvance != null) ...[
+                        const SizedBox(height: AppSpacing.lg),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF10B981),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 13),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              elevation: 0,
+                            ),
+                            onPressed: () => onTakeAdvance!(
+                              medicationTarget.id,
+                              itemTitle,
+                            ),
+                            icon: const Icon(LucideIcons.pill, size: 18),
+                            label: const Text(
+                              '提前服药打卡',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ],
@@ -1121,11 +1221,17 @@ class _DecisionDetails extends StatelessWidget {
 }
 
 class _TimelineRow extends StatelessWidget {
-  const _TimelineRow({required this.item, required this.position, this.onOpen});
+  const _TimelineRow({
+    required this.item,
+    required this.position,
+    this.onOpen,
+    this.onTakeAdvance,
+  });
 
   final TimelineItem item;
   final AppListRowPosition position;
   final ValueChanged<TimelineItem>? onOpen;
+  final void Function(String occurrenceId, String title)? onTakeAdvance;
 
   @override
   Widget build(BuildContext context) {
@@ -1133,12 +1239,39 @@ class _TimelineRow extends StatelessWidget {
     final onTap = item.actionTarget == null || onOpen == null
         ? null
         : () => onOpen!(item);
+
+    final isMedication =
+        item.actionTarget?.resource == 'medication_occurrence';
+    final isPendingOrUpcoming =
+        item.status == TimelineStatus.upcoming || item.status == TimelineStatus.due;
+
+    Widget? trailingWidget;
+    if (isMedication && isPendingOrUpcoming && onTakeAdvance != null) {
+      trailingWidget = FilledButton.icon(
+        style: FilledButton.styleFrom(
+          backgroundColor: const Color(0xFF059669),
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+        onPressed: () => onTakeAdvance!(item.actionTarget!.id, item.title),
+        icon: const Icon(LucideIcons.pill, size: 13),
+        label: Text(
+          item.status == TimelineStatus.due ? '服药' : '提前服药',
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+        ),
+      );
+    }
+
     return AppListRow(
       icon: visuals.icon,
       title: item.title,
       subtitle: '${_formatTime(item.scheduledAt)} · ${item.subtitle}',
       statusText: visuals.label,
       statusColor: visuals.color,
+      trailing: trailingWidget,
       position: position,
       onTap: onTap,
     );

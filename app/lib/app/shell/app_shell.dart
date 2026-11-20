@@ -574,6 +574,16 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
           onOpenSettings: _openSettings,
           onOpenAttention: _handleAttentionAction,
           onOpenTimeline: (item) => _openTimelineItem(item),
+          onTakeMedication: widget.actionCenterActions == null
+              ? null
+              : (occurrenceId, title) async {
+                  final result = await widget.actionCenterActions!
+                      .markMedicationTaken(occurrenceId);
+                  _refreshMedicine();
+                  _refreshToday();
+                  setState(() => _planRefreshRevision += 1);
+                  _showSnackBar(result.message);
+                },
           onQuickCreate: canQuickCreate ? _openQuickCreate : null,
           onCaptureMedicine: widget.onCaptureMedicine == null
               ? null

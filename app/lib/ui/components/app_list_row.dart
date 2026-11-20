@@ -13,6 +13,7 @@ class AppListRow extends StatelessWidget {
     required this.subtitle,
     this.statusText,
     this.statusColor,
+    this.trailing,
     this.onTap,
     this.position = AppListRowPosition.single,
   });
@@ -22,6 +23,7 @@ class AppListRow extends StatelessWidget {
   final String subtitle;
   final String? statusText;
   final Color? statusColor;
+  final Widget? trailing;
   final VoidCallback? onTap;
   final AppListRowPosition position;
 
@@ -103,7 +105,13 @@ class AppListRow extends StatelessWidget {
                           ),
                         ),
                       ),
-                      if (!useCompactLayout && statusText != null) ...[
+                      if (trailing != null) ...[
+                        const SizedBox(width: AppSpacing.sm),
+                        Padding(
+                          padding: const EdgeInsets.only(top: AppSpacing.xs),
+                          child: trailing!,
+                        ),
+                      ] else if (!useCompactLayout && statusText != null) ...[
                         const SizedBox(width: AppSpacing.md),
                         Padding(
                           padding: const EdgeInsets.only(top: AppSpacing.xs),
