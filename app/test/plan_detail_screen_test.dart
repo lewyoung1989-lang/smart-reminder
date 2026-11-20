@@ -48,6 +48,9 @@ void main() {
       );
       await tester.tap(find.widgetWithText(OutlinedButton, '暂停计划'));
       await tester.pumpAndSettle();
+      expect(find.text('确认暂停用药计划'), findsOneWidget);
+      await tester.tap(find.widgetWithText(FilledButton, '确认暂停'));
+      await tester.pumpAndSettle();
       expect(pauses, 1);
     });
 
@@ -199,6 +202,9 @@ void main() {
         onPause: () => Future<void>.error(StateError('pause failed')),
       );
       await tester.tap(find.widgetWithText(OutlinedButton, '暂停计划'));
+      await tester.pumpAndSettle();
+      expect(find.text('确认暂停用药计划'), findsOneWidget);
+      await tester.tap(find.widgetWithText(FilledButton, '确认暂停'));
       await tester.pumpAndSettle();
       expect(find.text('操作失败，请稍后重试'), findsOneWidget);
       expect(find.widgetWithText(OutlinedButton, '暂停计划'), findsOneWidget);

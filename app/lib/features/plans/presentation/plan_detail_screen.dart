@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/theme/app_spacing.dart';
+import '../../../ui/components/app_confirm_dialog.dart';
 import '../../../ui/components/app_page_header.dart';
 import '../../../ui/components/app_status_banner.dart';
 import '../domain/plan_models.dart';
@@ -54,39 +55,14 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
       return;
     }
 
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showMedicationConfirmDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Row(
-          children: <Widget>[
-            Icon(LucideIcons.pill, color: Color(0xFF059669), size: 22),
-            SizedBox(width: 8),
-            Text('提前服用打卡'),
-          ],
-        ),
-        content: Text(
-          '确认现在提前服用 ${nextOcc.medicineName ?? _detail.summary.title}（${nextOcc.dosageText ?? _detail.doseLabel ?? "按时剂量"}）？\n\n系统将精确留痕当前实际服药时间，并自动扣减库存。',
-          style: const TextStyle(height: 1.5),
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('稍后再说'),
-          ),
-          FilledButton.icon(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF059669),
-              foregroundColor: Colors.white,
-            ),
-            icon: const Icon(LucideIcons.check, size: 18),
-            label: const Text('确认提前服用'),
-          ),
-        ],
-      ),
+      medicineTitle: nextOcc.medicineName ?? _detail.summary.title,
+      doseLabel: nextOcc.dosageText ?? _detail.doseLabel,
+      isAdvance: true,
     );
 
-    if (confirmed != true || !mounted) return;
+    if (!confirmed || !mounted) return;
 
     setState(() => _isTakingMedication = true);
     try {
@@ -120,6 +96,25 @@ class _PlanDetailScreenState extends State<PlanDetailScreen> {
     final isPaused = _detail.summary.status == PlanStatus.paused;
     final action = isPaused ? widget.onResume : widget.onPause;
     if (action == null) return;
+
+    if (!isPaused) {
+      final confirmed = await showAppConfirmDialog(
+        context: context,
+        icon: LucideIcons.pauseCircle,
+        iconColor: const Color(0xFFD97706),
+        iconBackgroundColor: const Color(0xFFFEF3C7),
+        title: '确认暂停用药计划',
+        primaryText: _detail.summary.title,
+        secondaryText: _detail.doseLabel != null && _detail.doseLabel!.isNotEmpty
+            ? '计划剂量：${_detail.doseLabel}'
+            : null,
+        infoBannerText: '暂停后系统将停止推送此计划的用药提醒通知，直到您手动恢复。',
+        confirmLabel: '确认暂停',
+        cancelLabel: '取消',
+        confirmColor: const Color(0xFFD97706),
+      );
+      if (!confirmed || !mounted) return;
+    }
 
     setState(() => _isTogglingStatus = true);
     try {

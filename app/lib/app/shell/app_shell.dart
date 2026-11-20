@@ -25,6 +25,7 @@ import '../../features/today/data/today_repository.dart';
 import '../../features/today/domain/today_models.dart';
 import '../../features/today/presentation/today_screen.dart';
 import '../../platform/notifications/local_notification_scheduler.dart';
+import '../../ui/components/app_confirm_dialog.dart';
 import '../settings/settings_screen.dart';
 import '../theme/app_spacing.dart';
 
@@ -333,7 +334,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         onAction: target != null
             ? () async {
                 Navigator.of(sheetContext).pop();
-                await _executeTargetAction(target);
+                await _executeTargetAction(target, title: item.title);
               }
             : null,
       ),
@@ -496,10 +497,10 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       _showSnackBar('这个动作暂时只能查看，稍后会接入处理入口');
       return;
     }
-    await _executeTargetAction(target);
+    await _executeTargetAction(target, title: item.title);
   }
 
-  Future<void> _executeTargetAction(ActionTarget target) async {
+  Future<void> _executeTargetAction(ActionTarget target, {String? title}) async {
     if (target.resource == 'workflow') {
       await _openPlanDetail(target.id);
       return;
@@ -513,6 +514,12 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
 
     try {
       if (target.resource == 'medication_occurrence') {
+        final confirmed = await showMedicationConfirmDialog(
+          context: context,
+          medicineTitle: title ?? '该药品',
+          isAdvance: false,
+        );
+        if (!confirmed || !mounted) return;
         final result = await actions.markMedicationTaken(target.id);
         _refreshMedicine();
         _showSnackBar(result.message);
@@ -524,6 +531,17 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         _showSnackBar('已处理买药提醒');
       } else if (target.resource == 'reminder') {
         if (target.action == 'complete') {
+          final confirmed = await showAppConfirmDialog(
+            context: context,
+            icon: LucideIcons.checkCircle2,
+            iconColor: const Color(0xFF059669),
+            title: '确认完成提醒',
+            primaryText: title ?? '该提醒事项',
+            infoBannerText: '系统将标记该提醒已完成。',
+            confirmLabel: '确认完成',
+            cancelLabel: '取消',
+          );
+          if (!confirmed || !mounted) return;
           await actions.completeReminder(target.id);
           _showSnackBar('已完成提醒');
         } else if (target.action == 'snooze') {

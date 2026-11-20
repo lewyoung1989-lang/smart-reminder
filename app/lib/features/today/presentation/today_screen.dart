@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../core/data/feature_unavailable_exception.dart';
+import '../../../ui/components/app_confirm_dialog.dart';
 import '../../../ui/components/app_content_state.dart';
 import '../../../ui/components/app_list_row.dart';
 import '../../../ui/components/app_page_header.dart';
@@ -126,39 +127,13 @@ class _TodayScreenState extends State<TodayScreen> {
     String occurrenceId,
     String medicineTitle,
   ) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showMedicationConfirmDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Row(
-          children: <Widget>[
-            Icon(LucideIcons.pill, color: Color(0xFF059669), size: 22),
-            SizedBox(width: 8),
-            Text('提前服用打卡'),
-          ],
-        ),
-        content: Text(
-          '确认现在提前记录服用 $medicineTitle？\n\n系统将精确留痕当前实际服药时间，并自动扣减库存。',
-          style: const TextStyle(height: 1.5),
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('稍后再说'),
-          ),
-          FilledButton.icon(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF059669),
-              foregroundColor: Colors.white,
-            ),
-            icon: const Icon(LucideIcons.check, size: 18),
-            label: const Text('确认服药'),
-          ),
-        ],
-      ),
+      medicineTitle: medicineTitle,
+      isAdvance: true,
     );
 
-    if (confirmed != true || !mounted) return;
+    if (!confirmed || !mounted) return;
 
     if (widget.onTakeMedication != null) {
       await widget.onTakeMedication!(occurrenceId, medicineTitle);

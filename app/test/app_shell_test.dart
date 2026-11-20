@@ -798,6 +798,10 @@ void main() {
     await tester.tap(find.widgetWithText(TextButton, '记录'));
     await tester.pumpAndSettle();
 
+    expect(find.text('确认服药打卡'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, '确认服药'));
+    await tester.pumpAndSettle();
+
     expect(actions.takenOccurrences, ['occurrence-1']);
     expect(todayRepository.calls, 2);
     expect(medicineRepository.scopes, [
@@ -913,6 +917,10 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(find.widgetWithText(FilledButton, '完成'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('确认完成提醒'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, '确认完成'));
     await tester.pumpAndSettle();
 
     expect(actions.completedReminders, ['reminder-1']);
